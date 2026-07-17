@@ -186,6 +186,22 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-17 `totp-login`エンドポイントをVPS本番へデプロイ完了**:
+  上記の新規`POST /api/auth/totp-login`を実VPS
+  (`/root/open-easy-web/open-easy-web-server`、systemdサービス
+  `open-easy-web`、`https://easyweb.tokyo`経由で公開)へ反映。
+  デプロイ時に判明した実バグ: VPS上のソースがローカルの最新版より古く
+  `appserver_registration.rs`自体が存在せず、`Cargo.toml`にも
+  `thiserror`依存が無かった(以前のセッションでこのファイルの反映が
+  漏れていた)——ファイルをコピーし依存を追加して解消。`cargo build
+  --release`成功後、`systemctl restart open-easy-web`で反映、実際に
+  `https://easyweb.tokyo/api/auth/totp-login`へ実HTTPリクエストを送り
+  未登録アカウントに対し`403`が正しく返ることを確認済み(型チェックの
+  みでの「完了」報告ではない)。
+  次にすべきこと: `easy-web.tokyo`(ハイフン付き新ドメイン)へのDNS
+  Aレコード追加(ConoHa DNSゾーン側、ユーザー操作待ち)後、そちらの
+  ドメインでも同様に証明書取得・vhost追加を行う。
+
 - **2026-07-17 メールOTP/TOTP 2FAを「どちらか一方だけでログイン可能」に
   変更(ユーザー指示)**: 従来は「メールOTP必須、2FA(TOTP)有効時はさらに
   TOTPコードも必須」というAND方式だった。ユーザーへの確認の結果、
