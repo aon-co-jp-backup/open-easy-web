@@ -1,0 +1,43 @@
+# FastAPI(ASGI)用 Apache VirtualHost テンプレート(スタック: fastapi)。
+# uvicorn/gunicorn(uvicorn worker)等のASGIサーバーの手前に立てる
+# リバースプロキシ。WebSocket対応込み(機能上の必須要件)。
+# {{PLACEHOLDER}} は scripts/gen-vhost.sh が埋める。UPSTREAMには
+# ASGIサーバーの host:port を指定する(例: 127.0.0.1:8000)。
+# 事前に mod_ssl / mod_proxy / mod_proxy_http / mod_proxy_wstunnel /
+# mod_rewrite を有効化しておくこと
+# (a2enmod ssl proxy proxy_http proxy_wstunnel rewrite)。
+# TLS証明書は scripts/setup-tls.sh (Let's Encrypt / certbot) が取得・
+# 自動更新する。
+#
+# 注: mod_deflate(gzip)圧縮・keepaliveプーリングなどの高速化(speedup)
+# チューニングは本リポジトリの対象外(open-runo/poem-cosmo-tauri側で
+# ネイティブRust実装として提供する方針)。
+
+<VirtualHost {{IP}}:80>
+    ServerName {{DOMAIN}}
+    DocumentRoot "{{WEBROOT}}"
+
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</VirtualHost>
+
+<VirtualHost {{IP}}:443>
+    ServerName {{DOMAIN}}
+    DocumentRoot "{{WEBROOT}}"
+
+    SSLEngine on
+    SSLCertificateFile      /etc/letsencrypt/live/{{DOMAIN}}/fullchain.pem
+    SSLCertificateKeyFile   /etc/letsencrypt/live/{{DOMAIN}}/privkey.pem
+
+    # WebSocket / Server-Sent Events 用にアップグレードリクエストを
+    # proxy_wstunnel へ転送し、それ以外は通常のHTTPプロキシへ(機能上の
+    # 必須要件)。
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule /(.*) ws://{{UPSTREAM}}/$1 [P,L]
+
+    ProxyPreserveHost On
+    ProxyPass "/" "http://{{UPSTREAM}}/" connectiontimeout=5 timeout=3600
+    ProxyPassReverse "/" "http://{{UPSTREAM}}/"
+</VirtualHost>

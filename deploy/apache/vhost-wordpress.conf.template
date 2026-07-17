@@ -1,0 +1,46 @@
+# WordPress用 Apache VirtualHost テンプレート(スタック: wordpress)。
+# {{PLACEHOLDER}} は scripts/gen-vhost.sh が埋める。UPSTREAMには
+# PHP-FPMのソケットまたはTCPアドレスを指定する
+# (例: unix:/run/php/php8.3-fpm.sock|fcgi://localhost または
+# fcgi://127.0.0.1:9000)。事前に mod_ssl / mod_proxy_fcgi / mod_rewrite を
+# 有効化しておくこと(a2enmod ssl proxy_fcgi rewrite)。
+# TLS証明書は scripts/setup-tls.sh (Let's Encrypt / certbot) が取得・
+# 自動更新する。OPcache・Redis/Memcachedオブジェクトキャッシュの有効化は
+# PHP側(php.ini・wp-config.php)で行うこと。
+#
+# 注: mod_deflate(gzip)圧縮・静的アセットの長期キャッシュ(mod_expires)
+# などの高速化(speedup)チューニングは本リポジトリの対象外(open-runo/
+# poem-cosmo-tauri側でネイティブRust実装として提供する方針)。
+
+<VirtualHost {{IP}}:80>
+    ServerName {{DOMAIN}}
+    DocumentRoot "{{WEBROOT}}"
+
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</VirtualHost>
+
+<VirtualHost {{IP}}:443>
+    ServerName {{DOMAIN}}
+    DocumentRoot "{{WEBROOT}}"
+
+    SSLEngine on
+    SSLCertificateFile      /etc/letsencrypt/live/{{DOMAIN}}/fullchain.pem
+    SSLCertificateKeyFile   /etc/letsencrypt/live/{{DOMAIN}}/privkey.pem
+
+    <Directory "{{WEBROOT}}">
+        Require all granted
+        AllowOverride All
+        DirectoryIndex index.php index.html
+    </Directory>
+
+    # wp-config.php等の機密ファイルは直接配信しない。
+    <FilesMatch "^(?:wp-config\.php|\.htaccess)$">
+        Require all denied
+    </FilesMatch>
+
+    <FilesMatch "\.php$">
+        SetHandler "proxy:fcgi://{{UPSTREAM}}"
+    </FilesMatch>
+</VirtualHost>

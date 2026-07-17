@@ -1,0 +1,10 @@
+[Unit]
+Description=Run easyweb-tls-monitor once daily
+
+[Timer]
+OnCalendar=*-*-* 09:00:00
+RandomizedDelaySec=900
+Persistent=true
+
+[Install]
+WantedBy=timers.target

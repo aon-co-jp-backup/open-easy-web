@@ -1,0 +1,10 @@
+[Unit]
+Description=Run easyweb-tls-renew twice daily (Let's Encrypt recommendation)
+
+[Timer]
+OnCalendar=*-*-* 03,15:00:00
+RandomizedDelaySec=1800
+Persistent=true
+
+[Install]
+WantedBy=timers.target

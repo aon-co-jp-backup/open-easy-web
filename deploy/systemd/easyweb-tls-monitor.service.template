@@ -1,0 +1,9 @@
+[Unit]
+Description=open-easy-web: TLS certificate expiry monitor (all registered domains)
+
+[Service]
+Type=oneshot
+WorkingDirectory={{REPO_ROOT}}
+ExecStart={{REPO_ROOT}}/scripts/check-all-tls.sh
+# 失効間近(WARN_DAYS以内)の場合は終了コード1になり、journalにWARNとして残る。
+# メール/Slack通知が必要な場合は ExecStartPost で別途フックすること。

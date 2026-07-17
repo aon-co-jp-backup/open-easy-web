@@ -1,0 +1,31 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+# Cargo.lock はコミットする（バージョン固定、バイナリクレートのため）
+
+# wasm-bindgen 生成物 (ビルドで再生成される)
+/pkg/
+
+# scripts/gen-vhost.sh の生成物(実際のIP/ドメインを含むため環境ごとに生成する)
+/deploy/generated/
+
+# Node系ツールを万一使う場合の保険 (このリポジトリの主ビルドチェーンではない)
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/

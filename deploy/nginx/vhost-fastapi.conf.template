@@ -1,0 +1,64 @@
+# FastAPI(ASGI)用 Nginx vhost テンプレート(スタック: fastapi)。
+# uvicorn/gunicorn(uvicorn worker)等のASGIサーバーの手前に立てる
+# リバースプロキシ。WebSocket/ストリーミングレスポンスに対応するため
+# `proxy_buffering off` と `Upgrade` ヘッダ転送を含む(これは機能上の
+# 必須要件であり、高速化目的のチューニングではない)。
+# {{PLACEHOLDER}} は scripts/gen-vhost.sh が埋める。UPSTREAMには
+# ASGIサーバーの host:port を指定する(例: 127.0.0.1:8000)。
+#
+# 実際のドメイン取得・DNS登録(Aレコード追加など)は各自レジストラ側で
+# 事前に完了させておくこと。TLS証明書自体は scripts/setup-tls.sh
+# (Let's Encrypt / certbot)で取得・自動更新する。
+#
+# 注: gzip圧縮・named upstream + keepaliveプーリングなどの高速化
+# (speedup)チューニングは本リポジトリの対象外(open-runo/poem-cosmo-tauri側で
+# ネイティブRust実装として提供する方針)。
+
+# 80番: ACME challenge 応答 + HTTPSへのリダイレクト。
+server {
+    listen {{IP}}:80;
+    server_name {{DOMAIN}};
+
+    location /.well-known/acme-challenge/ {
+        root {{WEBROOT}};
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# 443番: FastAPI(ASGI)へのリバースプロキシ。
+server {
+    listen {{IP}}:443 ssl http2;
+    server_name {{DOMAIN}};
+
+    ssl_certificate     /etc/letsencrypt/live/{{DOMAIN}}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{DOMAIN}}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://{{UPSTREAM}};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket / Server-Sent Events 等のストリーミング対応
+        # (機能上の必須要件)。
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+    }
+}
+
+# WebSocketアップグレード判定用マップ(このファイル1つで完結させるため、
+# http コンテキストの conf.d に含める前提。既に他のvhostで定義済みの
+# 場合は重複エラーになるので、その場合はこの map ブロックを削除して
+# 共通の nginx.conf 側に1つだけ置くこと)。
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}

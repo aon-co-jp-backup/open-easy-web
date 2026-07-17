@@ -1,0 +1,6 @@
+[Unit]
+Description=open-easyweb managed domains: certbot renew + reload webserver
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/certbot renew --quiet --deploy-hook "systemctl reload nginx 2>/dev/null || systemctl reload apache2 2>/dev/null || systemctl reload httpd 2>/dev/null || true"

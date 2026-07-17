@@ -1,0 +1,46 @@
+# 静的サイト用 Nginx vhost テンプレート(スタック: static)。
+# open-easy-web自身(WASM + index.html)のような、バックエンドを持たない
+# 静的サイトの配信に使う。{{PLACEHOLDER}} は scripts/gen-vhost.sh が埋める。
+#
+# 実際のドメイン取得・DNS登録(Aレコード追加など)は各自レジストラ側で
+# 事前に完了させておくこと。TLS証明書自体は scripts/setup-tls.sh
+# (Let's Encrypt / certbot)で取得・自動更新する。
+#
+# 注: gzip圧縮・静的アセットの長期キャッシュ(expires/Cache-Control)などの
+# 高速化(speedup)チューニングは本リポジトリの対象外(open-runo/
+# poem-cosmo-tauri側でネイティブRust実装として提供する方針)。本テンプレートは
+# ドメイン・HTTPS・基本配信のみを担当する。
+
+# 80番: ACME challenge 応答 + HTTPSへのリダイレクト。
+server {
+    listen {{IP}}:80;
+    server_name {{DOMAIN}};
+
+    location /.well-known/acme-challenge/ {
+        root {{WEBROOT}};
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# 443番: 静的ファイル配信。
+# `listen ... ssl http2;` は Nginx 1.25.1+ では非推奨(別行の `http2 on;` が
+# 推奨)だが、Ubuntu 24.04 LTS 標準の Nginx 1.24 系など旧バージョンとの
+# 互換性のため、両対応できるこの記法を使う(実際に `nginx -t` で構文検証済み)。
+server {
+    listen {{IP}}:443 ssl http2;
+    server_name {{DOMAIN}};
+
+    ssl_certificate     /etc/letsencrypt/live/{{DOMAIN}}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{DOMAIN}}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    root {{WEBROOT}};
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}

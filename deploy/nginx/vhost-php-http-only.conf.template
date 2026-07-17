@@ -1,0 +1,38 @@
+# 汎用PHP配信用 Nginx vhost テンプレート(スタック: php、HTTPのみ・証明書取得前)。
+#
+# HTTPS証明書がまだ存在しないドメインに対する「第一段階」の設定。
+# ACME HTTP-01チャレンジに応答できるようにしつつ、証明書取得前でも
+# サイト自体はすぐ閲覧可能にする(サイトをHTTPSにリダイレクトしてしまうと
+# 証明書取得前は何も表示されなくなるため、あえて実配信もHTTP側で行う)。
+# 証明書取得後は vhost-php.conf.template(HTTP→HTTPSリダイレクト+
+# 443番での実配信)へ差し替える。
+
+server {
+    listen {{IP}}:80;
+    server_name {{DOMAIN}};
+
+    root {{WEBROOT}};
+    index index.php index.html;
+
+    client_max_body_size 64m;
+
+    location /.well-known/acme-challenge/ {
+        root {{WEBROOT}};
+    }
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location ~ /\.(?:htaccess|git) {
+        deny all;
+    }
+
+    location ~ \.php$ {
+        try_files $uri =404;
+        fastcgi_pass {{UPSTREAM}};
+        fastcgi_index index.php;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+}

@@ -1,0 +1,37 @@
+[workspace]
+
+[package]
+name = "open-easy-web-server"
+description = "open-easy-web: フォルダー作成・アップロード・AI自動PHP判定・nginx+PHP-FPM自動構成を担うバックエンド(WASM UIとは別バイナリ)。重量級Webフレームワークは使わずtokio/hyperを直接使用する。"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "Apache-2.0"
+
+[[bin]]
+name = "open-easy-web-server"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+sha2 = "0.10"
+sha1 = "0.10"
+hmac = "0.12"
+base32 = "0.5"
+rand = "0.8"
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+thiserror = "1"
+
+[dev-dependencies]
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+tempfile = "3"

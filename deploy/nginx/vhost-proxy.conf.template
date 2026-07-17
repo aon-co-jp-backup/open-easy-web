@@ -1,0 +1,47 @@
+# 汎用リバースプロキシ用 Nginx vhost テンプレート(スタック: proxy)。
+# aruaru-db・open-web-server・open-raid-z系(Rust + Poem等)のような、
+# 任意のHTTPバックエンドを丸ごとリバースプロキシする場合に使う。
+# {{PLACEHOLDER}} は scripts/gen-vhost.sh が埋める。UPSTREAMには
+# バックエンドの host:port を指定する(例: 127.0.0.1:4000)。
+#
+# 実際のドメイン取得・DNS登録(Aレコード追加など)は各自レジストラ側で
+# 事前に完了させておくこと。TLS証明書自体は scripts/setup-tls.sh
+# (Let's Encrypt / certbot)で取得・自動更新する。
+#
+# 注: named upstream + keepaliveプーリングやgzip圧縮などの高速化
+# (speedup)チューニングは本リポジトリの対象外(open-runo/poem-cosmo-tauri側で
+# ネイティブRust実装として提供する方針)。本テンプレートは基本的なドメイン・
+# HTTPS・リバースプロキシ配線のみを担当する。
+
+# 80番: ACME challenge 応答 + HTTPSへのリダイレクト。
+server {
+    listen {{IP}}:80;
+    server_name {{DOMAIN}};
+
+    location /.well-known/acme-challenge/ {
+        root {{WEBROOT}};
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# 443番: バックエンド全体をリバースプロキシ。
+server {
+    listen {{IP}}:443 ssl http2;
+    server_name {{DOMAIN}};
+
+    ssl_certificate     /etc/letsencrypt/live/{{DOMAIN}}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{DOMAIN}}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://{{UPSTREAM}};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
