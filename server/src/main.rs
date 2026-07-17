@@ -196,6 +196,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
             (&Method::POST, "/upload") => upload_files(&state, &site, req).await,
             (&Method::POST, "/detect-and-configure") => detect_and_configure(&state, &site).await,
             (&Method::POST, "/correct") => correct_detection(&state, &site, req).await,
+            (&Method::POST, "/register-appserver") => register_appserver(&site, req).await,
             _ => error_response(StatusCode::NOT_FOUND, "unknown site action"),
         };
     }
@@ -446,6 +447,35 @@ async fn correct_detection(state: &AppState, site: &str, req: Request<Incoming>)
             "weights": &*weights,
         }),
     )
+}
+
+/// `POST /api/sites/:name/register-appserver` — 「分身の術」構想の仕上げ:
+/// このサイトのドメイン(`site`)を、既に稼働中の共有バックエンド
+/// (`open-web-server`または`poem-cosmo-tauri`)へ動的登録する
+/// (`appserver_registration`モジュール参照)。WASM側の「🔗 共有バックエンド
+/// へ登録」ボタンはこのエンドポイントを呼ぶ想定で先に実装されていたが、
+/// サーバー側のルート配線自体が漏れていた——2026-07-17に発見・追加。
+async fn register_appserver(site: &str, req: Request<Incoming>) -> Response<BoxBody> {
+    let bytes = match req.into_body().collect().await {
+        Ok(c) => c.to_bytes(),
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
+    };
+    let payload: appserver_registration::RegisterAppserverRequest = match serde_json::from_slice(&bytes) {
+        Ok(p) => p,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
+    };
+
+    let client = reqwest::Client::new();
+    match appserver_registration::register(&client, site, &payload).await {
+        Ok(()) => json_response(
+            StatusCode::OK,
+            &serde_json::json!({
+                "message_ja": "共有バックエンドへ登録しました。",
+                "message_en": "Registered with the shared backend.",
+            }),
+        ),
+        Err(e) => error_response(StatusCode::BAD_GATEWAY, e.to_string()),
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -1042,6 +1072,46 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.status(), reqwest::StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn register_appserver_route_requires_session_and_reaches_registration_logic() {
+        // このルート自体が長らく配線されておらず(appserver_registration
+        // モジュールの関数群がdead codeだった)、2026-07-17に追加した。
+        let (addr, state) = spawn_test_server().await;
+        let client = reqwest::Client::new();
+
+        // 認証無し → 401(他の/api/sites/*アクションと同じ扱い)。
+        let res = client
+            .post(format!("http://{addr}/api/sites/example.tokyo/register-appserver"))
+            .json(&serde_json::json!({
+                "shared_endpoint": "http://127.0.0.1:1",
+                "kind": "poem_cosmo_tauri",
+                "backend_addr": "127.0.0.1:9100",
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+        state.users.register("appserver-user@example.com", None, Some("appserver-user2@example.com".into())).unwrap();
+        let token = state.auth.create_session("appserver-user@example.com");
+
+        // 認証あり、かつ`shared_endpoint`が到達不能 → appserver_registration
+        // 側のHTTPエラーがそのままBAD_GATEWAYとして返る(ルーティング・
+        // 認証・ボディのデシリアライズ・呼び出しがすべて実際に動くことの確認)。
+        let res = client
+            .post(format!("http://{addr}/api/sites/example.tokyo/register-appserver"))
+            .bearer_auth(&token)
+            .json(&serde_json::json!({
+                "shared_endpoint": "http://127.0.0.1:1",
+                "kind": "poem_cosmo_tauri",
+                "backend_addr": "127.0.0.1:9100",
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::BAD_GATEWAY);
     }
 
     #[tokio::test]
