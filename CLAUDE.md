@@ -186,6 +186,28 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-17 `POST /api/sites/:name/register-appserver`ルートの配線漏れを
+  発見・修正、VPS本番デプロイ完了(無人自動開発)**: `cargo build`の
+  dead_code警告(`appserver_registration.rs`の`register`他3関数が
+  未使用)を追ったところ、WASM側(`src/profiles.rs`)の
+  「🔗 共有バックエンドへ登録」ボタンは完成していたのに、
+  サーバー側(`server/src/main.rs`)にこのエンドポイント自体が
+  ルーティングされておらず、本番では常に404になっていたという実バグを
+  発見した。他の`/api/sites/*`アクションと同じ`require_session`
+  認証パターンでルートを追加し解消。
+  - **検証**: `cargo build`が**警告0件**に(従来7件→3件は無関係な
+    警告として残置、`register`系4関数分の警告が解消)。`cargo test`
+    49件全green(新規1件: 認証無し401・`shared_endpoint`到達不能時に
+    502が返ることを実HTTP経由で確認する統合テスト)。VPS本番
+    (`/root/open-easy-web/open-easy-web-server`)へも反映し、
+    `systemctl restart open-easy-web`後、実際に
+    `https://easyweb.tokyo/api/sites/example.tokyo/register-appserver`
+    へ認証無しでPOSTし`401`が返ることを確認済み。
+  - 次にすべきこと: 認証ありでの実登録(実際に稼働中の
+    open-web-server/poem-cosmo-tauriインスタンスへ本当にテナント登録が
+    成功するか)は、共有バックエンド側も実際に起動した状態でのE2E検証が
+    必要(今回は403/502の経路のみ実HTTPで確認)。
+
 - **2026-07-17 `totp-login`エンドポイントをVPS本番へデプロイ完了**:
   上記の新規`POST /api/auth/totp-login`を実VPS
   (`/root/open-easy-web/open-easy-web-server`、systemdサービス
