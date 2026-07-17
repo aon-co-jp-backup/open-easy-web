@@ -208,6 +208,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         // パスにすることで、登録経路があること自体を外部に見せない。
         (&Method::POST, "/api/auth/request-otp") => request_otp(&state, req).await,
         (&Method::POST, "/api/auth/verify-otp") => verify_otp(&state, req).await,
+        (&Method::POST, "/api/auth/totp-login") => totp_login(&state, req).await,
         (&Method::POST, "/api/auth/logout") => logout(&state, req).await,
         (&Method::POST, "/api/auth/totp/setup") => totp_setup(&state, &req).await,
         (&Method::POST, "/api/auth/totp/enable") => totp_enable(&state, req).await,
@@ -512,6 +513,63 @@ async fn request_otp(state: &AppState, req: Request<Incoming>) -> Response<BoxBo
             Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
         }
     }
+}
+
+#[derive(serde::Deserialize)]
+struct TotpLoginRequest {
+    account_email: String,
+    totp_code: String,
+}
+
+/// `POST /api/auth/totp-login` — メールOTPを一切経由せず、認証アプリの
+/// TOTPコードだけでログインする(ユーザー指示、2026-07-17: 「メールOTP
+/// または2FA、どちらか一方だけでログイン可能」)。既存の`verify-otp`は
+/// これまで通りメールOTPが必須(2FA有効時はさらにTOTPも必須)のままで、
+/// 変更していない——このエンドポイントは「TOTPだけで完結する」もう
+/// 一方の代替経路として追加した。TOTPが有効化されていないアカウントでは
+/// 使用できない(そのアカウントにとっての2つ目の要素が存在しないため)。
+async fn totp_login(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+    let bytes = match req.into_body().collect().await {
+        Ok(c) => c.to_bytes(),
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
+    };
+    let payload: TotpLoginRequest = match serde_json::from_slice(&bytes) {
+        Ok(p) => p,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
+    };
+
+    if !state.users.totp_enabled(&payload.account_email) {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "TOTP is not enabled for this account / このアカウントは認証アプリの2段階認証が有効になっていません",
+        );
+    }
+
+    let secret = state.users.totp_secret(&payload.account_email).unwrap_or_default();
+    let Some(secret_bytes) = totp::base32_to_secret(&secret) else {
+        return error_response(StatusCode::INTERNAL_SERVER_ERROR, "invalid stored TOTP secret");
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    if !totp::verify_code(&secret_bytes, &payload.totp_code, now) {
+        return error_response(
+            StatusCode::UNAUTHORIZED,
+            "invalid authenticator code / 認証アプリのコードが正しくありません",
+        );
+    }
+
+    let token = state.auth.create_session(&payload.account_email);
+    json_response(
+        StatusCode::OK,
+        &serde_json::json!({
+            "token": token,
+            "email": payload.account_email,
+            "message_ja": "認証アプリのコードでログインしました。",
+            "message_en": "Logged in with your authenticator app code.",
+        }),
+    )
 }
 
 #[derive(serde::Deserialize)]
@@ -1064,6 +1122,43 @@ mod tests {
         let body: serde_json::Value = res.json().await.unwrap();
         assert_eq!(body["totp_required"].as_bool(), Some(true));
         assert!(body["token"].is_null());
+
+        // `/api/auth/totp-login`: メールOTPを一切経由せず、TOTPコード
+        // だけでログインできる(2026-07-17、ユーザー指示の「どちらか一方
+        // だけでログイン可能」の代替経路)。
+        let now2 = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let counter2 = now2 / 30;
+        let code_for_login = (0..1_000_000u32)
+            .map(|n| format!("{n:06}"))
+            .find(|c| totp::verify_code(&secret_bytes, c, counter2 * 30))
+            .expect("a valid 6-digit code must exist for this time step");
+        let res = client
+            .post(format!("http://{addr}/api/auth/totp-login"))
+            .json(&serde_json::json!({"account_email": "totp-user@example.com", "totp_code": code_for_login}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(body["email"].as_str(), Some("totp-user@example.com"));
+        assert!(body["token"].as_str().is_some());
+    }
+
+    #[tokio::test]
+    async fn totp_login_rejects_accounts_without_totp_enabled() {
+        let (addr, state) = spawn_test_server().await;
+        state.users.register("no-totp@example.com", None, Some("no-totp2@example.com".into())).unwrap();
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("http://{addr}/api/auth/totp-login"))
+            .json(&serde_json::json!({"account_email": "no-totp@example.com", "totp_code": "000000"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::FORBIDDEN);
     }
 
     #[test]

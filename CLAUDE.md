@@ -186,6 +186,33 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-17 メールOTP/TOTP 2FAを「どちらか一方だけでログイン可能」に
+  変更(ユーザー指示)**: 従来は「メールOTP必須、2FA(TOTP)有効時はさらに
+  TOTPコードも必須」というAND方式だった。ユーザーへの確認の結果、
+  「2FA有効時はTOTPコードだけでメールOTPをスキップしてログイン可能に
+  する」という方針を採用。
+  - 既存の`verify-otp`(メールOTP経由、2FA有効時はTOTPコードも要求)は
+    **そのまま変更していない**——引き続き有効なログイン経路の一つ。
+  - 新規`POST /api/auth/totp-login`(`server/src/main.rs`、
+    `TotpLoginRequest { account_email, totp_code }`)を追加。
+    `users.totp_enabled()`でTOTP未有効のアカウントは`403 Forbidden`で
+    拒否(そのアカウントにとっての2つ目の要素が存在しないため)。
+    有効なアカウントはTOTPコードのみでセッション発行(メールOTPの
+    リクエスト・消費を一切経由しない)。
+  - **検証**: `cargo test`(server側)— **48件全green**
+    (新規2件: `totp_login_rejects_accounts_without_totp_enabled`、
+    既存の`totp_setup_enable_then_requires_code_on_next_login`内に
+    実HTTP経由での`totp-login`成功ケースを追記)。WSL Ubuntu
+    (rustc/cargo 1.97)で実施、型チェックのみでなく実際のHTTP
+    リクエスト・レスポンスで確認済み。
+  - **未着手(次回セッション、ユーザー指示「次回2FAともう一つのe-mailも
+    確認」)**: (1) WASM側(`src/api_auth.rs`/`src/auth_ui.rs`)に
+    `totp-login`を呼ぶUI導線がまだ無い(現状はサーバーAPIのみ)。
+    (2) 次回、実際にブラウザ操作で(a) メールOTP+TOTPの既存フロー、
+    (b) TOTPコード単体の新フロー、両方が実際にログインできることを
+    確認する(「もう一つのe-mail」=セカンドメール/backup_email経由の
+    メールOTPフローも含めて確認する、という意味と解釈)。
+
 - **2026-07-17 `aon-co-jp/easyweb`と`aon-co-jp/open-easyweb`を本リポジトリ
   (`open-easy-web`、ドメイン`easy-web.tokyo`)へ融合 — ユーザー指示**:
   開発が並行して分岐していた2つのリポジトリを統合。
