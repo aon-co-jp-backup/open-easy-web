@@ -110,6 +110,31 @@ fn on_verify_otp() {
     });
 }
 
+/// メールOTPを一切経由せず、認証アプリのコードだけでログインする
+/// (`/api/auth/totp-login`、2026-07-17)。
+fn on_totp_login() {
+    let account_email = input_value("totp-login-email");
+    let totp_code = input_value("totp-login-code");
+    if account_email.trim().is_empty() || totp_code.trim().is_empty() {
+        set_text(
+            "totp-login-result",
+            "アカウントのメールアドレスと認証アプリのコードの両方を入力してください。 / \
+             Enter both the account email and the authenticator app code.",
+        );
+        return;
+    }
+    wasm_bindgen_futures::spawn_local(async move {
+        set_text("totp-login-result", "確認中… / Verifying…");
+        match api_auth::totp_login(&account_email, &totp_code).await {
+            Ok(_token) => {
+                set_text("totp-login-result", "✅ ログインしました。 / Logged in.");
+                sync_auth_visibility();
+            }
+            Err(e) => set_text("totp-login-result", &format!("❌ {e}")),
+        }
+    });
+}
+
 fn on_totp_setup() {
     wasm_bindgen_futures::spawn_local(async move {
         set_text("totp-result", "セットアップ中… / Setting up…");
@@ -276,6 +301,7 @@ fn wire_click(id: &str, f: impl Fn() + 'static) -> Result<(), JsValue> {
 pub fn wire() -> Result<(), JsValue> {
     wire_click("login-request-otp", on_request_otp)?;
     wire_click("login-verify-otp", on_verify_otp)?;
+    wire_click("totp-login-submit", on_totp_login)?;
     wire_click("logout-btn", on_logout)?;
     wire_click("change-email-submit", on_request_contact_change)?;
     wire_click("totp-setup-btn", on_totp_setup)?;

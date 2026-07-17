@@ -175,6 +175,30 @@ pub const SHELL_HTML: &str = r#"
       </div>
       <p id="login-result" class="muted" aria-live="polite"></p>
     </details>
+
+    <details>
+      <summary>認証アプリのコードだけでログイン / Log in with just an authenticator app code</summary>
+      <p class="muted">
+        2FA(認証アプリ)が有効なアカウントは、メールのワンタイムパスワードを
+        経由せず、認証アプリの6桁コードだけでログインできます。 / If your
+        account has authenticator-app 2FA enabled, you can log in with just
+        its 6-digit code, skipping the email one-time password entirely.
+      </p>
+      <div class="form-grid">
+        <div>
+          <label for="totp-login-email">アカウントの主メールアドレス / Account primary email</label>
+          <input id="totp-login-email" type="text" placeholder="you@example.com" />
+        </div>
+        <div>
+          <label for="totp-login-code">認証アプリのコード(6桁) / Authenticator code (6 digits)</label>
+          <input id="totp-login-code" type="text" inputmode="numeric" placeholder="123456" />
+        </div>
+      </div>
+      <div class="buttons">
+        <button id="totp-login-submit">認証アプリのコードでログイン / Log in with authenticator code</button>
+      </div>
+      <p id="totp-login-result" class="muted" aria-live="polite"></p>
+    </details>
   </div>
 
   <div id="auth-logged-in" class="hidden">

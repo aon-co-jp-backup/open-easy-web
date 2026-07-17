@@ -144,6 +144,28 @@ pub async fn verify_otp(contact: &str, code: &str, totp_code: Option<&str>) -> R
 }
 
 #[derive(Serialize)]
+struct TotpLoginBody {
+    account_email: String,
+    totp_code: String,
+}
+
+/// `POST /api/auth/totp-login` — メールOTPを一切経由せず、認証アプリの
+/// コードだけでログインする(サーバー側`server/src/main.rs`の
+/// `totp_login`ハンドラに対応、2026-07-17)。
+pub async fn totp_login(account_email: &str, totp_code: &str) -> Result<String, String> {
+    let value = post_json(
+        "/api/auth/totp-login",
+        None,
+        &TotpLoginBody { account_email: account_email.to_string(), totp_code: totp_code.to_string() },
+    )
+    .await?;
+    let token = value.get("token").and_then(|v| v.as_str()).ok_or("missing token in response")?;
+    let email = value.get("email").and_then(|v| v.as_str()).unwrap_or(account_email);
+    save_session(token, email);
+    Ok(token.to_string())
+}
+
+#[derive(Serialize)]
 struct TokenBody {
     token: String,
 }
