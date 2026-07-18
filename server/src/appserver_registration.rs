@@ -16,11 +16,18 @@ use serde::{Deserialize, Serialize};
 
 /// `SiteProfile.app_server`(WASM側、`profiles.rs`)と対応する、
 /// どちらの共有バックエンドへ登録するかの選択。
+///
+/// `AruaruLlm`(2026-07-18追加): `aruaru-llm`(契約不要の独自AI
+/// チャットコマース応答サービス、`open-cuda`とSET構成)も同じ
+/// 「分身の術」(共有インスタンスへの動的テナント登録、ドメインごとの
+/// 個別インストール不要)パターンを採用しているため、既存の
+/// open-runo/poem-cosmo-tauriと同じ管理APIから登録できるようにする。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AppServerKind {
     OpenRuno,
     PoemCosmoTauri,
+    AruaruLlm,
 }
 
 /// `POST /api/sites/:name/register-appserver`のリクエストボディ。
@@ -65,6 +72,7 @@ pub async fn register(client: &reqwest::Client, host: &str, req: &RegisterAppser
     match req.kind {
         AppServerKind::OpenRuno => register_open_web_server(client, host, req).await,
         AppServerKind::PoemCosmoTauri => register_poem_cosmo_tauri(client, host, req).await,
+        AppServerKind::AruaruLlm => register_aruaru_llm(client, host, req).await,
     }
 }
 
@@ -111,6 +119,26 @@ async fn register_poem_cosmo_tauri(client: &reqwest::Client, host: &str, req: &R
     let mut builder = client.post(&endpoint).json(&AppserverTenant { host, backend_addr: &req.backend_addr });
     if let Some(key) = &req.admin_key {
         builder = builder.header("x-api-key", key);
+    }
+
+    send_and_check(builder, &endpoint).await
+}
+
+/// `aruaru-llm`の`POST /admin/tenants`(`src/tenants.rs::TenantRegistry`)
+/// へ動的登録する。`backend_addr`/`db_uri`は使わない(`aruaru-llm`は
+/// バックエンドproxy先を持たず、単に「どのドメインが利用中か」を
+/// 記録するだけのため)。
+async fn register_aruaru_llm(client: &reqwest::Client, host: &str, req: &RegisterAppserverRequest) -> Result<(), RegisterError> {
+    #[derive(Serialize)]
+    struct TenantInfo<'a> {
+        host: &'a str,
+        label: Option<&'a str>,
+    }
+
+    let endpoint = format!("{}/admin/tenants", req.shared_endpoint.trim_end_matches('/'));
+    let mut builder = client.post(&endpoint).json(&TenantInfo { host, label: None });
+    if let Some(key) = &req.admin_key {
+        builder = builder.header("x-admin-token", key);
     }
 
     send_and_check(builder, &endpoint).await
@@ -223,6 +251,26 @@ mod tests {
         assert_eq!(r.header.as_deref(), Some("test-key"));
         assert_eq!(r.body["host"], "app.example.jp");
         assert_eq!(r.body["backend_addr"], "127.0.0.1:9100");
+    }
+
+    #[tokio::test]
+    async fn registers_aruaru_llm_tenant_with_expected_shape() {
+        let (addr, recorded) = start_recording_server("x-admin-token").await;
+        let req = RegisterAppserverRequest {
+            shared_endpoint: format!("http://{addr}"),
+            kind: AppServerKind::AruaruLlm,
+            backend_addr: "unused".to_string(),
+            admin_key: Some("llm-admin-token".to_string()),
+            db_uri: None,
+        };
+
+        register(&reqwest::Client::new(), "e-gov.info", &req).await.expect("registration should succeed");
+
+        let r = recorded.lock().unwrap().take().expect("server should have recorded a request");
+        assert_eq!(r.method, "POST");
+        assert_eq!(r.path, "/admin/tenants");
+        assert_eq!(r.header.as_deref(), Some("llm-admin-token"));
+        assert_eq!(r.body["host"], "e-gov.info");
     }
 
     #[tokio::test]

@@ -186,6 +186,23 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-18 `aruaru-llm`(契約不要の独自AI、`open-cuda`とSET構成)への
+  「分身の術」登録対応を追加**: `open-raid-z/CLAUDE.md`の方針
+  (「管理はopen-easy-webで行なうように」)に基づき、
+  `appserver_registration.rs`の`AppServerKind`に`AruaruLlm`variantを
+  追加し、`register_aruaru_llm()`(`aruaru-llm`の
+  `POST /admin/tenants`、`x-admin-token`ヘッダ認証)を新設。既存の
+  `register_open_web_server`/`register_poem_cosmo_tauri`と同じ
+  `register()`ディスパッチ経由で呼び出せる。**検証**:
+  `cargo build`/`cargo test`とも成功、**50件全green**(新規1件
+  `registers_aruaru_llm_tenant_with_expected_shape`、実TCPループバック上の
+  モックサーバーで`POST /admin/tenants`が正しいホスト名・ヘッダで
+  呼ばれることを確認)、既存49件のリグレッションも無いことを確認済み。
+  次にすべきこと: (1) WASM側(`src/profiles.rs`/`src/shell.rs`)の
+  `app_server`選択肢に`aruaru-llm`を追加するUI配線(現状はサーバー側
+  APIのみ)、(2) 実際に稼働中の`aruaru-llm`インスタンスへの実登録
+  E2E検証(今回はモックサーバーでの形状検証のみ)。
+
 - **2026-07-17 `POST /api/sites/:name/register-appserver`ルートの配線漏れを
   発見・修正、VPS本番デプロイ完了(無人自動開発)**: `cargo build`の
   dead_code警告(`appserver_registration.rs`の`register`他3関数が
