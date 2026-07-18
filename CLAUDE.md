@@ -230,6 +230,54 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-19 監査: 下記2026-07-18エントリの「次にすべきこと(1)」
+  (WASM側UI配線)は、実は同日中の後続コミットで既に完了済みだったことを
+  確認・実地検証、HANDOFF記載を訂正**: このエントリ自体の「次にすべき
+  こと」が古いまま残っていて、実際には`837178d`
+  (`Add aruaru-llm as a selectable app_server option in the
+  site-management UI`、2026-07-18 21:00)で`src/profiles.rs`の
+  `appserver_kind_for()`に`"aruaru-llm" => Some("aruaru_llm")`、
+  `src/shell.rs`の`#site-app-server`セレクトに
+  `<option value="aruaru-llm" title="契約不要の独自AIチャットコマース
+  応答サービス(open-cudaとSET構成)。バックエンド接続先ではなく
+  テナント登録のみ行う。">aruaru-llm(AIチャットコマース)</option>`が
+  既に追加済みだった(このHANDOFFの追記漏れ、コード自体は正しく
+  実装・コミット済み)。「タスク管理メタデータを鵜呑みにしない」
+  既存方針どおり、実ソース・実ビルド・実ブラウザ描画で裏取りした。
+  - **検証(型チェックのみでなく実際に確認)**:
+    1. `cargo build --target wasm32-unknown-unknown`(ルートcrate)
+       警告・エラー0件で成功。
+    2. `cd server && cargo test` — **50件全green**(2026-07-18
+       エントリで唯一flakyだった`totp_setup_enable_then_requires_
+       code_on_next_login`も含め全件パス、このパスでは再現せず)。
+    3. `wasm-bindgen --target web --no-typescript --out-dir pkg
+       target/wasm32-unknown-unknown/debug/open_easy_web.wasm`で
+       実際にJSグルー+`.wasm`を生成し、`python -m http.server`で
+       ローカル配信。**実ブラウザ(Claude Browser pane)で
+       `index.html`を開き**、白画面・コンソールエラーが無いことを
+       確認した上で、サイト追加フォームの「アプリケーションサーバー」
+       `<select>`に実際に`aruaru-llm(AIチャットコマース)`という
+       選択肢が描画されていることをアクセシビリティツリー越しに確認。
+       さらに実際に選択→サイト名・ホスト(`e-gov.info`)を入力→
+       保存ボタンをクリックし、`localStorage`
+       (`openeasyweb_site_profiles_v1`)に
+       `"app_server":"aruaru-llm"`として実際に永続化されること、
+       一覧カードに`アプリサーバー: aruaru-llm`と表示されることを
+       DOM経由で確認した(コンパイル済み`.wasm`バイナリ内に
+       `aruaru-llm`/`aruaru_llm`の文字列が実際に埋め込まれていることも
+       `grep`で裏取り済み)。保存後にサーバー側ドメイン登録が
+       `not logged in`エラーになったのは、このパスでは
+       `open-easy-web-server`本体(セッション認証付きAPI)を起動せず
+       静的ファイル配信のみだったための想定内の挙動であり、
+       aruaru-llm UI配線とは無関係(「白画面バグ」には該当しない)。
+    4. 既存の`appserver_registration::tests::
+       registers_aruaru_llm_tenant_with_expected_shape`
+       (サーバー側、実TCPループバックのモックで
+       `POST /admin/tenants`の形状検証)も引き続きgreen。
+  - **結論**: 下記2026-07-18エントリの「次にすべきこと(1)」は完了済み。
+    残る「次にすべきこと(2)」(実際に稼働中の`aruaru-llm`インスタンスへの
+    実登録E2E検証)のみ引き続き未着手。
+
 - **2026-07-18 `aruaru-llm`(契約不要の独自AI、`open-cuda`とSET構成)への
   「分身の術」登録対応を追加**: `open-raid-z/CLAUDE.md`の方針
   (「管理はopen-easy-webで行なうように」)に基づき、
