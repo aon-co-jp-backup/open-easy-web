@@ -96,6 +96,7 @@ pub const SHELL_HTML: &str = r#"
         <option value="none">なし(Webサーバー単体で動作)</option>
         <option value="open-runo">open-runo</option>
         <option value="poem-cosmo-tauri">poem-cosmo-tauri</option>
+        <option value="aruaru-llm" title="契約不要の独自AIチャットコマース応答サービス(open-cudaとSET構成)。バックエンド接続先ではなくテナント登録のみ行う。">aruaru-llm(AIチャットコマース)</option>
       </select>
     </div>
     <div>
@@ -105,8 +106,8 @@ pub const SHELL_HTML: &str = r#"
     <div class="form-grid-full">
       <p class="muted">
         共有バックエンドへの登録(任意、2026-07-16新設・「分身の術」構想):
-        既に稼働中のopen-web-server/poem-cosmo-tauriインスタンスへ
-        このドメインを動的登録し、ドメインごとの個別インストールを
+        既に稼働中のopen-web-server/poem-cosmo-tauri/aruaru-llmインスタンス
+        へこのドメインを動的登録し、ドメインごとの個別インストールを
         不要にします。管理APIのURLを入力すると、一覧のカードに
         「🔗 共有バックエンドへ登録」ボタンが表示されます。
       </p>

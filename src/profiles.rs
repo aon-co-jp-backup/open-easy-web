@@ -45,9 +45,12 @@ pub struct SiteProfile {
     #[serde(default = "default_engine")]
     pub webserver_engine: String,
     /// このドメインの動的処理を担うアプリケーションサーバー層。
-    /// "none"(未割り当て) | "open-runo" | "poem-cosmo-tauri"。
-    /// Apache+Tomcatの関係と同様、Webサーバー(nginx/apache/
-    /// open-web-server)だけでも単体動作するため、"none"が既定値。
+    /// "none"(未割り当て) | "open-runo" | "poem-cosmo-tauri" |
+    /// "aruaru-llm"(契約不要の独自AIチャットコマース応答サービス、
+    /// `open-cuda`とSET構成——バックエンド接続先ではなくテナント登録
+    /// のみを行う点が他の2つと異なる)。Apache+Tomcatの関係と同様、
+    /// Webサーバー(nginx/apache/open-web-server)だけでも単体動作
+    /// するため、"none"が既定値。
     /// `scripts/gen-vhost.sh --stack=proxy` のUPSTREAM、または
     /// `open-web-server-gateway` の `OPEN_WEB_SERVER_APP_UPSTREAM` に
     /// 対応する接続先は `app_server_upstream` に持つ。
@@ -393,13 +396,15 @@ fn on_register_appserver(id: String) {
     });
 }
 
-/// `SiteProfile.app_server`("open-runo"/"poem-cosmo-tauri")を、
+/// `SiteProfile.app_server`("open-runo"/"poem-cosmo-tauri"/"aruaru-llm")を、
 /// サーバー側`appserver_registration::AppServerKind`のJSON表現
-/// ("open_runo"/"poem_cosmo_tauri")へ変換する。"none"はどちらでもない。
+/// ("open_runo"/"poem_cosmo_tauri"/"aruaru_llm")へ変換する。
+/// "none"はどれでもない。
 fn appserver_kind_for(app_server: &str) -> Option<&'static str> {
     match app_server {
         "open-runo" => Some("open_runo"),
         "poem-cosmo-tauri" => Some("poem_cosmo_tauri"),
+        "aruaru-llm" => Some("aruaru_llm"),
         _ => None,
     }
 }
