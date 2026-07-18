@@ -53,6 +53,27 @@ middleware, etc. — see those repos' CLAUDE.md for details).
   `easyweb-tls-monitor.timer` (expiry monitor, daily).
 - **VPS deploy**: `scripts/deploy-vps.ps1` (Windows PowerShell)
   automates build → upload → launch.
+- **Password-free account authentication**: no fixed passwords at all —
+  log in via a one-time password (OTP) sent to whichever contact you
+  registered (primary email, a second email, or a phone number).
+  Authenticator-app 2FA (TOTP) can be enabled, and **either the email
+  OTP or the authenticator code alone is enough to log in** (a
+  dedicated login path lets a 2FA-enabled account skip the email OTP
+  entirely and authenticate with just the 6-digit authenticator code).
+  Contact-info changes are always confirmed via a link sent to the
+  *current* primary email, never the new one (prevents account
+  takeover).
+- **AI-driven automatic PHP detection**: uploading files to a site
+  triggers a self-learning AI (no external LLM, no contract) that
+  scores file-extension/`<?php` tag/`wp-config.php`/`composer.json`
+  signatures to decide whether the site is PHP, and if so auto-
+  generates and installs the matching nginx + PHP-FPM vhost. Detections
+  can be manually corrected, and each correction nudges the AI's
+  weights online (EWMA).
+- **Dynamic registration with a shared backend ("bunshin no jutsu")**:
+  instead of installing a separate `open-runo`/`poem-cosmo-tauri`
+  process per domain, a site's domain can be dynamically registered
+  with an already-running shared backend instance.
 
 ## What it deliberately does not do
 
@@ -60,7 +81,7 @@ middleware, etc. — see those repos' CLAUDE.md for details).
   upstream keepalive pooling) — see `open-runo`/`poem-cosmo-tauri`'s
   native Rust implementations instead.
 - **No database connectivity** of any kind.
-- No auth, pagination, or automatic error retry.
+- Pagination and automatic error retry are not implemented.
 - No native-app experience like Tauri (browser-run WASM only).
 - **Does not perform actual domain purchase/DNS record registration**
   (a registrar operation) or VPS contracting — those are the user's
