@@ -670,7 +670,7 @@ python -m http.server 8080   # index.html + pkg/ を配信
   **未着手として明記**: (1) 実VPS環境での実行検証、(2) 10ヶ国語READMEへの
   反映。
   併せて、`open-web-server`のREADMEに命名の由来(`open-web-server`は
-  石塚正浩・aon CEOによる命名、`aruaru-server`はClaude開発過程での命名)と
+  ユーザーによる命名、`aruaru-server`はClaude開発過程での命名)と
   両者の位置付けを追記(ユーザー指示)——`aruaru-server`は`aruaru-db`
   workspace内の1クレート(`[[bin]] name = "aruaru-server"`)であり、
   `aruaru-query`/`aruaru-wire`/`aruaru-dist`等と密結合しているため、
