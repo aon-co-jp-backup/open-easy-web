@@ -118,7 +118,7 @@ python -m http.server 8080   # index.html + pkg/ を配信
 - **aruaru-web**(分離元。高速化機能・ドメイン/HTTPS機能の旧居場所、
   現在はDB/高速化/ドメイン機能いずれも持たない): https://github.com/aon-co-jp/aruaru-web
 - **open-runo**(Web高速化機能の実装先の一つ): https://github.com/aon-co-jp/open-runo
-- **poem-cosmo-tauri**(同上、実装の先行地点): https://github.com/aon-co-jp/poem-cosmo-tauri
+- **RPoem**(旧poem-cosmo-tauri)(同上、実装の先行地点): https://github.com/aon-co-jp/RPoem
 - **aruaru-db**: https://github.com/aon-co-jp/aruaru-db
 - **open-web-server**: https://github.com/aon-co-jp/open-web-server
 - **open-raid-z**(開発ルールの正本): https://github.com/aon-co-jp/open-raid-z
