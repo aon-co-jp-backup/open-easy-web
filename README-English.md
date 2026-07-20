@@ -20,7 +20,8 @@ features** — has moved here. The speed-up features (gzip compression,
 static-asset long-lived caching, FastCGI buffer tuning, upstream
 keepalive pooling) are no longer generated as Nginx/Apache config;
 they've instead been consolidated into **native Rust (hyper
-middleware) implementations in `open-runo`/`poem-cosmo-tauri`** (gzip
+middleware) implementations in `open-runo`/RPoem (formerly
+poem-cosmo-tauri)** (gzip
 response-compression middleware, static-asset Cache-Control
 middleware, etc. — see those repos' CLAUDE.md for details).
 
@@ -46,7 +47,7 @@ middleware, etc. — see those repos' CLAUDE.md for details).
   Nginx/Apache vhosts (HTTP→HTTPS redirect + ACME challenge path
   included) for 5 stacks: `static`, `proxy` (generic reverse proxy),
   `wordpress`, `laravel`, `fastapi`. **Speed-up tuning is deliberately
-  not included here** — see `open-runo`/`poem-cosmo-tauri`.
+  not included here** — see `open-runo`/RPoem (formerly poem-cosmo-tauri).
 - **Automatic HTTPS monitor/renew**: `scripts/setup-tls.sh` (Let's
   Encrypt via certbot), `deploy/systemd/install-systemd-units.sh`
   installs `easyweb-tls-renew.timer` (certbot renew, twice daily) and
@@ -62,7 +63,11 @@ middleware, etc. — see those repos' CLAUDE.md for details).
   entirely and authenticate with just the 6-digit authenticator code).
   Contact-info changes are always confirmed via a link sent to the
   *current* primary email, never the new one (prevents account
-  takeover).
+  takeover). **As of 2026-07-15, public sign-up is disabled for security
+  reasons — only a single fixed account seeded at startup can log in**
+  (`FIXED_ACCOUNT_EMAIL` in `server/src/main.rs`). Running multiple
+  accounts currently requires editing that fixed-account setup for your
+  own deployment.
 - **AI-driven automatic PHP detection**: uploading files to a site
   triggers a self-learning AI (no external LLM, no contract) that
   scores file-extension/`<?php` tag/`wp-config.php`/`composer.json`
@@ -71,14 +76,16 @@ middleware, etc. — see those repos' CLAUDE.md for details).
   can be manually corrected, and each correction nudges the AI's
   weights online (EWMA).
 - **Dynamic registration with a shared backend ("bunshin no jutsu")**:
-  instead of installing a separate `open-runo`/`poem-cosmo-tauri`
+  instead of installing a separate `open-runo`/RPoem (formerly
+  poem-cosmo-tauri)
   process per domain, a site's domain can be dynamically registered
   with an already-running shared backend instance.
 
 ## What it deliberately does not do
 
 - **No web speed-up** (gzip/static caching/FastCGI buffer tuning/
-  upstream keepalive pooling) — see `open-runo`/`poem-cosmo-tauri`'s
+  upstream keepalive pooling) — see `open-runo`/RPoem (formerly
+  poem-cosmo-tauri)'s
   native Rust implementations instead.
 - **No database connectivity** of any kind.
 - Pagination and automatic error retry are not implemented.
@@ -136,7 +143,7 @@ full honest verification status.
 
 - **aruaru-web** (split source): https://github.com/aon-co-jp/aruaru-web
 - **open-runo**: https://github.com/aon-co-jp/open-runo
-- **poem-cosmo-tauri**: https://github.com/aon-co-jp/poem-cosmo-tauri
+- **RPoem** (formerly poem-cosmo-tauri): https://github.com/aon-co-jp/RPoem
 - **aruaru-db**: https://github.com/aon-co-jp/aruaru-db
 - **open-web-server**: https://github.com/aon-co-jp/open-web-server
 - **open-raid-z** (canonical dev rules): https://github.com/aon-co-jp/open-raid-z
