@@ -88,7 +88,7 @@ fn normalize(email: &str) -> String {
 }
 
 /// 電話番号の表記ゆれ(ハイフン・スペイン等)を吸収する。先頭の`+`は
-/// 保持し、それ以外の非数字は取り除く(`090-7555-5011`と`09075555011`を
+/// 保持し、それ以外の非数字は取り除く(`090-1234-5678`と`09075555011`を
 /// 同一視するため)。
 pub fn normalize_phone(phone: &str) -> String {
     let phone = phone.trim();
@@ -373,16 +373,16 @@ mod tests {
 
     #[test]
     fn normalize_phone_ignores_hyphens_and_keeps_leading_plus() {
-        assert_eq!(normalize_phone("090-7555-5011"), "09075555011");
-        assert_eq!(normalize_phone("+81 90 7555 5011"), "+819075555011");
+        assert_eq!(normalize_phone("090-1234-5678"), "09012345678");
+        assert_eq!(normalize_phone("+81 90 1234 5678"), "+819012345678");
     }
 
     #[test]
     fn find_by_phone_matches_regardless_of_hyphenation() {
         let store = store();
-        store.register("user@example.com", Some("090-7555-5011".into()), None).unwrap();
-        assert_eq!(store.find_email_by_phone("09075555011").as_deref(), Some("user@example.com"));
-        assert_eq!(store.find_email_by_phone("090-7555-5011").as_deref(), Some("user@example.com"));
+        store.register("user@example.com", Some("090-1234-5678".into()), None).unwrap();
+        assert_eq!(store.find_email_by_phone("09012345678").as_deref(), Some("user@example.com"));
+        assert_eq!(store.find_email_by_phone("090-1234-5678").as_deref(), Some("user@example.com"));
     }
 
     #[test]

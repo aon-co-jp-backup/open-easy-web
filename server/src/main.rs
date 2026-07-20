@@ -59,9 +59,12 @@ struct AppState {
 /// セキュリティ上の理由で公開登録を廃止し固定アカウントのみに限定)。
 /// 起動のたびに`seed_fixed_account`で冪等に保証される——`/api/auth/register`
 /// は無効化されているため、これ以外のアカウントは今後一切作成できない。
-const FIXED_ACCOUNT_EMAIL: &str = "norukia.jp@gmail.com";
-const FIXED_ACCOUNT_BACKUP_EMAIL: &str = "cloud9slack@gmail.com";
-const FIXED_ACCOUNT_PHONE: &str = "090-7555-5011";
+/// 実際の個人情報をソースに残さないため、値は環境変数から読む
+/// (`OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`は必須、backup_email/phoneは任意)。
+fn fixed_account_email() -> String {
+    std::env::var("OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL")
+        .expect("OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL must be set — no default account is hardcoded")
+}
 
 impl AppState {
     fn from_env() -> Self {
@@ -75,10 +78,14 @@ impl AppState {
             "OPEN_EASYWEB_USERS_STATE",
             "/var/www/.open-easy-web-users.json",
         ));
+        let fixed_account_email = fixed_account_email();
+        let fixed_account_phone = std::env::var("OPEN_EASYWEB_FIXED_ACCOUNT_PHONE").ok();
+        let fixed_account_backup_email =
+            std::env::var("OPEN_EASYWEB_FIXED_ACCOUNT_BACKUP_EMAIL").ok();
         users.seed_fixed_account(
-            FIXED_ACCOUNT_EMAIL,
-            Some(FIXED_ACCOUNT_PHONE),
-            Some(FIXED_ACCOUNT_BACKUP_EMAIL),
+            &fixed_account_email,
+            fixed_account_phone.as_deref(),
+            fixed_account_backup_email.as_deref(),
         );
         Self {
             sites_root,
@@ -93,7 +100,7 @@ impl AppState {
             ),
             nginx_conf_d: env_path("OPEN_EASYWEB_NGINX_CONF_D", "/etc/nginx/conf.d"),
             acme_email: std::env::var("OPEN_EASYWEB_ACME_EMAIL")
-                .unwrap_or_else(|_| FIXED_ACCOUNT_EMAIL.to_string()),
+                .unwrap_or_else(|_| fixed_account_email.clone()),
             bind_ip: std::env::var("OPEN_EASYWEB_SITE_BIND_IP").unwrap_or_else(|_| "0.0.0.0".into()),
             php_fpm_upstream: std::env::var("OPEN_EASYWEB_PHP_FPM_UPSTREAM")
                 .unwrap_or_else(|_| "unix:/run/php-fpm/www.sock".into()),

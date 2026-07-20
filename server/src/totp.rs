@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn provisioning_uri_contains_expected_fields() {
-        let uri = provisioning_uri("norukia.jp@gmail.com", "open-easy-web", "ABCDEFGH");
+        let uri = provisioning_uri("owner@example.com", "open-easy-web", "ABCDEFGH");
         assert!(uri.starts_with("otpauth://totp/"));
         assert!(uri.contains("secret=ABCDEFGH"));
         assert!(uri.contains("digits=6"));

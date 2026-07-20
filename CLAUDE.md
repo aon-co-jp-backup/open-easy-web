@@ -230,6 +230,35 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-20 個人情報のハードコード除去(ユーザー指示)——`server/src/main.rs`の
+  `FIXED_ACCOUNT_EMAIL`/`FIXED_ACCOUNT_BACKUP_EMAIL`/`FIXED_ACCOUNT_PHONE`定数
+  (実際の個人Gmailアドレス2件・実電話番号)を削除し、環境変数から読む方式に変更**:
+  - 新規必須環境変数`OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`(未設定なら起動時に
+    `panic`で明示的に落ちる——固定アカウント制でこれが無いと誰もログイン
+    できないため、サイレントな機能不全より起動失敗の方が安全と判断)。
+    任意環境変数`OPEN_EASYWEB_FIXED_ACCOUNT_PHONE`/
+    `OPEN_EASYWEB_FIXED_ACCOUNT_BACKUP_EMAIL`(いずれか片方以上の登録が
+    必須という既存の`register()`バリデーションはそのまま)。
+  - `acme_email`のデフォルトフォールバック先も同じ値を使うよう追従。
+  - テスト/docコメント中に残っていた実電話番号(`090-7555-5011`)・実個人
+    メール(`totp.rs`の`norukia.jp@gmail.com`)もダミー値
+    (`090-1234-5678`/`owner@example.com`)に置換。
+  - **検証**: `cargo build`警告0件、`cargo test` 50件中49件green・
+    1件(`totp_setup_enable_then_requires_code_on_next_login`)は単体再実行で
+    green(既知のflaky、2026-07-18 HANDOFFに記録済みの並列実行タイミング
+    起因で今回の変更とは無関係)。
+  - **⚠️ 本番VPS反映時の注意(次回デプロイ時に必須)**: 実VPS
+    (`/root/open-easy-web/open-easy-web-server`、systemdサービス
+    `open-easy-web`)側で`OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`(+電話/
+    セカンドメールのいずれか)を環境変数として設定してから
+    `systemctl restart open-easy-web`すること——設定せずに再起動すると
+    起動時に`panic`して**サービスが落ちる**(固定アカウントが復元できず
+    誰もログインできなくなるより安全な設計だが、デプロイ手順を伴わないと
+    ダウンタイムになる)。`deploy/systemd/`にはまだ
+    `open-easy-web-server.service`雛形が無い(既知の未着手項目)ため、
+    現状は`/etc/systemd/system/open-easy-web.service`のVPS側の
+    `Environment=`行、または`EnvironmentFile=`を手動で編集する必要がある。
+
 - **2026-07-20 ドキュメント監査(ユーザー指示、コード変更なし)——実装と
   ドキュメントの齟齬を発見・修正、10ヶ国語READMEのうち3件・PORTING.md・
   この`CLAUDE.md`を更新**:
