@@ -72,6 +72,16 @@ wasm-bindgen --target web --no-typescript --out-dir pkg \
 python -m http.server 8080
 ```
 
+> ⚠️ **Build-Hinweis (Netzlaufwerk-Umgebungen)**: Liegt dieses Repository
+> auf einem netzwerkgemounteten Laufwerk (z. B. SMB-Share), kann das
+> direkte Lesen/Schreiben der `target/`-Ausgabe von `cargo build` oder
+> der Ein-/Ausgabe von `wasm-bindgen` auf diesem Laufwerk **unmittelbar
+> nach einem Schreibvorgang veraltete Inhalte zurückgeben** (Lese-Cache-
+> Inkonsistenz, am 2026-07-20 tatsächlich aufgetreten). Wirkt ein Rebuild
+> nicht, die Build-Ausgabe mit `cargo build --target-dir
+> <lokales-Temp-Verzeichnis>` auf ein lokales Laufwerk umleiten und
+> `wasm-bindgen` gegen diese lokale Kopie ausführen.
+
 ## In diesem Durchlauf verifiziert
 
 `cargo check`/`build`/`clippy --target wasm32-unknown-unknown` alle

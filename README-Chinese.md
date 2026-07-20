@@ -68,6 +68,13 @@ wasm-bindgen --target web --no-typescript --out-dir pkg \
 python -m http.server 8080
 ```
 
+> ⚠️ **构建注意事项(网络驱动器环境)**: 如果本仓库位于网络共享驱动器
+> (如 SMB 挂载)上,直接在该驱动器上读写 `cargo build` 的 `target/`
+> 输出或 `wasm-bindgen` 的输入/输出,**写入后立即读取可能返回旧内容**
+> (读取缓存不一致,2026-07-20 实际发生并确认)。若重新构建后改动未生效,
+> 可用 `cargo build --target-dir <本地临时目录>` 将构建输出指向网络
+> 驱动器之外(如本地 C 盘),再对该本地副本运行 `wasm-bindgen` 即可解决。
+
 ## 本次验证情况
 
 `cargo check`/`build`/`clippy --target wasm32-unknown-unknown` 均

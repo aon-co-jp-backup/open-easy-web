@@ -73,6 +73,15 @@ wasm-bindgen --target web --no-typescript --out-dir pkg \
 python -m http.server 8080
 ```
 
+> ⚠️ **빌드 시 주의(네트워크 드라이브 환경)**: 저장소가 SMB 등으로 마운트한
+> 네트워크 공유 드라이브에 있을 경우, `cargo build`의 `target/` 출력이나
+> `wasm-bindgen`의 입출력을 해당 드라이브에서 직접 읽고 쓰면 **쓰기 직후
+> 읽기가 오래된 내용을 반환**할 수 있다(읽기 캐시 불일치, 2026-07-20에
+> 실제 발생·확인됨). 재빌드해도 변경이 반영되지 않으면 `cargo build
+> --target-dir <로컬 임시 디렉터리>`로 빌드 출력을 네트워크 드라이브 밖
+> (로컬 C: 등)으로 돌리고, 그 로컬 복사본에 대해 `wasm-bindgen`을 실행하면
+> 해결된다.
+
 ## 이번 패스 검증 내용
 
 `cargo check`/`build`/`clippy --target wasm32-unknown-unknown` 모두

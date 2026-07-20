@@ -1,7 +1,9 @@
 # PORTING.md — open-easy-web お引越しファイル
 
 > このファイル1枚で、他プロジェクトへ `open-easy-web` を導入・移設できます。
-> 対象バージョン: 0.1.0(2026-07-13、`aruaru-web` からの分離初版)。
+> 対象バージョン: 0.1.0(2026-07-13、`aruaru-web` からの分離初版。
+> 2026-07-20、デプロイ先既定パス変更・ネットワークドライブ移設時の
+> 注意事項を追記)。
 
 ## 0. このリポジトリのスコープ
 
@@ -60,6 +62,25 @@ wasm-bindgen --target web --no-typescript --out-dir pkg \
   target/wasm32-unknown-unknown/debug/open_easy_web.wasm
 ```
 
+> ⚠️ **移設先がネットワーク共有ドライブの場合の注意(2026-07-20、実際に
+> 発生した事故から追記)**: 移設先が(このリポジトリの元々の開発環境と
+> 同様に)SMB等でマウントしたネットワーク共有ドライブの場合、`cargo
+> build`の`target/`出力や`wasm-bindgen`の入出力を**そのドライブ上で
+> 直接読み書きすると、書き込み直後の読み取りが古い内容を返すことがある**
+> (読み取りキャッシュの不整合)。この不整合により、`wasm-bindgen`が
+> 生成したJSグルーコードが古いファイル名を内部参照したまま本番へ
+> デプロイされ、実際に画面が白くなる事故(`WebAssembly.instantiate():
+> Import #0 ... module is not an object or function`)が発生した。
+> 再ビルドしても変更が反映されない場合は、`cargo build --target-dir
+> <ローカルドライブの一時ディレクトリ>`でビルド出力先をネットワーク
+> ドライブ外(ローカルのC:等)に切り替え、`wasm-bindgen`もそのローカル
+> コピーの`.wasm`に対して実行し、生成物だけをリポジトリへコピーし
+> 戻すこと。また、`wasm-bindgen`は入力`.wasm`ファイル名のstemを基に
+> JSグルーコード内の相対import(`<stem>_bg.wasm`/`<stem>_bg.js`)を
+> 生成するため、**入力ファイル名は最終的にデプロイする出力ファイル名と
+> 一致させること**(後から出力ファイルだけをリネームすると内部参照が
+> 古い名前のまま残る)。
+
 ## 3. vhostテンプレートの再利用
 
 `deploy/nginx/vhost-<stack>.conf.template` /
@@ -92,6 +113,11 @@ prefix(`easyweb-`)を変更し、`ExecStart`のパスをリポジトリの実際
 ロード→`ssh`経由の`serve.sh`起動を自動化する。他プロジェクトの
 バイナリ/静的ファイルを同時にアップロードしたい場合は
 `-OpenWebServerPath`相当の追加パラメータを増設する形で拡張できる。
+**アップロード先の既定パスは2026-07-20時点で`/root/RUNO/open-easy-web`**
+(`-RemoteAruaruPath`パラメータで上書き可能。旧既定値`/root/open-easy-web`
+から変更されたので、既存VPSに旧パスで運用中の環境を移設する場合は
+`systemd` unit(`WorkingDirectory`/`ExecStart`/
+`Environment=OPEN_EASYWEB_STATIC_DIR`)側のパスも合わせて更新すること)。
 
 ## 6. 動作確認
 

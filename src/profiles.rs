@@ -141,19 +141,35 @@ fn default_profiles() -> Vec<SiteProfile> {
     ]
 }
 
-/// `seed-self`のドメインが過去の値(`localhost:8080`→`easy-web.tokyo`)の
-/// ままになっている既存ユーザーのlocalStorageを、現在の正式ドメイン
-/// `easy-web.tokyo`へ一度だけ補正する(2026-07-16、easy-web.tokyoへ
-/// 一本化。easy-web.tokyoはopen-easy-webを表示しない方針になったため)。
+/// 自サイト(`purpose == "self"`)のドメイン/名称が過去の値
+/// (`localhost:8080`またはハイフン無し旧表記`easyweb.tokyo`/
+/// `open-easyweb`)のままになっている既存ユーザーのlocalStorageを、
+/// 現在の正式表記(`easy-web.tokyo`・`open-easy-web(このサイト)`)へ
+/// 一度だけ補正する(2026-07-16、ドメインをeasy-web.tokyoへ一本化。
+/// 2026-07-20、次の2点を修正: (1) 旧表記のハイフン無しホスト名
+/// `easyweb.tokyo`が誤って「既に正しい値」として判定されてしまい
+/// 補正されない不具合、(2) `name`フィールドがそもそも補正対象に
+/// 含まれていなかった不具合、(3) 一度「保存」ボタン経由で編集された
+/// 自サイトは`id`が`seed-self`から`site-<timestamp>`形式に変わり
+/// `id`一致では検出できなくなっていた不具合——`id`ではなく
+/// `purpose == "self"`で判定するよう変更)。
 fn migrate_stale_self_seed(profiles: &mut Vec<SiteProfile>) -> bool {
+    const CANONICAL_NAME: &str = "open-easy-web(このサイト)";
+    const LEGACY_NAME: &str = "open-easyweb(このサイト)";
     let mut changed = false;
     for p in profiles.iter_mut() {
-        let is_stale = p.id == "seed-self"
-            && ((p.host == "localhost" && p.port == 8080) || p.host == "easy-web.tokyo");
-        if is_stale {
+        if p.purpose != "self" {
+            continue;
+        }
+        let is_stale_host = (p.host == "localhost" && p.port == 8080) || p.host == "easyweb.tokyo";
+        if is_stale_host {
             p.protocol = "https".to_string();
             p.host = "easy-web.tokyo".to_string();
             p.port = 443;
+            changed = true;
+        }
+        if p.name == LEGACY_NAME {
+            p.name = CANONICAL_NAME.to_string();
             changed = true;
         }
     }

@@ -19,7 +19,7 @@
 #   -VpsHost             VPSのIPアドレスまたはドメイン(必須)
 #   -VpsUser             SSH接続ユーザー名(既定: root)
 #   -VpsPort             SSHポート(既定: 22)
-#   -RemoteAruaruPath    open-easy-webのアップロード先(既定: /root/open-easy-web)
+#   -RemoteAruaruPath    open-easy-webのアップロード先(既定: /root/RUNO/open-easy-web)
 #   -OpenWebServerPath   ローカルのopen-web-serverディレクトリ(指定時のみ
 #                        /root/open-web-server へ同時アップロードする)
 #   -SkipBuild           指定すると、ローカルでの `cargo build`/`wasm-bindgen`
@@ -31,7 +31,7 @@ param(
     [Parameter(Mandatory = $true)][string]$VpsHost,
     [string]$VpsUser = "root",
     [int]$VpsPort = 22,
-    [string]$RemoteAruaruPath = "/root/open-easy-web",
+    [string]$RemoteAruaruPath = "/root/RUNO/open-easy-web",
     [string]$OpenWebServerPath = "",
     [switch]$SkipBuild,
     [switch]$StartServer

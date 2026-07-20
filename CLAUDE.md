@@ -230,6 +230,85 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-20 開発マシンのドライブレター変更(Z:→F:)・本番VPS表記修正
+  (`open-easyweb`→`open-easy-web`)・デプロイ先パス変更(`/root/open-easy-web`
+  →`/root/RUNO/open-easy-web`)・`src/profiles.rs`の自サイト情報自動補正
+  バグ2件を修正(ユーザー指示)**:
+  1. **開発マシンのドライブ構成変更**: これまで`Z:\runo\open-easy-web`
+     だった作業パスが、ユーザーの環境変更により`F:\runo\open-easy-web`
+     (同一内容、ドライブ文字のみ変更)になった。以後のセッションは
+     `F:\runo\open-easy-web`を正として作業する。
+  2. **本番VPS(`easy-web.tokyo`、実体は`easyweb.tokyo`向けnginx vhost経由)
+     の表記修正**: 画面最上部の見出し・ページタイトルが実際には
+     `open-easyweb`(ハイフン無し、旧ブランディング)のままデプロイされて
+     いた——ローカルのソース(`src/shell.rs`)は既に`open-easy-web`表記に
+     修正済みだったが、本番へは反映されていなかった(ビルド成果物と
+     ソースの乖離)。ローカルで`cargo build --target
+     wasm32-unknown-unknown` + `wasm-bindgen`を再実行し、生成物を本番へ
+     再デプロイして解消。
+  3. **デプロイ先ディレクトリの変更**: VPS上の実体パスを
+     `/root/open-easy-web`から`/root/RUNO/open-easy-web`へ移設
+     (`mv`、既存の`open-easy-web-frontend`/`open-easy-web-server`/
+     `open-easy-web-wasm`サブディレクトリ構成はそのまま)。
+     `/etc/systemd/system/open-easy-web.service`の`WorkingDirectory`・
+     `ExecStart`・`Environment=OPEN_EASYWEB_STATIC_DIR`の3箇所を`sed`で
+     新パスに書き換え、`systemctl daemon-reload && systemctl start
+     open-easy-web`で復旧・動作確認済み(`systemctl is-active` =
+     `active`)。`scripts/deploy-vps.ps1`の`-RemoteAruaruPath`既定値も
+     同じ新パスに追従済み(このコミットに含む)。
+  4. **`src/profiles.rs`の`migrate_stale_self_seed()`(自サイト情報の
+     旧表記→新表記への自動補正関数)に発見した2件のバグを修正**:
+     (a) ホスト名の判定条件が誤って**既に正しい値**`"easy-web.tokyo"`を
+     チェックしており、実際の旧表記`"easyweb.tokyo"`(ハイフン無し)を
+     検出できず補正が効かなかった(コピー&ペースト由来の誤り)。
+     (b) `name`フィールド(`"open-easyweb(このサイト)"`→
+     `"open-easy-web(このサイト)"`)がそもそも補正対象に含まれておらず、
+     ホスト名を直しても表示名は古いままだった。(c) 判定を`id ==
+     "seed-self"`で行っていたため、一度でも「保存」ボタン経由で編集
+     された自サイトは`id`が`site-<timestamp>`形式に変わり、以後は
+     `id`一致で検出できなくなっていた——`purpose == "self"`での判定に
+     変更し、`id`の変遷に関わらず補正できるようにした。
+  5. **付随して発見した開発環境固有の重大な既知の問題(次回以降も注意)**:
+     このリポジトリをネットワーク共有ドライブ(SMB等でマウントした
+     ドライブ、当時は`Z:`、現在は`F:`)上に置いた状態で`cargo build`→
+     `wasm-bindgen`を実行すると、**直前の書き込み(ビルド成果物)に対する
+     読み取りが古い内容を返すことがある**(読み取りキャッシュの不整合、
+     複数回再現・確認済み)。この不整合により、一時的に本番へ
+     内部参照が不整合な(JS側が古い入力ファイル名`_bg.wasm`/`_bg.js`を
+     参照する)壊れたビルドをデプロイしてしまい、画面が一時的に真っ白
+     になる事故が発生した(`WebAssembly.instantiate(): Import #0
+     "./open_easy_web_src_bg.js": module is not an object or function`)。
+     **回避策**: `cargo build --target-dir <ローカルドライブの一時
+     ディレクトリ>`でビルド出力先をネットワークドライブ外(ローカルの
+     C:等)に切り替え、`wasm-bindgen`もそのローカルコピーに対して実行
+     すると解消する(このHANDOFFの直後に10ヶ国語README/PORTING.mdへも
+     同じ注意書きを追記済み)。**入力ファイル名を最終的な出力名と一致
+     させること**も重要——`wasm-bindgen`は入力wasmファイルのファイル名
+     stemを基にJSグルーコード内の相対import参照(`_bg.wasm`/`_bg.js`)を
+     生成するため、後から出力ファイルだけをリネームしても内部参照は
+     古い名前のまま残る(このバグを実際に本番デプロイ後の実ブラウザ
+     コンソールエラーで検出・修正した)。
+  - **検証**: (1) `cargo build --target wasm32-unknown-unknown`
+    (ローカル`--target-dir`経由のクリーンビルド)警告0件で成功。
+    (2) 実際に`http://easy-web.tokyo/`をブラウザで開き、見出し・タイトル
+    が`open-easy-web`になっていること、「選択中のサイト」表示が
+    `open-easy-web(このサイト) ( easy-web.tokyo )`に補正されていること、
+    コンソールエラーが無いことを実際のアクセシビリティスナップショット・
+    コンソールログ・ネットワークログで確認済み(型チェックのみでの
+    「完了」報告ではない、既存の検証基準どおり)。(3) VPS側で
+    `systemctl is-active open-easy-web` = `active`、旧`/root/
+    open-easy-web`ディレクトリが存在しないこと、nginx設定に古いパス
+    参照が残っていないこと(`grep`)を確認済み。
+  - 次にすべきこと: (1) `server/`クレート側(バックエンド)は今回
+    パス変更・再起動のみで、コード変更・再ビルドは行っていない
+    (`open-easy-web-server`バイナリ自体は無変更のため再ビルド不要と
+    判断)——次回、`server/`側にもコード変更を加える際は、この新しい
+    デプロイパス(`/root/RUNO/open-easy-web/open-easy-web-server`)を
+    前提に手順を組むこと。(2) ネットワークドライブのキャッシュ不整合が
+    今回だけの一過性の問題か、`F:`ドライブでも再発するかは未確認——
+    再発した場合は同じ「ローカル`--target-dir`経由でビルド」回避策を
+    再度使うこと。
+
 - **2026-07-20 個人情報のハードコード除去(ユーザー指示)——`server/src/main.rs`の
   `FIXED_ACCOUNT_EMAIL`/`FIXED_ACCOUNT_BACKUP_EMAIL`/`FIXED_ACCOUNT_PHONE`定数
   (実際の個人Gmailアドレス2件・実電話番号)を削除し、環境変数から読む方式に変更**:

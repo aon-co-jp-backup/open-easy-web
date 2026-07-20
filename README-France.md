@@ -71,6 +71,16 @@ wasm-bindgen --target web --no-typescript --out-dir pkg \
 python -m http.server 8080
 ```
 
+> ⚠️ **Avertissement de build (environnements sur lecteur réseau)** : si
+> ce dépôt se trouve sur un lecteur monté en réseau (ex. partage SMB),
+> lire/écrire la sortie `target/` de `cargo build` ou les entrées/sorties
+> de `wasm-bindgen` directement sur ce lecteur **peut renvoyer un contenu
+> obsolète juste après une écriture** (incohérence de cache de lecture,
+> réellement rencontrée le 2026-07-20). Si une recompilation ne semble pas
+> prise en compte, redirigez la sortie du build vers un lecteur local
+> avec `cargo build --target-dir <répertoire-temporaire-local>` et
+> exécutez `wasm-bindgen` sur cette copie locale.
+
 ## Vérifié dans ce passage
 
 `cargo check`/`build`/`clippy --target wasm32-unknown-unknown` réussis

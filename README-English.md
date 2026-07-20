@@ -106,6 +106,15 @@ wasm-bindgen --target web --no-typescript --out-dir pkg \
 python -m http.server 8080
 ```
 
+> ⚠️ **Build caveat (network-drive environments)**: if this repo lives on
+> a network-mounted drive (e.g. an SMB share), reading/writing `cargo
+> build`'s `target/` output or `wasm-bindgen`'s input/output directly on
+> that drive can return stale content immediately after a write (a
+> read-cache coherency issue actually hit on 2026-07-20). If a rebuild
+> doesn't seem to take effect, point the build output at a local drive
+> with `cargo build --target-dir <local-temp-dir>` and run `wasm-bindgen`
+> against that local copy instead.
+
 ## Launch by IP
 
 ```bash
