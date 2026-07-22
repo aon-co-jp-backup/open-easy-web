@@ -230,6 +230,45 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-22 `https://easy-web.tokyo/`のSSL証明書ホスト名不一致を修正
+  (ユーザー指示)**: `http://easy-web.tokyo/`は200 OKで正常だったが、
+  `https://easy-web.tokyo/`にアクセスするとブラウザにSSL警告が出る問題を
+  調査・修正。
+  - **原因**: `/etc/nginx/conf.d/easy-web.tokyo.conf`(2026-07-17新設、
+  当時DNS未反映のためHTTPのみ)が443番のserverブロックを持たず、
+  TLS終端は別ファイル`/etc/nginx/conf.d/easyweb-tokyo-tls.conf`
+  (`easyweb.tokyo`、ハイフン無し旧ドメイン向け)が担っていた。`certbot
+  certificates`で確認したところ、`easyweb.tokyo`(ハイフン無し)証明書は
+  `easyweb.tokyo`/`www.easyweb.tokyo`のみをSANに含み、ハイフン付き新
+  ドメイン`easy-web.tokyo`/`www.easy-web.tokyo`をカバーする証明書が
+  一枚も存在しなかった。443番へのTLS接続時、SNI `easy-web.tokyo`に対して
+  一致するserverブロックが無く提示証明書とホスト名が食い違い、
+  `SEC_E_WRONG_PRINCIPAL`(ホスト名不一致)警告となっていた。
+  - **DNS確認**: `nslookup easy-web.tokyo` → `160.251.237.162`
+  (VPS本体)へ正しく解決済みであることを確認(2026-07-17時点の
+  「DNS反映待ち」は解消済みだった)。
+  - **修正内容**: (1) `certbot certonly --webroot -w /var/www/acme-webroot
+  -d easy-web.tokyo -d www.easy-web.tokyo`で新規証明書を取得
+  (`/etc/letsencrypt/live/easy-web.tokyo/`、2026-10-20失効、certbotの
+  自動更新タイマーにも登録済み)。(2)
+  `/etc/nginx/conf.d/easy-web.tokyo.conf`に443番のserverブロックを追記し
+  (`server_name easy-web.tokyo www.easy-web.tokyo`、
+  `ssl_certificate`/`ssl_certificate_key`とも新証明書のパスを指定)、
+  80番のserverブロックはproxy_passのまま維持(`http://.../healthz`の
+  200監視を止めないため、意図的にhttps://へのリダイレクトは追加して
+  いない)。旧設定は`easy-web.tokyo.conf.bak-20260722`としてVPS上に
+  バックアップ済み。`nginx -t`で構文検証(既存の`aruaru.tokyo.conf`由来の
+  無関係な警告のみ、エラー無し)後、`systemctl reload nginx`で反映。
+  - **検証**: `curl -v https://easy-web.tokyo/`(証明書検証あり、`-k`
+  無し)で`HTTP/1.1 200 OK`を確認、同様に`https://www.easy-web.tokyo/`も
+  200を確認。作業前後とも`curl http://easy-web.tokyo/healthz`が200を
+  返し続けることを確認済み(本番停止なし)。
+  - **今後の推奨アクション**: certbotの自動更新は
+  `easyweb.tokyo`(旧)・`easy-web.tokyo`(新)の2証明書が併存する状態に
+  なった——旧ドメイン向けの`/etc/nginx/conf.d/easyweb-tokyo-tls.conf`を
+  今後廃止する予定があるなら、対応する旧証明書の`certbot delete`も
+  検討すること(今回はサービス継続を優先し削除は行っていない)。
+
 - **2026-07-20 開発マシンのドライブレター変更(Z:→F:)・本番VPS表記修正
   (`open-easyweb`→`open-easy-web`)・デプロイ先パス変更(`/root/open-easy-web`
   →`/root/RUNO/open-easy-web`)・`src/profiles.rs`の自サイト情報自動補正
