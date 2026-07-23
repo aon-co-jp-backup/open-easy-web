@@ -230,6 +230,40 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-23(続き2) 3点セット(`install.sh`/`install.ps1`/
+  `.github/workflows/release.yml`)を新規追加、v0.1.0タグでCI成功・
+  GitHub Release実在確認まで完了**: エコシステム全体インストーラー
+  整備計画(正本: `open-raid-z/CLAUDE.md`「エコシステム全体
+  インストーラー整備計画」節)の一環。このリポジトリは2つの独立した
+  Cargoワークスペースを持つ(ルート=WASMフロントエンドの単一cdylib
+  クレート、`server/`配下=バックエンドAPIサーバーの独立ワークスペース)
+  ため、配布対象は実行可能バイナリを持つ`server/`側
+  (`open-easy-web-server`)のみとした——ルートのWASMクレートは
+  ライブラリでありこのインストーラーの対象外(既存の`deploy/systemd`
+  配下のTLS監視/更新タイマー用unitファイルとは別物、そちらは
+  引き続き`deploy/systemd/install-systemd-units.sh`で個別に導入する)。
+  1. `install.sh`(systemdサービス登録)・`install.ps1`(Windows
+     サービス登録案内)を新規作成。**正直な開示**: `open-easy-web-server`
+     は固定アカウント制の認証を持ち、`OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`
+     未設定だと起動時にpanicする設計(誰もログインできない状態で
+     サイレントに動き続けるより起動失敗のほうが安全)であることを
+     両スクリプトのコメント・出力メッセージに明記した。
+  2. `release.yml`: `server/Cargo.toml`にpath依存が無いことを確認
+     (ルート側の`open-runo-view`はgit依存でありsibling checkoutは
+     不要)。`working-directory: server`でビルドし、Linux x86_64・
+     Windows x86_64向けにGitHub Releasesへ添付する構成。
+  3. `v0.1.0`タグを実際にpushし、`gh run list`で2ジョブ(Linux/
+     Windows)とも`completed success`、`gh release view v0.1.0`で
+     `open-easy-web-server-linux-x86_64.tar.gz`/
+     `open-easy-web-server-windows-x86_64.zip`の両方が実在することを
+     確認した(型チェックのみでの完了報告ではない)。
+  4. README(日本語)にサーバー側インストール節を新設。
+  - 次にすべきこと: (1) WASMフロントエンド自体の配布(このリリース
+    には含まれない、`pkg/`ビルド成果物を`open-easy-web-server`の
+    静的配信〈`OPEN_EASYWEB_STATIC_DIR`〉で同梱配布する形が候補)、
+    (2) Android版インストーラー(未着手、他リポジトリと共通の
+    バックログ)。
+
 - **2026-07-23(続き) `open-web-server`側にCORS対応が追加(このリポジトリ側の
   コード変更は不要と判断・確認のみ)**: `open-web-server`
   (`crates/open-web-server-gateway/src/middleware/cors.rs`)に、別オリジンの

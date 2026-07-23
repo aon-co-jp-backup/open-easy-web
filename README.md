@@ -136,6 +136,26 @@ python -m http.server 8080
 > でビルド出力先をネットワークドライブ外(ローカルのC:等)に切り替え、
 > `wasm-bindgen`もそのローカルコピーに対して実行すると解消する。
 
+## サーバー側(open-easy-web-server)のインストール(2026-07-23追加)
+
+上記はWASMフロントエンド(`pkg/`+`index.html`)のビルド手順。バックエンド
+API(`server/`配下、フォルダー作成・アップロード・AI自動PHP判定・
+nginx+PHP-FPM自動構成を担う`open-easy-web-server`バイナリ)は別途、
+`install.sh`(Linux、systemdサービス登録)・`install.ps1`(Windows、
+サービス登録案内)・`.github/workflows/release.yml`(タグpush時に
+Linux x86_64・Windows x86_64向けバイナリを自動ビルドし
+[GitHub Releases](https://github.com/aon-co-jp/open-easy-web/releases)へ
+添付)を用意した。**正直な開示**: `open-easy-web-server`は固定アカウント
+制の認証を持ち、環境変数`OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`が未設定だと
+起動時にpanicする(誰もログインできない状態でサイレントに動き続ける
+より起動失敗のほうが安全という設計判断)。この配布物にWASM
+フロントエンドは含まれない(上記のビルド手順で別途生成すること)。
+
+```
+curl -fsSL https://github.com/aon-co-jp/open-easy-web/releases/latest/download/open-easy-web-server-linux-x86_64.tar.gz | tar xz
+sudo ./install.sh
+```
+
 ## IPアドレスから起動する
 
 ```bash
