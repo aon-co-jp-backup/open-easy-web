@@ -80,6 +80,20 @@ middleware, etc. — see those repos' CLAUDE.md for details).
   poem-cosmo-tauri)
   process per domain, a site's domain can be dynamically registered
   with an already-running shared backend instance.
+- **Easy free-domain wizard (DuckDNS, up to 20 domains, added 2026-07-23)**:
+  for non-static-IP DDNS environments, a single-screen wizard drives
+  `open-web-server`'s new admin API end to end: (a) an external link to
+  create a DuckDNS (duckdns.org) account, (b) a registered-domain list
+  (remaining-capacity count + per-domain remove button), (c) a
+  subdomain-name + token form with an "Add & verify" button that
+  registers the domain and checks connectivity immediately, (d) once
+  verified, an example SFTP connection command (with a dropdown to pick
+  which of several registered domains to use). Up to 20 domains can be
+  registered and auto-renewed per instance. **Honest disclosure**:
+  creating the DuckDNS account itself (OAuth login) is not automated.
+  If `open-web-server` is on a different origin, the request may be
+  blocked depending on its CORS configuration (see
+  [PORTING.md](PORTING.md), Japanese only).
 
 ## What it deliberately does not do
 

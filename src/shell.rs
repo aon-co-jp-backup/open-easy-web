@@ -262,6 +262,78 @@ pub const SHELL_HTML: &str = r#"
   </div>
 </section>
 
+<section id="freedomain-section">
+  <h2>簡単ドメイン設定(無料DDNS、DuckDNS) / Easy Free-Domain Setup (DuckDNS)</h2>
+  <p class="muted">
+    固定IPではないDDNS環境向けに、無料サブドメイン(DuckDNS)の取得〜自動更新を
+    open-web-server側で一気通貫にセットアップします。 / For non-static-IP DDNS
+    environments, set up a free DuckDNS subdomain with automatic renewal on the
+    open-web-server side, end to end.
+  </p>
+  <p class="muted">
+    ① まずDuckDNS(<a href="https://www.duckdns.org/" target="_blank" rel="noopener noreferrer">duckdns.org</a>)
+    でアカウント作成(GitHub/Google/Reddit等のOAuthログイン)し、トークンを取得してください——
+    このアカウント作成自体はこのソフトウェアから自動化できません(他社サービスの認証情報を
+    代行取得しない方針のため)。 / ① First create an account at
+    <a href="https://www.duckdns.org/" target="_blank" rel="noopener noreferrer">duckdns.org</a>
+    (via GitHub/Google/Reddit OAuth login) and obtain your token — account creation itself
+    cannot be automated by this software (we do not acquire third-party credentials on your behalf).
+  </p>
+  <div class="form-grid">
+    <div>
+      <label for="freedomain-server-url">open-web-serverのURL / open-web-server URL</label>
+      <input id="freedomain-server-url" type="text" placeholder="例: http://127.0.0.1:8080" />
+    </div>
+    <div>
+      <label for="freedomain-admin-token">open-web-serverの管理トークン / open-web-server admin token</label>
+      <input id="freedomain-admin-token" type="password" placeholder="x-admin-token" />
+    </div>
+  </div>
+
+  <h3>登録済みドメイン一覧 / Registered domains</h3>
+  <p class="muted">
+    1インスタンスにつき最大20ドメインまで登録・自動更新できます。 / Up to 20 domains
+    can be registered and auto-renewed per instance.
+  </p>
+  <div class="buttons">
+    <button id="freedomain-list-fetch-btn" class="secondary">一覧を更新 / Refresh list</button>
+  </div>
+  <div id="freedomain-domain-list"></div>
+  <p id="freedomain-list-result" class="muted" aria-live="polite"></p>
+
+  <h3>ドメインを追加 / Add a domain</h3>
+  <div class="form-grid">
+    <div>
+      <label for="freedomain-duckdns-domain">② 希望サブドメイン名 / Desired subdomain name</label>
+      <input id="freedomain-duckdns-domain" type="text" placeholder="例: myhost (→ myhost.duckdns.org)" />
+    </div>
+    <div>
+      <label for="freedomain-duckdns-token">DuckDNSトークン / DuckDNS token</label>
+      <input id="freedomain-duckdns-token" type="password" placeholder="duckdns.orgのアカウントページから取得" />
+    </div>
+  </div>
+  <div class="buttons">
+    <button id="freedomain-setup-btn">③ 追加&疎通確認 / Add &amp; verify</button>
+  </div>
+  <p id="freedomain-result" class="muted" aria-live="polite" style="white-space: pre-line"></p>
+
+  <div id="freedomain-sftp-step" class="hidden">
+    <h3>④ SFTP接続コマンド例 / Example SFTP connection command</h3>
+    <div class="form-grid">
+      <div>
+        <label for="freedomain-sftp-host-select">SFTP接続に使うドメイン(任意) / Domain to use for SFTP (optional)</label>
+        <select id="freedomain-sftp-host-select">
+          <option value="">(自動選択 / auto-select)</option>
+        </select>
+      </div>
+    </div>
+    <div class="buttons">
+      <button id="freedomain-sftp-fetch-btn" class="secondary">SFTP接続情報を取得 / Fetch SFTP connection info</button>
+    </div>
+    <p id="freedomain-sftp-result" class="muted" aria-live="polite"></p>
+  </div>
+</section>
+
 <section id="site-ops-section" class="hidden">
   <h2>フォルダー作成 / アップロード — Create Folder / Upload Files</h2>
   <p class="muted">

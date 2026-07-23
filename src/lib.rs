@@ -16,9 +16,11 @@
 //! - DB(aruaru-db等)への接続機能は持たない(意図的にスコープ外)。
 
 mod api_auth;
+mod api_free_domain;
 mod api_upload;
 mod auth_ui;
 mod dom;
+mod free_domain_ui;
 mod profiles;
 mod shell;
 pub mod view_bridge;
@@ -87,6 +89,7 @@ pub fn start() -> Result<(), JsValue> {
     profiles::render_site_manager();
     profiles::sync_active_site_label();
     auth_ui::wire()?;
+    free_domain_ui::wire()?;
 
     set_status("準備完了。サイトを登録・選択・接続テストできます。");
     Ok(())

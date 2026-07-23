@@ -230,6 +230,88 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-23(続き) 「簡単ドメイン設定」ウィザードを単一ドメインから
+  最大20ドメイン対応へ拡張(ユーザー追加指示「open-web-server/
+  open-easy-webを同時にインストールした一台に20ドメインまで取得と
+  自動更新可能にして」)**:
+  1. **`src/api_free_domain.rs`に`list_domains`/`remove_domain`を追加**:
+     `open-web-server`側の新設`GET /admin/ddns/domains`・
+     `DELETE /admin/ddns/domains/:domain`を呼ぶ薄いラッパー。
+  2. **`src/free_domain_ui.rs`を単一フォームから「登録済み一覧+追加
+     フォーム」形式へ全面改修**: 一覧を取得・カード表示(残り枠付き)、
+     カードごとの「削除」ボタン(動的生成される要素のため、ボタン個別に
+     クロージャを付けず**イベント委譲**でコンテナ1つのリスナーに集約
+     ——`forget()`し続けるクロージャがメモリを増やし続けないための設計)。
+     SFTP接続コマンド取得時は複数登録ドメインから`<select>`で選べる
+     ようにし、選んだドメインを`?host=`クエリとして
+     `sftp/connection-info`へ渡す。
+  3. **`src/shell.rs`**: `#freedomain-section`を「登録済みドメイン一覧
+     (`#freedomain-domain-list`+残り枠表示)」「ドメインを追加フォーム」
+     「SFTP接続ドメイン選択`<select>`」の3ブロックへ再構成。
+  4. **`Cargo.toml`に`HtmlOptionElement`のweb-sys featureを追加**
+     (`<select>`へのオプション動的追加に必要)。
+  - **検証**: `cargo build --target wasm32-unknown-unknown`警告0件
+    (既知の回避策どおりローカル`--target-dir`経由)。実ブラウザ
+    (Claude Browser pane)で実際に開き、「登録済みドメイン一覧」
+    「一覧を更新」ボタン、「ドメインを追加」フォーム(サブドメイン名・
+    DuckDNSトークン入力・追加&疎通確認ボタン)が正しく描画され、
+    白画面・コンソールエラーが無いことを確認済み。
+  - **正直な制限事項**: 実際のDuckDNSトークン+複数ドメイン登録での
+    フルE2E(実際に3件以上追加→一覧確認→削除、というシナリオ)は
+    このパスでは未実施(単一ドメイン版のときと同じ制約——実トークン・
+    実稼働`open-web-server`インスタンスが必要)。
+  - 次にすべきこと: (1) 実DuckDNSトークン+実稼働`open-web-server`での
+    複数ドメイン登録フルE2E検証、(2) `open-web-server`側のCORS対応
+    (既存の未着手項目、引き続き)。
+
+- **2026-07-23 「簡単ドメイン設定」ウィザードを新規追加(無料DDNS/DuckDNS、
+  ユーザー指示「open-easy-webとopen-web-serverの特にAndroid/Windows/
+  Linuxで、固定IPではないDDNSの場合の簡単ドメイン設定」)**:
+  1. **新規`src/api_free_domain.rs`**: `open-web-server`側の新設管理API
+     (`POST /admin/ddns/setup-free-domain`・`GET /admin/sftp/
+     connection-info`)への薄い`fetch()`ラッパー。`api_auth.rs`と異なり
+     呼び出し先は別オリジンの`open-web-server`インスタンス(ユーザーが
+     ベースURLを入力)のため`RequestMode::Cors`を使用——`open-web-server`
+     側でCORS未設定の場合はブラウザ側でブロックされうる制約を正直に
+     モジュールdocへ明記した。
+  2. **新規`src/free_domain_ui.rs`**: 4ステップのウィザードのDOM配線。
+     (a) DuckDNS(duckdns.org)アカウント作成への外部リンク案内(自動化
+     できない部分を明示)、(b) open-web-serverのURL・管理トークン・
+     希望サブドメイン名・DuckDNSトークンの入力、(c)「セットアップ&
+     疎通確認」ボタンで`setup-free-domain`を呼び即時疎通確認、
+     (d) 成功したらSFTP接続コマンド例取得ボタンが表示され、
+     `sftp/connection-info`を呼んでコピペ可能なコマンドを表示。
+     **過剰実装を避け**、豪華なウィザードではなく1画面完結のシンプルな
+     フォームとして実装(`src/shell.rs`の`#freedomain-section`)。
+  3. **`src/lib.rs`に配線**: `free_domain_ui::wire()`を`start()`内で呼び出し。
+  - **検証**: `cargo build --target wasm32-unknown-unknown`
+    警告0件で成功(ネットワークドライブのキャッシュ不整合を避けるため
+    既存の既知の回避策どおり`--target-dir`をローカルドライブに向けて
+    実施)。`wasm-bindgen`で生成した`.wasm`+JSグルーを`python -m
+    http.server`でローカル配信し、**実ブラウザ(Claude Browser pane)で
+    実際に開いて確認**: 見出し・4ステップのフォーム(URL/管理トークン/
+    サブドメイン名/DuckDNSトークンの入力欄、セットアップボタン、
+    SFTP接続コマンド取得の折り畳みステップ)が正しく描画され、白画面・
+    コンソールエラーが無いことを確認済み(型チェックのみでの「完了」
+    報告ではない、既存の検証基準どおり)。
+  - **正直な制限事項**: (1) 実際のDuckDNSトークン・稼働中の
+    `open-web-server`インスタンスを使ったフルE2E(実際にセットアップ
+    ボタンを押して疎通確認が成功するところまで)はこのパスでは未実施
+    (ネットワーク到達性・実トークンの制約)。(2) CORS: `open-web-server`
+    側が別オリジンの場合、ブラウザのCORSポリシーにより`fetch`が
+    ブロックされる可能性がある——`open-web-server`側でCORSヘッダを
+    返す設定が無い場合、reverse proxy等で同一オリジンに揃えるか、
+    `open-web-server`側にCORS対応を追加する必要がある(今回はUI側の
+    実装のみ、`open-web-server`側のCORS対応は範囲外)。(3) Android版は
+    `open-web-server`側のAPK化が完了するまでは、このウィザードで
+    セットアップした内容も実機で活用できない(過大な請け合いを避ける
+    ため明記)。
+  - 次にすべきこと: (1) `open-web-server`側でのCORS対応検討、
+    (2) 実DuckDNSトークン+実稼働`open-web-server`でのフルE2E検証、
+    (3) 10ヶ国語READMEへの本機能の反映(今回はCLAUDE.mdのみ更新、
+    範囲を絞った——既存の運用ルールに対する既知のギャップとして記録)。
+
+
 - **2026-07-23 監査+flakyテスト2件の実バグ修正(ユーザー指示「完成度・
   実用性・互換性・連携性を向上して」)**:
   1. **監査結果**: `AppServerKind`経由のテナント登録(open-runo/
