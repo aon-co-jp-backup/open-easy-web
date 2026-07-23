@@ -1163,20 +1163,21 @@ mod tests {
         assert_eq!(res.status(), reqwest::StatusCode::UNAUTHORIZED);
 
         // 実際に生成した正しいコードで有効化。
+        // **正直な開示・実バグの経緯(2026-07-23)**: 以前はここで
+        // `verify_code`に通る値を0〜100万まで総当たりして探していたが、
+        // debugビルドではこの総当たり自体が(運悪く正解が999999に近い
+        // 場合)数秒かかることがあり、その間にTOTPの時間窓(30秒×
+        // スキュー許容±1ステップ=最大60秒強)を超えてしまい、サーバー側の
+        // `verify_code`が`401`を返す——というflaky failureの実際の原因
+        // だった(`cargo test`を複数回実行して実際に再現・特定した)。
+        // `totp::code_at`(テスト用に`pub`化)で正しいコードを直接計算する
+        // ことで、この総当たりの遅延自体を無くして解消する。
         let secret_bytes = totp::base32_to_secret(&secret_b32).unwrap();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let counter = now / 30;
-        let correct_code = {
-            // totp.rsのcode_atは非公開のため、verify_codeが受理する値を
-            // 総当たりで求める(0..1_000_000、テスト用途なので許容)。
-            (0..1_000_000u32)
-                .map(|n| format!("{n:06}"))
-                .find(|c| totp::verify_code(&secret_bytes, c, counter * 30))
-                .expect("a valid 6-digit code must exist for this time step")
-        };
+        let correct_code = totp::code_at(&secret_bytes, now);
         let res = client
             .post(format!("http://{addr}/api/auth/totp/enable"))
             .bearer_auth(&token)
@@ -1207,11 +1208,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let counter2 = now2 / 30;
-        let code_for_login = (0..1_000_000u32)
-            .map(|n| format!("{n:06}"))
-            .find(|c| totp::verify_code(&secret_bytes, c, counter2 * 30))
-            .expect("a valid 6-digit code must exist for this time step");
+        let code_for_login = totp::code_at(&secret_bytes, now2);
         let res = client
             .post(format!("http://{addr}/api/auth/totp-login"))
             .json(&serde_json::json!({"account_email": "totp-user@example.com", "totp_code": code_for_login}))

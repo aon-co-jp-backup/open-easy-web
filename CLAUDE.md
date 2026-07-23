@@ -230,6 +230,41 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-23 監査+flakyテスト2件の実バグ修正(ユーザー指示「完成度・
+  実用性・互換性・連携性を向上して」)**:
+  1. **監査結果**: `AppServerKind`経由のテナント登録(open-runo/
+     RPoem[旧poem-cosmo-tauri]/aruaru-llm)・TLS自動発行/更新は実装済み・
+     実際に`main.rs`から配線済みと確認。**依頼文にあった「RS-Chiketto」
+     「RS-Red」は、リポジトリ全体をgrepしても現状一切登場せず**、
+     `AppServerKind`にも存在しない(必要なら別途追加要)。
+  2. **`cargo test --workspace`(ルート)が実質0件しか実行しない構造的
+     な罠を発見**: ルート`Cargo.toml`は`[workspace]`のみで
+     `members`未指定、`server/`が独自に別の`[workspace]`を宣言する
+     **2ワークスペース構成**になっている。実際のバックエンド50件の
+     テストは`cd server && cargo test`しないと一切実行されない
+     ——CLAUDE.md本文では毎回正しいコマンドが書かれているが、
+     この2ワークスペース分離自体はREADME/ビルド手順に明記されて
+     いなかった。
+  3. **`totp_setup_enable_then_requires_code_on_next_login`のflaky
+     failureの実原因を特定・修正**: `server/src/main.rs`内2箇所で、
+     TOTPコードを「0〜100万を総当たりして`verify_code`が受理する
+     値を探す」という設計になっていた。debugビルドではこの総当たり
+     自体が(正解が高い番号の場合)数秒〜20秒以上かかることがあり、
+     その間にTOTPの時間窓(30秒×スキュー許容±1ステップ)を超えて
+     しまい、サーバー側が正しく`401`(コード不一致)を返す——という
+     のが実際のflakyの原因だった(3回実行して1回失敗を実際に再現し、
+     原因を特定)。`server/src/totp.rs`の非公開関数`code_at`を
+     `pub`化し、正しいコードを直接計算する方式へ2箇所とも書き換えて
+     解消。**検証**: 修正後は該当テスト単体の実行時間が23秒→0.02秒
+     に激減、3回連続green(以前は3回に1回程度の頻度で再現していた
+     flakyが解消したことを実証)。
+  - 次にすべきこと: (1) ルート`Cargo.toml`のビルド手順ドキュメントに
+    2ワークスペース構成(`cd server && cargo test`が必須)を明記する、
+    (2) `AppServerKind`へのRS-Git/RS-Red等の追加要否をユーザーに確認、
+    (3) `scripts/gen-vhost.sh`とサーバー側`vhost.rs`(Rust再実装版)の
+    役割分担をCLAUDE.md/READMEに正確に書き分ける(現状は前者が
+    メイン経路であるかのように読める記載がある)。
+
 - **2026-07-22 `https://easy-web.tokyo/`のSSL証明書ホスト名不一致を修正
   (ユーザー指示)**: `http://easy-web.tokyo/`は200 OKで正常だったが、
   `https://easy-web.tokyo/`にアクセスするとブラウザにSSL警告が出る問題を

@@ -67,7 +67,13 @@ fn hotp(secret: &[u8], counter: u64) -> u32 {
     binary % 10u32.pow(CODE_DIGITS)
 }
 
-fn code_at(secret: &[u8], unix_time: u64) -> String {
+/// 指定した秒(UNIX時刻)時点で正しいはずの6桁コードを直接計算する。
+/// `pub`にしているのはテストコード(`main.rs`の統合テスト)が、
+/// 「候補コードを0から100万まで総当たりして`verify_code`に通るものを
+/// 探す」という不要に遅い(debugビルドでは数秒かかることがあり、TOTPの
+/// 時間窓〈30秒×スキュー許容〉を超えてflaky failureの原因になっていた、
+/// 2026-07-23発見)方式ではなく、正しいコードを直接計算して使うため。
+pub fn code_at(secret: &[u8], unix_time: u64) -> String {
     let counter = unix_time / TIME_STEP_SECS;
     format!("{:0width$}", hotp(secret, counter), width = CODE_DIGITS as usize)
 }
