@@ -91,9 +91,10 @@ middleware, etc. — see those repos' CLAUDE.md for details).
   which of several registered domains to use). Up to 20 domains can be
   registered and auto-renewed per instance. **Honest disclosure**:
   creating the DuckDNS account itself (OAuth login) is not automated.
-  If `open-web-server` is on a different origin, the request may be
-  blocked depending on its CORS configuration (see
-  [PORTING.md](PORTING.md), Japanese only).
+  If `open-web-server` is on a different origin, set
+  `OPEN_WEB_SERVER_CORS_ALLOWED_ORIGINS` on the `open-web-server` side
+  (added 2026-07-23) to allow the call (see [PORTING.md](PORTING.md),
+  Japanese only).
 
 ## What it deliberately does not do
 

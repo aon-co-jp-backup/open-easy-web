@@ -230,6 +230,27 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-23(続き) `open-web-server`側にCORS対応が追加(このリポジトリ側の
+  コード変更は不要と判断・確認のみ)**: `open-web-server`
+  (`crates/open-web-server-gateway/src/middleware/cors.rs`)に、別オリジンの
+  ブラウザ上WASMフロントエンド(このリポジトリ`open-easy-web`のドメイン
+  設定ウィザードを想定)が管理API(`/admin/*`)を`fetch()`で叩けるようにする
+  CORSミドルウェアが追加された。**このリポジトリ側でのコード変更は不要**——
+  CORSはサーバー側(`open-web-server`)がレスポンスヘッダーを付与する
+  だけの機構であり、ブラウザの`fetch()`は標準のCORSプロトコルに従う
+  だけで動く。既存の`src/api_free_domain.rs`等の`fetch()`呼び出しコードは
+  無変更のまま、`open-web-server`起動時に
+  `OPEN_WEB_SERVER_CORS_ALLOWED_ORIGINS`環境変数(このウィザードを配信
+  するオリジン、例: `http://localhost:8080`)を設定すれば、別ポート/別
+  ホストからでも管理APIを呼べるようになる(既定は無効=同一オリジン
+  構成なら何もしなくてよい)。詳細・実HTTP検証結果は`open-web-server`側
+  `CLAUDE.md`/`PORTING.md`§4.10の同日エントリを参照。
+  **正直な開示**: このウィザードを実際に`open-web-server`とは別ポートで
+  配信し、実ブラウザで別オリジンからのAPI呼び出しが成功することを
+  実機確認するところまでは今回のパスでは実施していない
+  (`open-web-server`側の実HTTP統合テストでCORSヘッダーの付与・非付与・
+  プリフライト処理自体は検証済み)。
+
 - **2026-07-23(続き) 「簡単ドメイン設定」ウィザードを単一ドメインから
   最大20ドメイン対応へ拡張(ユーザー追加指示「open-web-server/
   open-easy-webを同時にインストールした一台に20ドメインまで取得と
