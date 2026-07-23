@@ -1,0 +1,75 @@
+name: Release binaries
+
+# タグ(例: v0.1.0)をpushすると、Linux(x86_64-unknown-linux-gnu)・
+# Windows(x86_64)向けにビルドし、GitHub Releasesへ添付する。
+#
+# このリポジトリは2つの独立したCargoワークスペースを持つ(ルートは
+# WASMフロントエンドの単一クレート、`server/`配下がバックエンドAPI
+# サーバーの独立ワークスペース)。配布対象は実行可能バイナリを持つ
+# `server/`側(`open-easy-web-server`)のみ——ルートのWASMクレートは
+# ライブラリ(cdylib)でありこのインストーラーの対象外(WASMビルド手順は
+# README/CLAUDE.md参照)。sibling path依存は無し(`server/Cargo.toml`に
+# path依存が無いことを確認済み、ルート側の`open-runo-view`はgit依存
+# でありpath依存ではないためsibling checkoutは不要)。
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Linux (x86_64-unknown-linux-gnu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        working-directory: server
+        run: cargo build --release --bin open-easy-web-server
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp server/target/release/open-easy-web-server dist/open-easy-web-server
+          cp install.sh dist/install.sh
+          tar -czf open-easy-web-server-linux-x86_64.tar.gz -C dist open-easy-web-server install.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-easy-web-server-linux-x86_64
+          path: open-easy-web-server-linux-x86_64.tar.gz
+
+  build-windows:
+    name: Windows (x86_64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        working-directory: server
+        run: cargo build --release --bin open-easy-web-server
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item server/target/release/open-easy-web-server.exe dist/
+          Copy-Item install.ps1 dist/
+          Compress-Archive -Path dist/* -DestinationPath open-easy-web-server-windows-x86_64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-easy-web-server-windows-x86_64
+          path: open-easy-web-server-windows-x86_64.zip
+
+  release:
+    name: GitHub Releaseへ添付
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            open-easy-web-server-linux-x86_64/open-easy-web-server-linux-x86_64.tar.gz
+            open-easy-web-server-windows-x86_64/open-easy-web-server-windows-x86_64.zip
