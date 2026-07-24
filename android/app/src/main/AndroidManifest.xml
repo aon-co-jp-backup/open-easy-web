@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 常時電源接続プロファイルがPARTIAL_WAKE_LOCKでスリープを防ぐために
+         必要。省電力/通常プロファイルでは取得しない(PowerProfile.kt参照)。 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- ACTION_POWER_DISCONNECTED/CONNECTEDはprotected broadcastのため、
+         マニフェスト側の権限宣言は不要(コード側でreceiverを動的登録するのみ)。 -->
+
+    <application
+        android:allowBackup="true"
+        android:icon="@drawable/ic_launcher_normal"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.OpenEasyWeb"
+        android:usesCleartextTraffic="true">
+
+        <!--
+          起動時の電源プロファイル選択画面を実際のLAUNCHERにする
+          (open-web-server/androidと同じ設計)。
+        -->
+        <activity
+            android:name=".ProfileSelectActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          open-easy-web-server本体はKotlinコードではなくクロスコンパイル
+          済みのネイティブ実行ファイル(`libopeneasywebserver.so`、実体は
+          ELF実行ファイルをjniLibs命名規則に合わせてリネームしたもの)を
+          `MainActivity`が`ProcessBuilder`で起動する構成。フォアグラウンド
+          サービス化は今回のスコープ外。`ProfileSelectActivity`または
+          下記の`activity-alias`経由でのみ起動される。
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false" />
+
+        <!--
+          3電源プロファイルそれぞれの専用ホーム画面アイコン
+          (open-web-server/androidと同じ設計)。
+        -->
+        <activity-alias
+            android:name=".LauncherPowerSave"
+            android:targetActivity=".MainActivity"
+            android:icon="@drawable/ic_launcher_powersave"
+            android:label="@string/app_name_powersave"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="tokyo.runo.openeasyweb.LAUNCH_POWER_SAVE" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherNormal"
+            android:targetActivity=".MainActivity"
+            android:icon="@drawable/ic_launcher_normal"
+            android:label="@string/app_name_normal"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="tokyo.runo.openeasyweb.LAUNCH_NORMAL" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherAlwaysOn"
+            android:targetActivity=".MainActivity"
+            android:icon="@drawable/ic_launcher_alwayson"
+            android:label="@string/app_name_alwayson"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="tokyo.runo.openeasyweb.LAUNCH_ALWAYS_ON" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+    </application>
+
+</manifest>

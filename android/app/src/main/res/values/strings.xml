@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">open-easy-web</string>
+    <string name="app_name_powersave">open-easy-web (省電力)</string>
+    <string name="app_name_normal">open-easy-web (通常)</string>
+    <string name="app_name_alwayson">open-easy-web (常時電源)</string>
+
+    <string name="profile_select_title">電源プロファイルを選択</string>
+    <string name="profile_select_subtitle">端末の使い方に合わせて選んでください。あとで「プロファイル変更」からいつでも選び直せます。</string>
+
+    <string name="profile_power_save_button">🔋 省電力 モード</string>
+    <string name="profile_power_save_desc">スマホとして普段使いする端末向け。バックグラウンドでの常時稼働を避け、Android標準の省電力(Doze)機能に逆らいません。</string>
+
+    <string name="profile_normal_button">⚖️ 通常 モード</string>
+    <string name="profile_normal_desc">通常のスマホ利用とサーバー稼働を両立するバランス型(既定)。</string>
+
+    <string name="profile_always_on_button">🔌 常時電源接続 モード</string>
+    <string name="profile_always_on_desc">充電しっぱなしのサーバー専用端末向け。WakeLockでスリープを防ぎ、常時稼働を優先します。</string>
+
+    <string name="open_browser_button">🌐 ブラウザで開く</string>
+    <string name="change_profile_button">電源プロファイルを変更</string>
+</resources>

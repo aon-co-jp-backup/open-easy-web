@@ -230,6 +230,92 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-24(続き5) open-easy-web自身のAndroidクライアントを新規実装
+  (ユーザー指示「今回はopen-easy-web自身のAndroidクライアントを新規実装」、
+  前回HANDOFF「Androidコードは無い、実体はopen-web-server」からの続き)**:
+  1. **前提調査**: `server/`配下(`open-easy-web-server`、独立
+     `[workspace]`のnested workspace、Rust+tokio/hyper直接実装、WASM
+     フロントエンドとは別バイナリ)の起動方法・管理API・認証方式を
+     `server/src/main.rs`から確認。`GET /healthz`が存在
+     (`{"status":"ok"}`)、`OPEN_EASYWEB_SERVER_BIND`(既定
+     `0.0.0.0:8090`)でbindアドレス変更可、認証はメールOTP+任意TOTP
+     2FA(`auth.rs`/`totp.rs`/`users.rs`、固定1アカウントのみ・
+     SMTP/SMS送信が絡む重い認証フロー)であり、open-web-server側の
+     `x-admin-token`のような単純な共有シークレット方式では**ない**こと
+     を確認した。
+  2. **設計判断**: `open-web-server/android`(3電源プロファイル+電源
+     抜き差し監視ダイアログ、`ProcessBuilder`によるネイティブバイナリ
+     起動という確立済み構成)に倣い、`android/`を新規作成
+     (パッケージ名`tokyo.runo.openeasyweb`、`open-web-server`版と区別)。
+     `open-easy-web-server`自体をクロスコンパイルしてAndroid上で
+     `ProcessBuilder`起動する設計を採用した(認証フロー[メールOTP/TOTP]
+     はサーバー側API呼び出しの話であり、Androidシェル自体の実装方式
+     [バイナリ同梱 or リモート接続]とは独立した関心事のため、過剰な
+     ログインUI再実装はしない——今回は`/healthz`での起動確認までに
+     スコープを絞った)。加えて、同梱バイナリの代わりに別ホストで動く
+     open-easy-webサーバーへ接続したい場合の導線として、
+     `SharedPreferences`の`remote_server_url`を任意設定できる薄い仕組み
+     も用意した(UIからの設定画面は今回未実装、次回課題として明記)。
+  3. **実装**: `PowerProfile.kt`/`ProfileSelectActivity.kt`/
+     `MainActivity.kt`は`open-web-server/android`と同じ設計を移植
+     (3電源プロファイル・`healthPollIntervalMs`によるポーリング間隔差
+     [省電力5分/通常1分/常時電源接続5秒]・`ACTION_POWER_DISCONNECTED`/
+     `CONNECTED`監視ダイアログ・`activity-alias`3種によるホーム画面
+     アイコン)。`open-web-server`側にあった`OPEN_WEB_SERVER_ACCEL_BACKEND`
+     (ハードウェアアクセラレーター先取り指定)はopen-easy-web-server
+     自体にその概念が無いため移植していない。バイナリ名は
+     `libopeneasywebserver.so`(bindポート`18090`、open-web-server版の
+     `18099`と衝突しないよう変更)。「ブラウザで開く」ボタンは
+     `serverBaseUrl()/`(既定`http://127.0.0.1:18090/`、リモート設定時は
+     そちらを優先)を開く。**正直な開示**: `open-easy-web-server`の
+     `GET /`は`OPEN_EASYWEB_STATIC_DIR`(既定`.`)配下の`index.html`を
+     配信する設計だが、このAndroidアプリはWASM UIバンドル
+     (`index.html`/`pkg/`)を同梱しない(過剰実装回避)。そのため
+     「ブラウザで開く」で`/`を開いても、`OPEN_EASYWEB_STATIC_DIR`を
+     別途配置していない限り404になる——`/healthz`・`/api/...`のREST
+     APIは同梱バイナリだけで機能する。
+  4. **クロスコンパイル(実証済み)**: `cargo ndk -t arm64-v8a -t x86_64
+     build --release`(この開発機に既存のNDK 27.1.12297006・
+     `cargo-ndk`・Androidターゲット4種で実行)で`server/`(nested
+     workspaceのため独立ビルド)から実際に成功し、
+     `target/aarch64-linux-android/release/open-easy-web-server`
+     (`file`コマンドで`ELF 64-bit LSB pie executable, ARM aarch64...
+     for Android 21`と確認)・`target/x86_64-linux-android/release/
+     open-easy-web-server`(同様に`x86-64`向けを確認)の両方を
+     `jniLibs/{arm64-v8a,x86_64}/libopeneasywebserver.so`として同梱。
+     新規依存追加や`server/Cargo.toml`の変更は不要だった(`reqwest`は
+     既に`default-features = false`+`rustls-tls`だったため、
+     open-web-server側で踏んだOpenSSLクロスビルド罠は再発しなかった)。
+  5. **Gradleビルド(実バグ1件修正)**: `Gradle 8.11.1`
+     (この開発機の`~/.gradle/wrapper/dists/`にキャッシュ済み、
+     `gradlew`無しで`gradle-8.11.1/bin/gradle`を直接実行)で
+     `:app:assembleDebug`を実行したところ、**`MainActivity.kt`の
+     Kotlinブロックコメント内に`/api/*`という文字列を書いたため、
+     `*/`が意図せずコメント終端として解釈され`Syntax error: Unclosed
+     comment`でコンパイル失敗**するという実バグを発見(open-web-server
+     版のコメントには無かった新規の罠)。`/api/*`→`/api/...`に書き換えて
+     修正し、再度`assembleDebug`を実行したところ**`BUILD SUCCESSFUL`**
+     となり、`app/build/outputs/apk/debug/app-debug.apk`
+     (約10.1MB、arm64-v8a+x86_64両ABI同梱)が実際に生成されることを
+     確認した。
+  6. **正直な制約・未検証事項**: (a) 実機/エミュレータでの起動・
+     `/healthz`応答確認は今回未実施(ビルド成功の確認までに留まる、
+     `adb`経由の実機検証にはGUI操作可能なセッションが必要——
+     open-web-server側の前回HANDOFFで記録された制約と同様)。
+     (b) メールOTP/TOTPログインフロー自体をAndroid UI上で完結させる
+     実装は無い(サーバー起動確認のみのスコープ、ログインが必要な
+     管理系API呼び出しはブラウザ経由での利用を想定)。(c) リモート
+     サーバー接続用の設定画面(UI)は無く、`SharedPreferences`の
+     キー名を用意したのみ(次回、設定画面かAndroid実機での`adb shell`
+     設定手順のどちらかを追加検討)。(d) WASM UIバンドルの同梱は
+     今回のスコープ外(上記4.参照)。(e) フォアグラウンドサービス化・
+     APK署名/配布は今回もスコープ外。
+  - 次にすべきこと: (1) 実機/エミュレータでの`adb install`→起動→
+    `/healthz`実応答確認(GUI操作可能なセッションで)、(2) リモート
+    サーバーURL設定用の簡易設定画面、(3) 必要であればWASM UIバンドルを
+    同梱する(または`OPEN_EASYWEB_STATIC_DIR`を外部ストレージ上の
+    書き込み可能なパスに向け、後から配置できるようにする)検討。
+
 - **2026-07-24(続き4) スマホ版電源モード切替(省電力/常時電源接続/通常)
   指示への対応: このリポジトリにAndroidコードは無いため実体は
   `open-web-server`側で実装(正直な開示)**: ユーザー指示「スマホ版の
