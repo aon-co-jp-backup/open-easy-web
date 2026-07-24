@@ -22,6 +22,7 @@ mod auth_ui;
 mod dom;
 mod free_domain_ui;
 mod profiles;
+mod setup_wizard_ui;
 mod shell;
 pub mod view_bridge;
 
@@ -90,6 +91,7 @@ pub fn start() -> Result<(), JsValue> {
     profiles::sync_active_site_label();
     auth_ui::wire()?;
     free_domain_ui::wire()?;
+    setup_wizard_ui::wire()?;
 
     set_status("準備完了。サイトを登録・選択・接続テストできます。");
     Ok(())

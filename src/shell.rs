@@ -11,6 +11,95 @@ pub const SHELL_HTML: &str = r#"
   <p class="muted">選択中のサイト: <strong id="active-site-name">(未設定)</strong></p>
 </header>
 
+<section id="setup-wizard-section">
+  <h2>First-time Setup Guide (初回セットアップガイド)</h2>
+  <p class="muted">
+    VPSを借りたら最初にこの画面を確認してください。SFTPソフトで
+    open-easy-webフォルダをアップロードし、Apache互換/Nginx互換の
+    どちらでopen-web-serverを動かすか選び、必要ならインストール
+    コマンドをコピーします。 / Check this screen first after renting a
+    VPS. Upload the open-easy-web folder with an SFTP client, choose
+    whether open-web-server should behave Apache-compatible or
+    Nginx-compatible, and copy the install command if needed.
+  </p>
+
+  <h3>Step 1: Check the IP address you are accessing (① 現在アクセスしているIPアドレス)</h3>
+  <p class="muted">
+    このIPアドレス(またはホスト名)を、次のステップのSFTP接続先として使います。 /
+    Use this IP address (or hostname) as the SFTP destination in the next step.
+  </p>
+  <p><strong id="setup-wizard-current-host">(取得中… / detecting…)</strong></p>
+
+  <h3>Step 2: Upload via SFTP (② SFTPでopen-easy-webフォルダを作成・アップロード)</h3>
+  <p class="muted">
+    FileZilla・WinSCP等、お好みのSFTPクライアントでVPSへ接続し
+    (ホスト: 上記IPアドレス、ポート: 通常22、ユーザー名/認証情報はVPS提供元の
+    案内に従ってください)、サーバー上に <code>open-easy-web</code> という
+    名前のフォルダを作り、ローカルの open-easy-web 一式(このアプリ本体)を
+    その中へアップロードしてください。 <strong>このアップロード操作自体は
+    SFTPクライアント上で手動で行う必要があります(このアプリからは自動化
+    しません)。</strong> / Connect to the VPS with your preferred SFTP client
+    (FileZilla, WinSCP, etc. — host: the IP address above, port: usually 22,
+    username/credentials per your VPS provider's instructions), create a
+    folder named <code>open-easy-web</code> on the server, and upload the
+    local open-easy-web files into it. <strong>This upload step itself must
+    be performed manually in your SFTP client (not automated by this
+    app).</strong>
+  </p>
+
+  <h3>Step 3: Choose Apache-compatible or Nginx-compatible mode (③ Apache互換モード / Nginx互換モードを選択)</h3>
+  <p class="muted">
+    アップロードが完了したら、このサイトをopen-web-server上でどちらの
+    互換モードで配信するかを選んでください。ファイルが見つからない場合の
+    挙動が変わります: Apache互換は`.htaccess`のFallbackResource相当で
+    index.htmlへフォールバック、Nginx互換はtry_files相当でフォールバック
+    せず404を返します。 / After uploading, choose which compatibility mode
+    open-web-server should use to serve this site. This changes what
+    happens when a requested file is missing: Apache-compatible falls back
+    to index.html (like `.htaccess` FallbackResource), Nginx-compatible
+    returns a plain 404 (like `try_files`) without falling back.
+  </p>
+  <div class="buttons">
+    <button id="setup-wizard-apache-btn">Start in Apache-compatible mode (Apache互換モードで起動)</button>
+    <button id="setup-wizard-nginx-btn">Start in Nginx-compatible mode (Nginx互換モードで起動)</button>
+  </div>
+  <p id="setup-wizard-mode-result" class="muted" aria-live="polite"></p>
+
+  <h3>Step 4: Install / register open-web-server (④ open-web-serverのインストール、または追加登録)</h3>
+  <p class="muted">
+    <strong>open-web-serverは1台のVPSにつき1回だけインストールしてください。</strong>
+    tenant_router(マルチテナント振り分け機構)が1プロセス内で複数ドメイン・
+    複数アプリ(open-easy-webを含む)をホスト名・パスで振り分けるため、
+    2つ目以降のドメイン/アプリでは再インストールは不要です——上のサイト管理
+    画面(「共有バックエンドへ登録」)や、下の「簡単ドメイン設定」ウィザードから
+    既存のopen-web-serverインスタンスへ追加登録するだけで済みます。 /
+    <strong>Install open-web-server only once per VPS.</strong> Its
+    tenant_router (multi-tenant dispatcher) routes multiple domains/apps
+    (including open-easy-web) within a single process by hostname/path, so
+    a second or later domain/app does not need reinstalling — just register
+    it against the existing open-web-server instance using the site
+    manager's "register with shared backend" option above, or the "Easy
+    Free-Domain Setup" wizard below.
+  </p>
+  <p class="muted">
+    まだこのVPSにopen-web-serverをインストールしていない場合は、以下の
+    コマンドをコピーしてVPS上のターミナル(SSH)へ貼り付け、手動で実行して
+    ください。<strong>このアプリがVPS上で自動的にコマンドを実行することは
+    ありません</strong>(安全設計上の意図的な制約)。 / If you have not yet
+    installed open-web-server on this VPS, copy the command below and paste
+    it into a terminal (SSH) on the VPS yourself. <strong>This app never
+    executes commands on the VPS automatically</strong> (an intentional
+    safety design constraint).
+  </p>
+  <pre id="setup-wizard-install-command" class="code-block">curl -fsSL https://github.com/aon-co-jp/open-web-server/releases/latest/download/open-web-server-linux-x86_64.tar.gz | tar xz &amp;&amp; cd open-web-server-linux-x86_64 &amp;&amp; sudo ./install.sh</pre>
+  <p class="muted">
+    (Windows VPSの場合は代わりに <code>install.ps1</code> を使用してください。
+    詳細は open-web-server の README を参照。 / On a Windows VPS, use
+    <code>install.ps1</code> instead — see the open-web-server README for
+    details.)
+  </p>
+</section>
+
 <div id="site-mgmt-section" class="hidden">
 <section>
   <h2>Register / Edit / Delete / Switch Domains &amp; Subdomains (ドメイン名・サブドメイン名の登録・編集・削除・選択切替)</h2>
