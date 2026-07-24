@@ -61,7 +61,8 @@
         font: inherit;
       }
       input:focus, select:focus { outline: none; border-color: var(--accent); }
-      .buttons { margin-top: 0.75rem; }
+      .buttons { margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+      /* タップ操作に適したサイズ(最小44px x 44px、Web標準のタッチターゲット推奨) */
       button {
         cursor: pointer;
         background: var(--bg);
@@ -72,7 +73,10 @@
         margin-right: 0.5rem;
         font: inherit;
         font-weight: 500;
+        min-height: 44px;
+        min-width: 44px;
       }
+      input, select { min-height: 44px; }
       button:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
       button:disabled { opacity: 0.5; cursor: not-allowed; }
       button:disabled:hover { background: var(--bg); color: var(--accent); border-color: var(--border); }
@@ -119,6 +123,19 @@
 
       .test-result { font-size: 0.8rem; align-self: center; }
       .hidden { display: none; }
+
+      /* スマホ縦画面向けレスポンシブ対応(Mobile portrait responsive layout) */
+      @media (max-width: 600px) {
+        #app-root { padding: 1rem 0.75rem 3rem; }
+        header h1 { font-size: 1.25rem; }
+        section { padding: 0.85rem 0.8rem; }
+        .site-card { flex-direction: column; }
+        .site-card-actions { max-width: 100%; width: 100%; }
+        .site-card-actions button { flex: 1 1 auto; }
+        .buttons { flex-direction: column; align-items: stretch; }
+        .buttons button { margin-right: 0; width: 100%; }
+        table { display: block; overflow-x: auto; }
+      }
     </style>
   </head>
   <body>
