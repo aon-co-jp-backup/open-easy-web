@@ -230,6 +230,72 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-24(続き7) DuckDNSドメイン一覧に`last_update`(最終確認日時・
+  反映IP・成功/失敗・DuckDNS生レスポンス)の表示+30秒おきの自動更新を追加
+  (ユーザー指示: `open-web-server`側の`GET /admin/ddns/domains`が返す
+  `last_update`を、Android版でしかポーリング表示していなかったのを
+  Windows/Windows Server/Linux/Linux Serverでもブラウザから見られる
+  ようにする)**:
+  1. **前提確認**: `open-web-server`側`crates/open-web-server-gateway/
+     src/free_domain.rs`の`RegisteredDomainSummary.last_update`
+     (`DomainUpdateStatus { ok, ip, raw_response, checked_at_unix }`)は
+     2026-07-24の別エントリで既に実装済みであり、`GET /admin/ddns/domains`
+     のレスポンスに含まれている(サーバー側の変更は不要と確認)。
+     不足していたのは「ブラウザで見やすく表示するUI」だけであり、これは
+     open-web-server自体がOS非依存で動くサーバー本体であることの
+     裏付けとなる——Androidネイティブアプリを新たに作らず、既存の
+     「簡単ドメイン設定ウィザード」に統合するだけでOSを問わず使える
+     という設計方針どおりの対応とした。
+  2. **`src/free_domain_ui.rs`を更新**: (a) `render_domain_list`の各
+     ドメインカードに、新規`render_last_update()`が生成する状態行を
+     追加(例:「最終確認: 2026-07-24 12:34:56 UTC / 反映IP:
+     203.0.113.5 / 状態: ✅成功 / success」+`DuckDNS応答: OK`)。
+     (b) `last_update`が`null`(サーバー未確認・再起動直後でリセット)の
+     場合は「最終確認: 未確認(まだ一度も自動更新が試行されていないか、
+     サーバー再起動直後で状態がリセットされています)」と正直に表示する
+     (成功したかのように偽らない)。(c) 時刻表示は外部crateを追加せず
+     `format_unix_timestamp()`(civil_from_daysアルゴリズムの自前実装)で
+     UTCの`YYYY-MM-DD HH:MM:SS UTC`形式に整形。(d) 新規
+     `wire_auto_refresh()`が`window.set_interval_with_callback_and_
+     timeout_and_arguments_0`で30秒おきに`on_refresh_domain_list`を
+     呼び直す(ユーザー指示どおりシンプルな`setInterval`、WebSocket等の
+     過剰実装はしない)——`open-web-server`側の5分間隔の自動更新ループの
+     結果が、このポーリングにより画面へ反映されるようになる。
+  3. **検証**: `cargo build --target wasm32-unknown-unknown`
+    (ローカル`--target-dir`経由)警告0件で成功。`cargo build --tests`
+    (host向け)・`cargo test`ともに成功、新規5件
+    (`format_unix_timestamp_matches_known_date`・
+    `format_unix_timestamp_handles_epoch_zero`・
+    `render_last_update_reports_honest_unchecked_state_for_null`・
+    `render_last_update_shows_success_ip_and_raw_response`・
+    `render_last_update_shows_failure_state_honestly`)を含め全green
+    (このクレートは元々ユニットテスト0件だったため、今回が初のテスト
+    追加)。**実ブラウザ(Claude Browser pane)で実際に確認**:
+    `wasm-bindgen`で生成した`.wasm`+JSグルーを`python -m http.server`で
+    ローカル配信し、`window.fetch`をモックして`GET /admin/ddns/domains`
+    が成功ドメイン1件(`last_update`あり)+未確認ドメイン1件
+    (`last_update: null`)を返すようにした上で「一覧を更新」ボタンを
+    実際にクリックし、(a) 成功ドメインに「最終確認: 2026-07-24
+    12:34:56 UTC / 反映IP: 203.0.113.5 / 状態: ✅成功」+
+    「DuckDNS応答: OK」が正しく描画される、(b) 未確認ドメインに
+    「最終確認: 未確認(...)」が正しく描画される、(c) 白画面・
+    コンソールエラーが無い、ことを確認した(型チェックのみでの完了
+    報告ではない、既存の検証基準どおり)。
+  4. **正直な制限事項**: (1) 30秒おきの自動更新タイマー自体が実際に
+    30秒後に再度`fetch`を発火することは、このパスの検証時間内では
+    (即座のクリックによる手動トリガーでのレンダリング確認に留め)
+    タイマー発火まで待っての確認はしていない——`setInterval`の登録
+    コード自体は`wire()`から呼ばれていることをコードレビューで確認
+    済み。(2) `open-web-server`側の実DuckDNSトークンでの実5分間隔
+    ループとの結合による実タイミングE2Eは今回未実施(モックfetchでの
+    表示ロジック検証に留めた、他社サービスの認証情報を使わない既存
+    方針とも整合)。(3) 時刻表示はUTC固定(ユーザーのローカル
+    タイムゾーンへの変換は行っていない)——例示された「2026-07-24
+    12:34:56」という表記自体はUTC表示であることを明記している。
+  - 次にすべきこと: (1) 実DuckDNSトークン+実稼働`open-web-server`
+    での実タイマー結合E2E(30秒ポーリング+5分自動更新ループの相互作用)
+    確認、(2) 10ヶ国語READMEへの本機能の反映(今回はCLAUDE.mdのみ)。
+
 - **2026-07-24(続き6) 「初回セットアップガイド」画面を新規実装(ユーザー指示
   「VPSを借りたら最初にIPアドレスを確認して、SFTPソフトでopen-easy-web
   フォルダを作り…Apacheかnginxか選択起動したら、open-web-serverを
