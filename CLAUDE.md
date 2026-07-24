@@ -230,6 +230,29 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-24(続き8) 自社ドメイン配下の無料サブドメイン取得+自動更新
+  機能・統一アカウント基盤(GitHub OAuth)・PostgreSQL+aruaru-dbデュアル
+  ライトの土台を`open-web-server`側に実装(ユーザー指示、実体は
+  `open-web-server`側、このリポジトリのコード変更は無し)**:
+  `DnsProvider`トレイト(`ValueDomainProvider`=aon.co.jp、
+  `ConohaDnsProvider`=runo.tokyo/nasa.tokyo/icpo.tokyo)・`AuthProvider`
+  トレイト(GitHub OAuth、`AccountRegistry`によるアカウント統一)・
+  `DualWriteCoordinator`(PostgreSQL+aruaru-db)を
+  `open-web-server-gateway`に新規実装(`custom_dns.rs`/
+  `oauth_provider.rs`/`dual_write.rs`)。詳細・検証状況・正直な未検証
+  事項は`open-web-server/CLAUDE.md`の同日HANDOFFを参照。
+  **このリポジトリ(open-easy-web)側での対応**: 既存の「簡単ドメイン
+  設定ウィザード」(`free_domain_ui.rs`、DuckDNS向け)と同じUIパターンを
+  将来この自社ドメイン機能向けにも拡張できる設計になっているが、
+  **このパスではUI側の配線は行っていない**(open-web-server側の管理API
+  ハンドラ自体がまだ無いため、対応するUIも次回課題として先送り)。
+  紹介バナー(aon.co.jp/runo.tokyoのトップページ)は各リポジトリ側で
+  直接追加した(このリポジトリのコードとは独立)。
+  - 次にすべきこと: `open-web-server`側で管理APIハンドラ
+    (`POST /admin/custom-domain/*`等)が実装され次第、このリポジトリの
+    `free_domain_ui.rs`と同じパターンで対応UIを追加する。
+
+
 - **2026-07-24(続き7) DuckDNSドメイン一覧に`last_update`(最終確認日時・
   反映IP・成功/失敗・DuckDNS生レスポンス)の表示+30秒おきの自動更新を追加
   (ユーザー指示: `open-web-server`側の`GET /admin/ddns/domains`が返す
