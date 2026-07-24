@@ -230,6 +230,23 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-24 open-web-server側にAndroid版(3電源プロファイル対応)が
+  追加され、「open-easy-webとSETのopen-web-server」という位置づけの
+  導線が追加されたことを反映(このリポジトリ側のコード変更は最小限)**:
+  `open-web-server`の`android/`配下に、Kotlin製のAndroidアプリ
+  (単一Activity+3電源プロファイル選択画面、`cargo ndk`でクロス
+  ビルドした`open-web-server`本体を`ProcessBuilder`で起動)が追加された。
+  ユーザーが「open-easy-webとSETのopen-web-server」と表現した通り、この
+  Androidアプリは`open-easy-web`と組み合わせて使うことを想定しており、
+  アプリ内に「🌐 open-easy-web ウィザードを開く」ボタン(既定
+  `http://127.0.0.1:8080`をブラウザで開く)を用意している。**この
+  リポジトリ側での対応**: 特別なコード変更は不要(このURLは同一端末/
+  同一LAN上で`python -m http.server 8080`等により配信されている
+  `open-easy-web`の`index.html`+`pkg/`を指す想定で、既存のビルド・配信
+  手順(このファイル冒頭「ビルド手順」参照)のままで動作する)。詳細・
+  実エミュレータでの検証結果は`open-web-server`側の`CLAUDE.md`/
+  `PORTING.md`§4.11の同日HANDOFFを参照。
+
 - **2026-07-23(続き2) 3点セット(`install.sh`/`install.ps1`/
   `.github/workflows/release.yml`)を新規追加、v0.1.0タグでCI成功・
   GitHub Release実在確認まで完了**: エコシステム全体インストーラー
