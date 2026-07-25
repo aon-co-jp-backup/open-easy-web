@@ -230,6 +230,98 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-25(続き) 実サイトファイル書き込み経路を分散同期(dist_sync)に
+  実配線——下記2026-07-25エントリの「正直な開示(1)」で明記されていた
+  ギャップ(「実際のサイトファイル書き込みはまだ`protect_write`経由で
+  ルーティングされていない」)を解消**:
+  1. **配線した実書き込み経路**: `server/src/main.rs`の
+     `upload_files`(`POST /api/sites/:name/upload`)ハンドラ内、
+     `tokio::fs::write(&dest, &field.data)`(1ファイルごとの実際の
+     webrootへの書き込み)の直後。**このパスの範囲は意図的に
+     アップロードハンドラ1箇所に絞った**(`create_folder`のような
+     ディレクトリ作成のみのエンドポイントは複製対象のデータを持たない
+     ため対象外、`vhost.rs`のnginx設定書き込みはサイトの"コンテンツ"
+     ではなくインフラ設定のため今回のスコープ外——「実際にユーザーが
+     アップロードしたサイトファイル」という要求に最も自然に一致する
+     単一の境界がここだったため)。
+  2. **`server/src/dist_sync.rs`に新規追加**: (a)
+     `DistSyncRegistry::has_sync_targets()`(登録済みVPS同期先が1件でも
+     あるかの安価な判定、`RwLock::read`のみ)、(b)
+     `replicate_written_file(registry, label, data)`(登録済み全同期先へ
+     `open_raid_z_core::offsite_backup::SftpBackupTarget::upload_segment`
+     を呼び複製する、既存の`SftpBackupTargetConfig`マッピング
+     [`build_manager`と同じロジック]を再利用——**再実装していない**)、
+     (c) `spawn_replication(registry, label, data)`(同期先0件なら
+     `tokio::spawn`すら行わず即座に戻る安全側デフォルト、1件以上あれば
+     `tokio::spawn`でデタッチ実行する非ブロッキングのエントリポイント)。
+  3. **非ブロッキング設計の実際の裏付け**: `SftpBackupTarget::upload_segment`
+     はブロッキングI/O(内部で専用の使い捨てtokioランタイムを起動する
+     同期関数、`open_raid_z_core`側の既存実装)のため、
+     `tokio::task::spawn_blocking`でtokioのブロッキングスレッドプールへ
+     退避してから呼ぶ(非同期ランタイムのワーカースレッドを塞がない)。
+     さらに`upload_files`ハンドラ側は`spawn_replication`の戻り値(即座に
+     返る、複製自体の完了は待たない)しか見ないため、アップロードした
+     ユーザーへのHTTPレスポンスは複製の完了を一切待たない——遅い/
+     到達不能なVPSが1台あっても、他の同期先への複製・アップロード
+     レスポンス自体には影響しない設計(個々の同期先の失敗は
+     `tracing::warn!`ログのみ、他の同期先への複製を継続)。
+  4. **完全後方互換であることの検証**: 新規テスト
+     `dist_sync::tests::spawn_replication_is_a_no_op_when_no_targets_are_registered`
+     で、同期先未登録時は`spawn_replication`が(バックグラウンドタスクの
+     スケジュールも含め)何も行わないことを確認。既存の
+     `site_actions_require_a_valid_session_over_real_http`等の既存
+     アップロード関連テストも無変更のまま全green——同期先未設定という
+     既存デフォルトの挙動が一切変わっていないことの間接的な裏付け。
+  5. **実複製の検証(ローカルモックのみ、`open_raid_z_core`側の既存方針
+     どおり実VPS/実クラウドには一切接続しない)**: 新規テスト
+     `dist_sync::tests::spawn_replication_actually_uploads_written_file_to_registered_mock_sftp_target`
+     が、`open_raid_z_core`側`tests/offsite_backup_integration.rs`と
+     同じインプロセス`russh`/`russh-sftp`サーバー(モック、パスワード
+     認証は常に受理、実際にtempdirへファイル読み書きする)を
+     `server/src/dist_sync.rs`のテストモジュールへ再利用する形で追加し、
+     同期先を1件登録した状態で`replicate_written_file`を呼び、**モック
+     SFTPサーバー側の実ディスク上に実際に複製されたファイルが存在し、
+     バイト列が完全一致すること**を`std::fs::read`で直接確認した
+     (モックの呼び出し回数確認等ではなく、実際に書き込まれた内容
+     そのものを検証)。`server/Cargo.toml`にこのテスト専用の
+     `[dev-dependencies]`(`russh`/`russh-sftp`、`open_raid_z_core`側と
+     同一バージョン・feature)を追加。**`rand`のバージョン衝突を発見・
+     解消した実バグ**: 主依存の`rand = "0.8"`(OTP生成等で使用)と
+     russh 0.62が要求する`rand`0.10系が同名でCargo依存解決上
+     衝突し(`error[E0464]: multiple candidates for rlib dependency
+     rand`)、そのままでは`cargo test`がビルドできなかった——
+     `rand_for_test_keys = { package = "rand", version = "0.10" }`で
+     テスト専用にリネーム依存させ解消。
+  6. **検証(実測値、作業前→作業後)**: `cd server && cargo test`
+     **54→56件**(新規2件、上記4.5.)、**全green**(実行結果:
+     `test result: ok. 56 passed; 0 failed; 0 ignored; 0 measured; 0
+     filtered out`)。`cargo build`(server、release無し)警告0件で成功。
+     WASMフロントエンド(ルート`src/`)は今回一切変更していないため
+     `cargo build --target wasm32-unknown-unknown`の再実行・実ブラウザ
+     確認は対象外(サーバー側のみのバックエンド変更のため)。
+  7. **正直な開示(引き続き未検証・既知の制約、範囲を絞ったスコープの
+     裏返し)**: (1) 実VPS・実SFTPサーバーへの接続はこのパスでも
+     一度も行っていない(ローカルモックのみ、既存の検証方針を踏襲)。
+     (2) `create_folder`(`POST /api/sites/:name/folder`、ディレクトリ
+     作成のみ)・vhost設定ファイルの生成(`vhost.rs`)は複製対象に
+     含めていない(「実際にアップロードされたサイトファイル」という
+     要求に最も自然に一致する境界として`upload_files`のみに意図的に
+     絞った、上記2.参照)。(3) ディザスタ用退避先(Email/Googleドライブ、
+     `DisasterRecoveryManager`経由)へは今回配線していない——今回は
+     ユーザー指示どおり「VPS同期先(SftpBackupTarget)への複製」のみに
+     スコープを絞った。ディザスタ退避先まで含めた完全な
+     `DisasterRecoveryManager::protect_write`配線(ジャーナル経由の
+     切断耐性書き込み)は、より大きな設計変更(全書き込みをジャーナル
+     経由にする)を伴うため次回以降の課題として残す。(4) 複製失敗時の
+     リトライ・再送機構は無い(1回`upload_segment`を試して失敗すれば
+     ログを残すのみ、`open_raid_z_core`の切断耐性ジャーナル
+     [`journal.rs`]・自動復旧[`disaster_recovery.rs`]との統合は上記(3)
+     と同様に次回課題)。
+  - 次にすべきこと: (1) 上記(3)(4)——`DisasterRecoveryManager`の
+    ジャーナル経由書き込み・自動復旧との本格統合、(2) 実VPS+実SFTP
+    サーバーでの結合E2E検証、(3) 10ヶ国語READMEへの本機能の反映
+    (今回は日本語・英語のみ、他8言語は未着手のバックログとして記録)。
+
 - **2026-07-25 分散同期クローンDB+ディザスタリカバリをBUILT-IN機能として
   新規実装(ユーザー指示: 他VPSへの自動レプリケーション・ネット切断/
   非常時のメール/Googleドライブ自動フェイルオーバー・CPU/GPU/NPU

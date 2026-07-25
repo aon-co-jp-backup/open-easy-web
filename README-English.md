@@ -110,6 +110,18 @@ middleware, etc. — see those repos' CLAUDE.md for details).
   or a real cloud account has been run — only local mocks (unreachable
   addresses, no real SMTP/cloud connection). See the 2026-07-25 HANDOFF
   entry in `CLAUDE.md` for details.
+  **2026-07-25 follow-up — real file writes now actually replicate**:
+  the gap above (registry/admin-API/wizard scaffolding only, no real
+  write-path wiring) has been closed. Uploading a site file
+  (`POST /api/sites/:name/upload`) now triggers a non-blocking
+  replication to every registered distributed-sync target — the HTTP
+  response to the uploading user never waits on replication, so a
+  slow or unreachable target does not delay the upload. When no sync
+  targets are registered, no replication work is scheduled at all
+  (zero behavior change from before this change). Wiring the disaster
+  fallback (email/Google Drive) destinations and integrating with the
+  disconnect-tolerant journal remain follow-up work. See the same-day
+  follow-up HANDOFF entry in `CLAUDE.md` for details.
 - **Easy free-domain wizard (DuckDNS, up to 20 domains, added 2026-07-23)**:
   for non-static-IP DDNS environments, a single-screen wizard drives
   `open-web-server`'s new admin API end to end: (a) an external link to

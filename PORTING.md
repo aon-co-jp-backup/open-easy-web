@@ -258,6 +258,44 @@ connection-info`)を呼び出すが、`api_auth.rs`(自サーバーAPI、
   失敗してもpanicせず「スキップ」として正直に報告することを確認する
   形のユニットテストのみで検証している。
 
+### 13a. 実サイトファイル書き込み経路への複製配線(2026-07-25続き)
+
+上記13節は「登録・設定・疎通確認」の土台のみで、実際のサイトファイル
+書き込みは複製されない、という既知のギャップがあった。その後の同日中に
+`server/src/main.rs`の`upload_files`(`POST /api/sites/:name/upload`)
+ハンドラへ実配線した。移植先で同様の「実データ書き込み→登録済み同期先へ
+複製」を行いたい場合の要点:
+
+- **配線ポイントの選び方**: 複数の書き込み経路がある場合、全てを一度に
+  配線しようとせず、「ユーザーが実際にデータを書き込む、最も自然で
+  境界が明確な1箇所」に絞ること(このリポジトリでは`upload_files`の
+  `tokio::fs::write`直後、ディレクトリ作成のみのエンドポイントや
+  インフラ設定ファイル生成は対象外とした)。
+- **非ブロッキングの実装パターン**(`dist_sync.rs`の
+  `spawn_replication`/`replicate_written_file`参照):
+  1. 登録済み同期先が0件なら`tokio::spawn`すら行わず即座に戻る
+     (`has_sync_targets()`で判定)——未設定時に一切のオーバーヘッドを
+     持ち込まない、後方互換性を保証する最重要ポイント。
+  2. `SftpBackupTarget::upload_segment`等のブロッキングI/O呼び出しは
+     `tokio::task::spawn_blocking`へ退避してから呼ぶ(非同期ランタイムの
+     ワーカースレッドを塞がないため)。
+  3. 呼び出し元(HTTPハンドラ)は複製処理の完了を待たない
+     (`tokio::spawn`でデタッチ)——ユーザーへのレスポンスは複製の
+     成否・速度に一切影響されない。個々の同期先の失敗は他の同期先への
+     複製やレスポンス自体をブロックしない(ログのみ)。
+- **テスト方針(実複製の検証)**: `open_raid_z_core`側
+  `tests/offsite_backup_integration.rs`のインプロセス`russh`/
+  `russh-sftp`モックサーバーを、複製元クレート(`server/`)側の
+  テストモジュールへそのまま移植・再利用できる(コピー&微調整のみ、
+  再実装は不要)。移植する場合、`Cargo.toml`の`[dev-dependencies]`に
+  `russh`/`russh-sftp`を`open_raid_z_core`と同一バージョン・featureで
+  追加すること。**罠**: 主依存で`rand`の別バージョン(例: `0.8`)を
+  既に使っている場合、russh 0.62が要求する`rand 0.10`系と名前が衝突し
+  `cargo test`が`error[E0464]: multiple candidates for rlib dependency
+  rand`で失敗する——`{ package = "rand", version = "0.10" }`で別名
+  リネームして依存させることで回避できる(このリポジトリでは
+  `rand_for_test_keys`という名前でリネーム)。
+
 ## 10. 「ルートで`cargo test`しても実は何も検証していない」構造の罠
 (2026-07-23発見)
 

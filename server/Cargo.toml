@@ -41,3 +41,13 @@ uuid = { version = "1", features = ["v4", "serde"] }
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 tempfile = "3"
+# dist_syncの実複製テスト(インプロセスrussh SFTPサーバー)向け。
+# open_raid_z_core側`tests/offsite_backup_integration.rs`と同じ
+# バージョン・featureに揃える(実クラウド/実VPSには一切接続しない、
+# ローカルモックのみの既存検証方針を踏襲)。
+russh = { version = "0.62", default-features = false, features = ["ring", "rsa"] }
+russh-sftp = "2"
+# `rand`は主依存(`rand = "0.8"`、認証OTP生成等で使用)とメジャー
+# バージョンが異なる(russh 0.62のキー生成が要求するのは0.10系)ため、
+# 名前衝突を避けて`rand_for_test_keys`としてリネームして依存させる。
+rand_for_test_keys = { package = "rand", version = "0.10" }

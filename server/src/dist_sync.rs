@@ -45,7 +45,9 @@ use uuid::Uuid;
 
 use open_raid_z_core::accel::AccelBackend;
 use open_raid_z_core::disaster_recovery::{DisasterRecoveryConfig, DisasterRecoveryManager, FirstTimeSetupReport};
-use open_raid_z_core::offsite_backup::{EmailBackupTargetConfig, GoogleDriveBackupTargetConfig, SftpBackupTargetConfig};
+use open_raid_z_core::offsite_backup::{
+    EmailBackupTargetConfig, GoogleDriveBackupTargetConfig, OffsiteBackupTarget, SftpBackupTarget, SftpBackupTargetConfig,
+};
 
 type BoxBody = Full<Bytes>;
 
@@ -189,6 +191,90 @@ impl DistSyncRegistry {
     pub fn run_first_time_setup(&self) -> anyhow::Result<FirstTimeSetupReport> {
         Ok(self.build_manager()?.run_first_time_setup())
     }
+
+    /// 登録済みVPS同期先が1件でもあるか(実サイトファイル書き込み経路が
+    /// 複製処理を起動するかどうかの判定に使う——0件なら複製処理自体を
+    /// 一切スケジュールしない、既存動作を完全に保つための早期リターン)。
+    pub fn has_sync_targets(&self) -> bool {
+        !self.targets.read().unwrap().is_empty()
+    }
+
+    /// 登録済みVPS同期先を`SftpBackupTargetConfig`として複製する
+    /// (`build_manager`と同じマッピング、複製処理側から個別に使うため公開)。
+    fn sftp_target_configs(&self) -> Vec<SftpBackupTargetConfig> {
+        self.targets
+            .read()
+            .unwrap()
+            .values()
+            .map(|t| SftpBackupTargetConfig {
+                host: t.host.clone(),
+                port: t.port,
+                username: t.username.clone(),
+                password_env: Some(t.password_env.clone()),
+                remote_backup_dir: t.remote_backup_dir.clone(),
+            })
+            .collect()
+    }
+}
+
+/// 実際に書き込まれたサイトファイル1件を、登録済みのVPS同期先
+/// (`SftpBackupTarget`)へ複製する。**この関数自体は呼び出し元の処理
+/// (アップロードのHTTPレスポンス)を一切ブロックしない**——呼び出し側は
+/// `tokio::spawn`でこの関数の実行そのものをデタッチすること
+/// (`main.rs`の`upload_files`参照)。
+///
+/// - 同期先が1件も登録されていない場合は**何もしない**(早期リターン、
+///   `has_sync_targets()`で判定)——未設定時は既存動作から一切変化しない
+///   ことを保証する設計。
+/// - `SftpBackupTarget::upload_segment`はブロッキングI/O(内部で専用の
+///   使い捨てtokioランタイムを起動する同期関数)のため、
+///   `tokio::task::spawn_blocking`へ退避してから呼ぶ
+///   (非同期ランタイムのワーカースレッドを塞がないため)。
+/// - 個々の同期先への複製が失敗しても他の同期先への複製は継続する
+///   (1つの不達VPSが他の同期を道連れにしない)。失敗は`tracing::warn!`で
+///   ログするのみで、アップロード自体の成否には一切影響しない
+///   (ユーザーがアップロードした時点で書き込みは既に成功しているため)。
+pub async fn replicate_written_file(registry: &Arc<DistSyncRegistry>, label: String, data: Bytes) {
+    if !registry.has_sync_targets() {
+        return;
+    }
+    let configs = registry.sftp_target_configs();
+    for config in configs {
+        let label_for_task = label.clone();
+        let data_for_task = data.clone();
+        let target_desc = format!("{}@{}:{}", config.username, config.host, config.remote_backup_dir);
+        let result = tokio::task::spawn_blocking(move || {
+            let target = SftpBackupTarget::new(config);
+            target.upload_segment(&label_for_task, &data_for_task)
+        })
+        .await;
+        match result {
+            Ok(Ok(())) => {
+                tracing::info!("dist-sync: replicated {label} to {target_desc}");
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("dist-sync: failed to replicate {label} to {target_desc}: {e}");
+            }
+            Err(e) => {
+                tracing::warn!("dist-sync: replication task for {label} to {target_desc} panicked: {e}");
+            }
+        }
+    }
+}
+
+/// アップロード完了後に呼ぶ、非ブロッキングの複製起動ヘルパー。
+/// `tokio::spawn`で[`replicate_written_file`]をデタッチ実行するため、
+/// 呼び出し側(`upload_files`ハンドラ)はこの関数を呼んでも一切待たされない
+/// ——遅い/到達不能な同期先があっても、アップロードしたユーザーへの
+/// レスポンスが遅延することはない。
+pub fn spawn_replication(registry: &Arc<DistSyncRegistry>, label: String, data: Bytes) {
+    if !registry.has_sync_targets() {
+        return;
+    }
+    let registry = Arc::clone(registry);
+    tokio::spawn(async move {
+        replicate_written_file(&registry, label, data).await;
+    });
 }
 
 fn json_response(status: StatusCode, value: &impl serde::Serialize) -> Response<BoxBody> {
@@ -364,5 +450,215 @@ mod tests {
         // 正直な報告が1件だけ返る(ローカル完結フォールバックのみで運用)。
         assert_eq!(report.outcomes.len(), 1);
         assert!(!report.any_offsite_target_ready);
+    }
+
+    #[tokio::test]
+    async fn spawn_replication_is_a_no_op_when_no_targets_are_registered() {
+        // 実サイトファイル書き込み経路への配線が「同期先未設定なら
+        // 既存動作から一切変化しない」ことの回帰テスト——`has_sync_targets()`
+        // がfalseの間は、`spawn_replication`がtokio::spawn自体を行わない
+        // (=バックグラウンドタスクが一切生成されない)ことを確認する。
+        let tmp = tempfile::tempdir().unwrap();
+        let registry = Arc::new(DistSyncRegistry::new(tmp.path().join("journal")));
+        assert!(!registry.has_sync_targets());
+
+        // パニックしない・エラーを返さないことのみが契約(戻り値は無い)。
+        spawn_replication(&registry, "example.tokyo/index.html".to_string(), Bytes::from_static(b"<html></html>"));
+        // デタッチされたタスクが仮にスケジュールされていたとしても、
+        // 同期先が無い場合はreplicate_written_file内で即座にreturnする
+        // ため、少し待っても登録状態自体は変化しない(副作用が無いことの
+        // 間接的な確認)。
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        assert!(!registry.has_sync_targets());
+    }
+
+    /// `open_raid_z_core`側`tests/offsite_backup_integration.rs`と同じ
+    /// パターン(インプロセスrussh SFTPサーバー、実クラウド/実VPSには
+    /// 一切接続しない)を、このリポジトリのdist_sync複製経路向けに
+    /// 再利用した最小限のフェイクSFTPサーバー。
+    mod fake_sftp_server {
+        use russh::keys::{Algorithm, PrivateKey};
+        use russh::server::{Auth, ChannelOpenHandle, Msg, Server as _, Session};
+        use russh::{Channel, ChannelId};
+        use russh_sftp::protocol::{Attrs, File, FileAttributes, Handle, Name, OpenFlags, Status, StatusCode, Version};
+        use std::collections::HashMap as StdHashMap;
+        use std::path::PathBuf;
+        use std::sync::Arc;
+        use tokio::io::{AsyncSeekExt, AsyncWriteExt};
+        use tokio::sync::Mutex;
+
+        #[derive(Clone)]
+        pub struct FakeServer {
+            pub root: PathBuf,
+        }
+
+        impl russh::server::Server for FakeServer {
+            type Handler = FakeSshSession;
+
+            fn new_client(&mut self, _: Option<std::net::SocketAddr>) -> Self::Handler {
+                FakeSshSession { root: self.root.clone(), clients: Arc::new(Mutex::new(StdHashMap::new())) }
+            }
+        }
+
+        pub struct FakeSshSession {
+            root: PathBuf,
+            clients: Arc<Mutex<StdHashMap<ChannelId, Channel<Msg>>>>,
+        }
+
+        impl russh::server::Handler for FakeSshSession {
+            type Error = anyhow::Error;
+
+            async fn auth_password(&mut self, _user: &str, _password: &str) -> Result<Auth, Self::Error> {
+                Ok(Auth::Accept)
+            }
+
+            async fn channel_open_session(
+                &mut self,
+                channel: Channel<Msg>,
+                reply: ChannelOpenHandle,
+                _session: &mut Session,
+            ) -> Result<(), Self::Error> {
+                self.clients.lock().await.insert(channel.id(), channel);
+                reply.accept().await;
+                Ok(())
+            }
+
+            async fn subsystem_request(&mut self, channel_id: ChannelId, name: &str, session: &mut Session) -> Result<(), Self::Error> {
+                if name == "sftp" {
+                    let channel = self.clients.lock().await.remove(&channel_id).unwrap();
+                    let sftp = FakeSftpSession { root: self.root.clone(), files: StdHashMap::new() };
+                    session.channel_success(channel_id)?;
+                    russh_sftp::server::run(channel.into_stream(), sftp).await;
+                } else {
+                    session.channel_failure(channel_id)?;
+                }
+                Ok(())
+            }
+        }
+
+        struct FakeSftpSession {
+            root: PathBuf,
+            files: StdHashMap<String, tokio::fs::File>,
+        }
+
+        impl FakeSftpSession {
+            fn resolve(&self, path: &str) -> PathBuf {
+                self.root.join(path.trim_start_matches('/'))
+            }
+        }
+
+        impl russh_sftp::server::Handler for FakeSftpSession {
+            type Error = StatusCode;
+
+            fn unimplemented(&self) -> Self::Error {
+                StatusCode::OpUnsupported
+            }
+
+            async fn init(&mut self, _version: u32, _extensions: StdHashMap<String, String>) -> Result<Version, Self::Error> {
+                Ok(Version::new())
+            }
+
+            async fn realpath(&mut self, id: u32, path: String) -> Result<Name, Self::Error> {
+                Ok(Name { id, files: vec![File::dummy(&path)] })
+            }
+
+            async fn mkdir(&mut self, id: u32, path: String, _attrs: FileAttributes) -> Result<Status, Self::Error> {
+                let resolved = self.resolve(&path);
+                std::fs::create_dir_all(&resolved).map_err(|_| StatusCode::Failure)?;
+                Ok(ok_status(id))
+            }
+
+            async fn stat(&mut self, id: u32, path: String) -> Result<Attrs, Self::Error> {
+                let resolved = self.resolve(&path);
+                if resolved.exists() {
+                    Ok(Attrs { id, attrs: FileAttributes::default() })
+                } else {
+                    Err(StatusCode::NoSuchFile)
+                }
+            }
+
+            async fn open(&mut self, id: u32, filename: String, _pflags: OpenFlags, _attrs: FileAttributes) -> Result<Handle, Self::Error> {
+                let resolved = self.resolve(&filename);
+                if let Some(parent) = resolved.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let file = tokio::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(&resolved)
+                    .await
+                    .map_err(|_| StatusCode::Failure)?;
+                self.files.insert(filename.clone(), file);
+                Ok(Handle { id, handle: filename })
+            }
+
+            async fn write(&mut self, id: u32, handle: String, offset: u64, data: Vec<u8>) -> Result<Status, Self::Error> {
+                let file = self.files.get_mut(&handle).ok_or(StatusCode::Failure)?;
+                file.seek(std::io::SeekFrom::Start(offset)).await.map_err(|_| StatusCode::Failure)?;
+                file.write_all(&data).await.map_err(|_| StatusCode::Failure)?;
+                Ok(ok_status(id))
+            }
+
+            async fn close(&mut self, id: u32, handle: String) -> Result<Status, Self::Error> {
+                self.files.remove(&handle);
+                Ok(ok_status(id))
+            }
+        }
+
+        fn ok_status(id: u32) -> Status {
+            Status { id, status_code: StatusCode::Ok, error_message: "Ok".to_string(), language_tag: "en-US".to_string() }
+        }
+
+        pub async fn spawn(root: PathBuf) -> u16 {
+            let config = russh::server::Config {
+                keys: vec![PrivateKey::random(&mut rand_for_test_keys::rng(), Algorithm::Ed25519).unwrap()],
+                ..Default::default()
+            };
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let mut server = FakeServer { root };
+
+            tokio::spawn(async move {
+                let _ = server.run_on_socket(Arc::new(config), &listener).await;
+            });
+
+            port
+        }
+    }
+
+    #[tokio::test]
+    async fn spawn_replication_actually_uploads_written_file_to_registered_mock_sftp_target() {
+        // 「登録済みの同期先があれば、実ファイル書き込みが実際に複製先へ
+        // 届く」ことを、実VPSではなくローカルのインプロセスrussh SFTP
+        // サーバー(モック)で検証する——`open_raid_z_core`側の既存検証
+        // 方針(`tests/offsite_backup_integration.rs`)をそのまま踏襲。
+        let sftp_root = tempfile::tempdir().unwrap();
+        let port = fake_sftp_server::spawn(sftp_root.path().to_path_buf()).await;
+        // サーバーのacceptループが立ち上がるまで少し待つ。
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        let journal_tmp = tempfile::tempdir().unwrap();
+        let registry = Arc::new(DistSyncRegistry::new(journal_tmp.path().join("journal")));
+
+        std::env::set_var("TEST_EASYWEB_DIST_SYNC_SFTP_PASSWORD", "unit-test-password");
+        registry.register(RegisterTargetRequest {
+            host: "127.0.0.1".into(),
+            port,
+            username: "easyweb-sync".into(),
+            password_env: "TEST_EASYWEB_DIST_SYNC_SFTP_PASSWORD".into(),
+            remote_backup_dir: "backup".into(),
+            label: Some("mock VPS".into()),
+        });
+        assert!(registry.has_sync_targets());
+
+        replicate_written_file(&registry, "example.tokyo/index.html".to_string(), Bytes::from_static(b"<html>hello</html>")).await;
+
+        // 実際にモックSFTPサーバー側のディスクへファイルが複製されたことを
+        // 直接確認する(型チェック・モックの呼び出し回数確認に留めず、
+        // 実際に書き込まれたバイト列そのものを検証する)。
+        let replicated_path = sftp_root.path().join("backup").join("example.tokyo/index.html");
+        let replicated = std::fs::read(&replicated_path).expect("replicated file should exist on the mock SFTP target");
+        assert_eq!(replicated, b"<html>hello</html>");
     }
 }

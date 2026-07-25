@@ -365,6 +365,14 @@ async fn upload_files(state: &AppState, site: &str, req: Request<Incoming>) -> R
         if tokio::fs::write(&dest, &field.data).await.is_err() {
             return error_response(StatusCode::INTERNAL_SERVER_ERROR, format!("failed to write {filename}"));
         }
+        // 実際にサイトファイルが書き込まれた直後、分散同期先(VPS群)が
+        // 1件でも登録されていれば、その書き込みをSFTP経由で複製する
+        // (`dist_sync.rs`参照)。`spawn_replication`は同期先が0件の場合は
+        // 何もせず即座に戻る(既存動作を変えない)。同期先がある場合も
+        // `tokio::spawn`でデタッチされるため、このアップロードリクエストの
+        // レスポンスは複製の完了を一切待たない(遅い/到達不能なVPSが
+        // あってもアップロードは遅延しない)。
+        dist_sync::spawn_replication(&state.dist_sync, format!("{site}/{}", rel.to_string_lossy()), Bytes::from(field.data));
         written.push(rel.to_string_lossy().to_string());
     }
 
