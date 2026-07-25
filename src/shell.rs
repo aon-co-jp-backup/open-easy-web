@@ -143,9 +143,13 @@ pub const SHELL_HTML: &str = r#"
   <h4>5b. Disaster fallback destination, optional (ディザスタ用退避先、任意)</h4>
   <p class="muted">
     ネット切断・非常時に自動でメールまたはGoogleドライブへ退避します。
-    どちらも設定せず「スキップ」してもかまいません。 / Automatically falls
-    back to email or Google Drive on disconnection/emergency. You may skip
-    this and configure neither.
+    どちらも設定せず「スキップ」してもかまいません。<strong>これは5aとは
+    独立した機能です——上の「VPS同期先」を1件も登録していなくても、
+    メールアドレスだけでこの退避先を設定できます。</strong> / Automatically
+    falls back to email or Google Drive on disconnection/emergency. You may
+    skip this and configure neither. <strong>This is independent from 5a —
+    you can configure this with just an email address even if you have not
+    registered any VPS sync target above.</strong>
   </p>
   <div class="form-grid">
     <label>SMTP host<input type="text" id="dist-sync-smtp-host" placeholder="smtp.example.com"></label>
