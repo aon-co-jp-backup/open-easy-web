@@ -1,5 +1,13 @@
 # open-easy-web
 
+> **Updated 2026-07-25**: The dev-policy file (`CLAUDE.md`) heading was
+> renamed from "Development Policy & Dev Environment Rules" to
+> "Design Philosophy & Development Policy & Dev Environment Rules",
+> to more clearly separate the project's design philosophy (what we
+> value), development policy (how we work), and dev environment rules
+> (concrete operational conventions). See `CLAUDE.md` for details.
+
+
 **A second KUSANAGI — launch by IP address after upload, and easily
 apply domain registration + automatic HTTPS (Rust → WebAssembly, no
 framework dependency)**
