@@ -230,6 +230,89 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-25 分散同期クローンDB+ディザスタリカバリをBUILT-IN機能として
+  新規実装(ユーザー指示: 他VPSへの自動レプリケーション・ネット切断/
+  非常時のメール/Googleドライブ自動フェイルオーバー・CPU/GPU/NPU
+  ハードウェアアクセラレーション)**:
+  1. **再利用方針の徹底**: 姉妹リポジトリ`open-raid-z`
+     (`open_runo_zfs_source/open_raid_z_core`)が実装・テスト済みの
+     切断耐性ジャーナル(`journal.rs`)・再接続時自動復旧
+     (`disaster_recovery.rs`)・オフサイト退避先(`offsite_backup.rs`、
+     Email/Googleドライブ/SFTP)・圧縮アクセラレーション抽象化
+     (`accel.rs`、CPU実装のみ・GPU/NPUは常にCPUへ安全フォールバック)を
+     **再実装せず**path依存で再利用した。依存パターンは`aruaru-db`の
+     `crates/aruaru-dist/Cargo.toml`(`open_raid_z_core`を
+     `default-features = false`でpath依存、featureで任意有効化)を
+     そのままコピー: `server/Cargo.toml`に
+     `open_raid_z_core = { path = "../../open-raid-z/open_runo_zfs_source/
+     open_raid_z_core", default-features = false, features =
+     ["offsite_backup"] }`を追加。
+  2. **新規`server/src/dist_sync.rs`**: (a)
+     `DistSyncRegistry`(`appserver_registration.rs`の`TenantRegistry`的
+     パターン、`RwLock<HashMap<id, config>>`)がVPS同期先の登録・一覧・
+     削除を提供。(b) 登録された同期先は全て
+     `open_raid_z_core::offsite_backup::SftpBackupTarget`へマッピング
+     される——ユーザー要件どおり「VPSへの分散同期」も「SFTPオフサイト
+     退避」も同一の抽象を共有する設計。(c) Email/Googleドライブの
+     ディザスタ用退避先設定と合わせて`DisasterRecoveryManager`を構築し、
+     `run_first_time_setup()`(全同期先/退避先への`ensure_ready`疎通確認、
+     失敗はスキップ扱いで使用開始を妨げない)を呼べる。(d) 管理API
+     `POST`/`GET`/`DELETE /admin/dist-sync/targets`・
+     `POST /admin/dist-sync/disaster-fallback`・
+     `POST /admin/dist-sync/first-time-setup`を`main.rs`へ配線、
+     `x-admin-token`ヘッダ認証(`OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN`
+     環境変数未設定時はAPI自体を503で無効化——誤って無認証公開しない
+     安全側デフォルト)。
+  3. **ウィザードUI**: セッション開始時点で`src/setup_wizard_ui.rs`・
+     `src/api_dist_sync.rs`・`src/shell.rs`のStep 5(VPS同期先登録フォーム・
+     メール退避先設定フォーム)が**既にコミット前の状態で実装済み**
+     だったため(前回セッションの未コミット作業)、今回はそれを検証した
+     上で、Googleドライブ退避先フォーム(バックアップフォルダ名/
+     クライアントID・シークレット・リフレッシュトークンの各環境変数名)
+     が抜けていた点(`api_dist_sync::set_disaster_fallback_google_drive`
+     関数はあったがUIから呼ばれておらずdead_code警告が出ていた)を発見・
+     追加し、「Email、Googleドライブ、またはスキップ」という要件を
+     完全に満たす形にした。「設定は任意・スキップ可能」という既存の
+     設定ウィザードの確立済み方針(`setup_wizard_ui.rs`のStep 4と同じ)を
+     ここでも踏襲・明記した。
+  4. **検証(実測値、作業前→作業後)**: `server/`(host、
+     `cargo test`)**50→54件**(新規: `dist_sync::tests`3件+
+     `dist_sync_admin_api_register_list_and_delete_over_real_http`
+     〈実HTTPで無効化状態(503)→誤トークン(401)→登録→一覧→
+     ディザスタ退避先設定→削除→一覧、を一気通貫検証〉1件)、全green。
+     ルート(WASM、host `cargo test`)**5→5件**(変更なし、DOM非依存の
+     既存テストのみ)、全green・警告0件(Googleドライブ関数の
+     dead_code警告もUI配線で解消)。`cargo build --target
+     wasm32-unknown-unknown`(ローカル`--target-dir`経由、既知の回避策
+     どおり)警告0件で成功。**実ブラウザ(Claude Browser pane)で実際に
+     確認**: `wasm-bindgen`生成物を`python -m http.server`でローカル
+     配信し、Step 5の全フィールド(VPS同期先登録・メール退避先・
+     Googleドライブ退避先・スキップ)が正しく描画されること、
+     「Register VPS sync target」ボタンを空欄でクリックして
+     クライアント側バリデーションメッセージが正しく表示されること、
+     「Skip for now」ボタンをクリックして結果メッセージが正しく
+     更新されること、コンソールエラー無し・白画面無し、を確認した
+     (型チェックのみでの完了報告ではない、既存の検証基準どおり)。
+  5. **正直な開示(未検証・既知の制約)**: (1) このサーバーが実際に
+     管理するデータ(アップロード済みサイトファイル等)を
+     `DisasterRecoveryManager::protect_write`経由で保護する配線までは
+     今回行っていない(`upload.rs`/`main.rs`のファイル書き込み経路
+     自体を変更するのは影響範囲が大きいため——今回は「登録・設定・
+     疎通確認」という管理APIとその土台の提供に留めた)。(2) 実VPS・
+     実SMTPサーバー・実Googleアカウントへの接続は一度も行っていない
+     ——`open-raid-z`側`tests/offsite_backup_integration.rs`と同じ
+     「ローカルモックのみ」方針を踏襲し、このパスの検証も到達不能
+     アドレス・未接続SMTP/クラウドでの正常系(構築できること・
+     エラーにならないこと)の確認に限定した。(3) GPU/NPU圧縮は
+     `open_raid_z_core::accel`がそのまま常にCPUへ安全フォールバックする
+     設計のまま(このリポジトリ側で新たに実装したものではない)。
+  - 次にすべきこと: (1) 実サイトデータの書き込み経路への
+    `protect_write`配線、(2) 実VPS/実SMTP/実Googleアカウントでの結合
+    テスト、(3) 10ヶ国語READMEへの反映(今回は日本語・英語のみ更新
+    ——`README-Japan.md`は前回セッション時点で既に反映済みだったため
+    今回は`README-English.md`のみ新規反映、他8言語は未着手のバックログ
+    として記録)。
+
 - **2026-07-24(続き8) 自社ドメイン配下の無料サブドメイン取得+自動更新
   機能・統一アカウント基盤(GitHub OAuth)・PostgreSQL+aruaru-dbデュアル
   ライトの土台を`open-web-server`側に実装(ユーザー指示、実体は

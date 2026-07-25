@@ -98,6 +98,87 @@ pub const SHELL_HTML: &str = r#"
     <code>install.ps1</code> instead — see the open-web-server README for
     details.)
   </p>
+
+  <h3>Step 5: Distributed sync &amp; disaster recovery (⑤ このファイルサーバーの分散同期・ディザスタリカバリ設定、任意)</h3>
+  <p class="muted">
+    このファイルサーバー(上記でセットアップしたopen-easy-webインスタンス)が
+    抱えるサイトデータを、他のVPSへ継続的に複製する「分散同期クローンDB」・
+    ネット切断や非常時にメール/Googleドライブへ自動退避する「ディザスタ
+    リカバリ」を、ここでまとめて設定できます。<strong>設定は任意です——
+    スキップしてもこのファイルサーバーは通常どおり使用できます。</strong> /
+    You can configure "distributed sync clone DB" (continuously replicating
+    this file server's site data to other VPS instances) and "disaster
+    recovery" (automatic fallback to email/Google Drive on disconnection or
+    emergency) together here. <strong>This step is optional — skipping it
+    does not block normal use of this file server.</strong>
+  </p>
+  <p class="muted">
+    管理トークン(サーバー起動時の <code>OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN</code>
+    環境変数と同じ値)を入力してから利用してください。未設定のサーバーでは
+    この管理APIは無効化されています。 / Enter the admin token (same value as
+    the <code>OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN</code> environment variable
+    set on the server) before using this. This admin API is disabled on
+    servers where that variable is not set.
+  </p>
+  <div class="form-grid">
+    <label>Admin token (管理トークン)<input type="password" id="dist-sync-admin-token" placeholder="OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN"></label>
+  </div>
+
+  <h4>5a. Register a VPS clone target (他VPSへの分散同期先を登録)</h4>
+  <div class="form-grid">
+    <label>Host (ホスト)<input type="text" id="dist-sync-host" placeholder="vps2.example.tokyo"></label>
+    <label>Port (ポート)<input type="number" id="dist-sync-port" value="22"></label>
+    <label>Username (ユーザー名)<input type="text" id="dist-sync-username" placeholder="sync-user"></label>
+    <label>Password env var (パスワード環境変数名)<input type="text" id="dist-sync-password-env" placeholder="EASYWEB_VPS2_SFTP_PASSWORD"></label>
+    <label>Remote backup dir (退避先ディレクトリ)<input type="text" id="dist-sync-remote-dir" placeholder="/home/sync-user/easyweb-sync"></label>
+    <label>Label, optional (任意のラベル)<input type="text" id="dist-sync-label" placeholder="東京VPS #2"></label>
+  </div>
+  <div class="buttons">
+    <button id="dist-sync-register-btn">Register VPS sync target (VPS同期先を登録)</button>
+    <button id="dist-sync-refresh-btn">Refresh list (一覧を更新)</button>
+  </div>
+  <p id="dist-sync-result" class="muted" aria-live="polite"></p>
+  <div id="dist-sync-target-list"></div>
+
+  <h4>5b. Disaster fallback destination, optional (ディザスタ用退避先、任意)</h4>
+  <p class="muted">
+    ネット切断・非常時に自動でメールまたはGoogleドライブへ退避します。
+    どちらも設定せず「スキップ」してもかまいません。 / Automatically falls
+    back to email or Google Drive on disconnection/emergency. You may skip
+    this and configure neither.
+  </p>
+  <div class="form-grid">
+    <label>SMTP host<input type="text" id="dist-sync-smtp-host" placeholder="smtp.example.com"></label>
+    <label>SMTP port<input type="number" id="dist-sync-smtp-port" value="587"></label>
+    <label>SMTP username<input type="text" id="dist-sync-smtp-username" placeholder="backup@example.com"></label>
+    <label>SMTP password env var<input type="text" id="dist-sync-smtp-password-env" placeholder="EASYWEB_SMTP_PASSWORD"></label>
+    <label>From address<input type="text" id="dist-sync-smtp-from" placeholder="backup@example.com"></label>
+    <label>To address<input type="text" id="dist-sync-smtp-to" placeholder="admin@example.com"></label>
+  </div>
+  <div class="buttons">
+    <button id="dist-sync-set-email-fallback-btn">Set email fallback (メール退避先を設定)</button>
+  </div>
+  <p class="muted">
+    Googleドライブへ退避する場合は、事前にご自身でOAuth2クライアント登録・
+    同意画面を済ませ、発行済みのリフレッシュトークンを環境変数として
+    サーバーへ渡してください(このアプリがOAuth2認証を代行することは
+    ありません)。 / For Google Drive, complete the OAuth2 client
+    registration/consent screen yourself beforehand and pass the already
+    issued refresh token to the server as an environment variable (this app
+    never performs the OAuth2 flow on your behalf).
+  </p>
+  <div class="form-grid">
+    <label>Backup folder name<input type="text" id="dist-sync-gdrive-folder" placeholder="open-easy-web-backup"></label>
+    <label>Client ID env var<input type="text" id="dist-sync-gdrive-client-id-env" placeholder="EASYWEB_GDRIVE_CLIENT_ID"></label>
+    <label>Client secret env var<input type="text" id="dist-sync-gdrive-client-secret-env" placeholder="EASYWEB_GDRIVE_CLIENT_SECRET"></label>
+    <label>Refresh token env var<input type="text" id="dist-sync-gdrive-refresh-token-env" placeholder="EASYWEB_GDRIVE_REFRESH_TOKEN"></label>
+  </div>
+  <div class="buttons">
+    <button id="dist-sync-set-gdrive-fallback-btn">Set Google Drive fallback (Googleドライブ退避先を設定)</button>
+    <button id="dist-sync-verify-btn">Verify all targets now (今すぐ全同期先を疎通確認)</button>
+    <button id="dist-sync-skip-btn">Skip for now (今はスキップ)</button>
+  </div>
+  <p id="dist-sync-fallback-result" class="muted" aria-live="polite"></p>
 </section>
 
 <div id="site-mgmt-section" class="hidden">

@@ -21,14 +21,22 @@ upstream keepalive)を除く全て**を引き継いだ。高速化機能自体�
 open-easy-web/
 ├── Cargo.toml / Cargo.lock
 ├── src/{lib,dom,profiles,shell,api_auth,api_upload,auth_ui,view_bridge,
-│        api_free_domain,free_domain_ui}.rs
+│        api_free_domain,free_domain_ui,setup_wizard_ui,api_dist_sync}.rs
 │                              # site management + auth + upload WASM UI
 │                              # (api_free_domain/free_domain_ui: 2026-07-23
 │                              #  簡単ドメイン設定ウィザード、無料DDNS/DuckDNS)
+│                              # (setup_wizard_ui/api_dist_sync: 2026-07-25
+│                              #  分散同期クローンDB+ディザスタリカバリ設定
+│                              #  ステップ〈初回セットアップガイド Step 5〉)
 ├── server/                   # 別クレート(open-easy-web-server、tokio/hyper直接実装)
-│   ├── Cargo.toml / Cargo.lock
+│   ├── Cargo.toml / Cargo.lock  # 2026-07-25: open_raid_z_core をpath依存
+│   │                            # (default-features=false, offsite_backup)
 │   └── src/{main,auth,users,totp,mail,sms,tls,vhost,php_detector,upload,
-│             appserver_registration}.rs
+│             appserver_registration,dist_sync}.rs
+│             # dist_sync.rs(2026-07-25新設): 分散同期先(VPS、SFTP経由)+
+│             # ディザスタ用退避先(Email/Googleドライブ)の登録・一覧・削除
+│             # 管理API。open-raid-zのjournal/disaster_recovery/
+│             # offsite_backup/accelをそのまま再利用(再実装しない)。
 ├── index.html / pkg/(ビルド生成物、.gitignore対象)
 ├── scripts/
 │   ├── serve.sh              # IPアドレス起動
@@ -208,6 +216,41 @@ connection-info`)を呼び出すが、`api_auth.rs`(自サーバーAPI、
 段階適用中——長い説明文・エラーメッセージは対象外)。移植先でこの
 パターンを踏襲する場合は、`src/shell.rs`内の既存表記を検索リファレンス
 として利用すること。
+
+## 13. 分散同期クローンDB + ディザスタリカバリの`open_raid_z_core`再利用
+(2026-07-25新設)
+
+`server/src/dist_sync.rs`は、他VPSへの分散同期クローンDB・ネット切断/
+非常時のメール/Googleドライブ自動退避・CPU圧縮アクセラレーションを、
+姉妹リポジトリ`open-raid-z`の`open_raid_z_core`(`journal`/
+`disaster_recovery`/`offsite_backup`/`accel`)をpath依存として再利用する
+ことで実装した。移植先で同種の機能が必要な場合の要点:
+
+- **Cargo依存**: `server/Cargo.toml`に
+  `open_raid_z_core = { path = "../../open-raid-z/open_runo_zfs_source/
+  open_raid_z_core", default-features = false, features =
+  ["offsite_backup"] }` のように`default-features = false`を必ず指定する
+  こと——既定featureには`winfsp_backend`/`gpu_accel`が含まれており、
+  WinFsp SDK・dxc・Windows SDKを要求してしまう(CPUフォールバックのみで
+  よい場合は不要な依存)。`aruaru-dist`(`aruaru-db`側)が先行して踏襲
+  済みの同じパターン。
+- **`DisasterRecoveryConfig`が既に「VPS同期先」も表現できる**:
+  `open_raid_z_core::offsite_backup::SftpBackupTarget`は「VPSへの分散
+  同期先」も「SFTPオフサイト退避」も同じ抽象で表現できるため、
+  `dist_sync.rs`はVPS同期先を全て`SftpBackupTargetConfig`へマッピング
+  している(独自のレプリケーションプロトコルを新設していない)。
+- **管理APIの認証方式は移植先の既存方針に合わせる**: このリポジトリの
+  `/api/*`系はBearerセッショントークン(`require_session`)が既定だが、
+  `dist_sync.rs`の`/admin/dist-sync/*`は`appserver_registration.rs`が
+  外部サービスへ送信する際と同じ`x-admin-token`ヘッダ方式を採用した
+  (環境変数`OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN`未設定時は無効化する
+  安全側デフォルト)——両方式が同一サーバー内に混在する設計になって
+  いる点に注意(意図的な選択、CLAUDE.md HANDOFF参照)。
+- **テスト方針**: `open-raid-z`側の`tests/offsite_backup_integration.rs`
+  と同じ「実クラウド/実SMTP/実VPSには一切接続しない」方針を踏襲。
+  到達不能なホスト/ポート(`127.0.0.1:1`等)を使い、`ensure_ready`が
+  失敗してもpanicせず「スキップ」として正直に報告することを確認する
+  形のユニットテストのみで検証している。
 
 ## 10. 「ルートで`cargo test`しても実は何も検証していない」構造の罠
 (2026-07-23発見)

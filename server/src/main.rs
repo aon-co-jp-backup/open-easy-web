@@ -9,6 +9,7 @@
 
 mod appserver_registration;
 mod auth;
+mod dist_sync;
 mod mail;
 mod php_detector;
 mod sms;
@@ -53,6 +54,9 @@ struct AppState {
     users: users::UserStore,
     smtp: Option<mail::SmtpConfig>,
     sms: Option<sms::SmsConfig>,
+    /// 分散同期先(VPS群)+ディザスタ用オフサイト退避先(Email/Googleドライブ)
+    /// のレジストリ(`dist_sync.rs`参照、open_raid_z_coreの再利用)。
+    dist_sync: Arc<dist_sync::DistSyncRegistry>,
 }
 
 /// 唯一ログインを許可するアカウント(ユーザー指示、2026-07-15、
@@ -110,6 +114,10 @@ impl AppState {
             users,
             smtp: mail::SmtpConfig::from_env(),
             sms: sms::SmsConfig::from_env(),
+            dist_sync: Arc::new(dist_sync::DistSyncRegistry::new(env_path(
+                "OPEN_EASYWEB_DIST_SYNC_JOURNAL_DIR",
+                "/var/www/.open-easy-web-dist-sync-journal",
+            ))),
         }
     }
 
@@ -206,6 +214,40 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
             (&Method::POST, "/register-appserver") => register_appserver(&site, req).await,
             _ => error_response(StatusCode::NOT_FOUND, "unknown site action"),
         };
+    }
+
+    // `/admin/dist-sync/*` — 分散同期先・ディザスタ用退避先の管理API
+    // (`dist_sync.rs`参照)。`x-admin-token`ヘッダによる認証必須。
+    if path == "/admin/dist-sync/targets" {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        return match method {
+            Method::POST => dist_sync::register_target(&state.dist_sync, req).await,
+            Method::GET => dist_sync::list_targets(&state.dist_sync).await,
+            _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "unsupported method"),
+        };
+    }
+    if let Some(id) = path.strip_prefix("/admin/dist-sync/targets/").filter(|s| !s.is_empty()) {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        return match method {
+            Method::DELETE => dist_sync::delete_target(&state.dist_sync, id).await,
+            _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "unsupported method"),
+        };
+    }
+    if path == "/admin/dist-sync/disaster-fallback" && method == Method::POST {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        return dist_sync::set_disaster_fallback(&state.dist_sync, req).await;
+    }
+    if path == "/admin/dist-sync/first-time-setup" && method == Method::POST {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        return dist_sync::run_first_time_setup(&state.dist_sync).await;
     }
 
     match (&method, path.as_str()) {
@@ -977,6 +1019,7 @@ mod tests {
             users: users::UserStore::load(dir.path().join("users.json")),
             smtp: None,
             sms: None,
+            dist_sync: Arc::new(dist_sync::DistSyncRegistry::new(dir.path().join("dist-sync-journal"))),
         });
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -1121,6 +1164,108 @@ mod tests {
         assert_eq!(res.status(), reqwest::StatusCode::BAD_GATEWAY);
     }
 
+    /// `/admin/dist-sync/*`一連の実HTTPフロー(2026-07-25新設): 未設定
+    /// (無効化)→トークン設定→登録→一覧→削除→一覧、を実際にHTTP経由で検証する。
+    #[tokio::test]
+    async fn dist_sync_admin_api_register_list_and_delete_over_real_http() {
+        let (addr, _state) = spawn_test_server().await;
+        let client = reqwest::Client::new();
+
+        // 環境変数未設定の間はこの管理API自体が無効(503)であることを確認
+        // (誤って無認証公開しない安全側デフォルト)。
+        std::env::remove_var("OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN");
+        let res = client
+            .get(format!("http://{addr}/admin/dist-sync/targets"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
+
+        // 環境変数を設定してから、間違ったトークンでは401。
+        // NOTE: `cargo test`はデフォルトでテストを並列実行するため、環境変数
+        // をテスト間で共有するとフレーキーになりうる。このプロセス内で
+        // 環境変数を読むテストは本テストのみ(grepで確認済み)なので許容する。
+        std::env::set_var("OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN", "test-dist-sync-token");
+        let res = client
+            .get(format!("http://{addr}/admin/dist-sync/targets"))
+            .header("x-admin-token", "wrong-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+        // 正しいトークンで登録。
+        let res = client
+            .post(format!("http://{addr}/admin/dist-sync/targets"))
+            .header("x-admin-token", "test-dist-sync-token")
+            .json(&serde_json::json!({
+                "host": "vps1.example.tokyo",
+                "port": 22,
+                "username": "sync-user",
+                "password_env": "EASYWEB_VPS1_SFTP_PASSWORD",
+                "remote_backup_dir": "/home/sync-user/easyweb-sync",
+                "label": "VPS1",
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+        let body: serde_json::Value = res.json().await.unwrap();
+        let target_id = body["target"]["id"].as_str().unwrap().to_string();
+        assert_eq!(body["target"]["host"], "vps1.example.tokyo");
+
+        // 一覧に反映されている。
+        let res = client
+            .get(format!("http://{addr}/admin/dist-sync/targets"))
+            .header("x-admin-token", "test-dist-sync-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(body["targets"].as_array().unwrap().len(), 1);
+
+        // ディザスタ用退避先(Email)の設定も通ること(実SMTP接続はしない、
+        // 設定を受け付けるだけの経路)。
+        let res = client
+            .post(format!("http://{addr}/admin/dist-sync/disaster-fallback"))
+            .header("x-admin-token", "test-dist-sync-token")
+            .json(&serde_json::json!({
+                "email": {
+                    "smtp_host": "smtp.example.invalid",
+                    "smtp_port": 587,
+                    "smtp_username": "backup@example.invalid",
+                    "smtp_password_env": "EASYWEB_BACKUP_SMTP_PASSWORD",
+                    "from_address": "backup@example.invalid",
+                    "to_address": "admin@example.invalid",
+                }
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+
+        // 削除。
+        let res = client
+            .delete(format!("http://{addr}/admin/dist-sync/targets/{target_id}"))
+            .header("x-admin-token", "test-dist-sync-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+
+        let res = client
+            .get(format!("http://{addr}/admin/dist-sync/targets"))
+            .header("x-admin-token", "test-dist-sync-token")
+            .send()
+            .await
+            .unwrap();
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(body["targets"].as_array().unwrap().len(), 0);
+
+        std::env::remove_var("OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN");
+    }
+
     #[tokio::test]
     async fn totp_setup_enable_then_requires_code_on_next_login() {
         let (addr, state) = spawn_test_server().await;
@@ -1253,6 +1398,7 @@ mod tests {
             users: users::UserStore::load(dir.path().join("users.json")),
             sms: None,
             smtp: None,
+            dist_sync: Arc::new(dist_sync::DistSyncRegistry::new(dir.path().join("dist-sync-journal"))),
         };
         assert!(state.site_dir("../etc").is_none());
         assert_eq!(state.site_dir("audiocafe.tokyo"), Some(PathBuf::from("/var/www/audiocafe.tokyo")));

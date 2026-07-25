@@ -24,9 +24,216 @@
 use crate::dom::{by_id, set_status, try_by_id};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{Event, HtmlButtonElement};
+use wasm_bindgen_futures::spawn_local;
+use web_sys::{Event, HtmlButtonElement, HtmlInputElement};
 
 const COMPAT_MODE_STORAGE_KEY: &str = "openeasyweb_compat_mode_v1";
+
+/// Step 5(分散同期・ディザスタリカバリ)は、この`open-easy-web-server`
+/// 自身の管理APIを呼ぶ想定のため、同一オリジン(現在の`Location`)を
+/// ベースURLとして使う——`api_free_domain`のような別オリジン入力は不要
+/// (このファイルサーバー自身の設定という位置づけのため、コーディネーター
+/// 追加指示どおりStep 4と同じ流れの中に置く)。
+fn same_origin_base_url() -> String {
+    crate::dom::window().location().origin().unwrap_or_default()
+}
+
+fn input_value(id: &str) -> String {
+    try_by_id(id)
+        .and_then(|el| el.dyn_into::<HtmlInputElement>().ok())
+        .map(|el| el.value())
+        .unwrap_or_default()
+}
+
+fn set_text(id: &str, text: &str) {
+    if let Some(el) = try_by_id(id) {
+        el.set_text_content(Some(text));
+    }
+}
+
+fn on_register_dist_sync_target() {
+    let admin_token = input_value("dist-sync-admin-token");
+    let host = input_value("dist-sync-host");
+    let port: u16 = input_value("dist-sync-port").parse().unwrap_or(22);
+    let username = input_value("dist-sync-username");
+    let password_env = input_value("dist-sync-password-env");
+    let remote_dir = input_value("dist-sync-remote-dir");
+    let label = input_value("dist-sync-label");
+
+    if host.trim().is_empty() || username.trim().is_empty() || password_env.trim().is_empty() {
+        set_text(
+            "dist-sync-result",
+            "❌ host / username / password env var は必須です。 / host, username, and password env var are required.",
+        );
+        return;
+    }
+
+    let base_url = same_origin_base_url();
+    spawn_local(async move {
+        let label_opt = if label.trim().is_empty() { None } else { Some(label.as_str()) };
+        match crate::api_dist_sync::register_target(
+            &base_url,
+            &admin_token,
+            &host,
+            port,
+            &username,
+            &password_env,
+            &remote_dir,
+            label_opt,
+        )
+        .await
+        {
+            Ok(_) => {
+                set_text(
+                    "dist-sync-result",
+                    "✅ VPS同期先を登録しました。 / VPS sync target registered.",
+                );
+                refresh_dist_sync_targets(base_url).await;
+            }
+            Err(e) => set_text("dist-sync-result", &format!("❌ {e}")),
+        }
+    });
+}
+
+async fn refresh_dist_sync_targets(base_url: String) {
+    let admin_token = input_value("dist-sync-admin-token");
+    match crate::api_dist_sync::list_targets(&base_url, &admin_token).await {
+        Ok(value) => {
+            let targets = value.get("targets").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+            let html = if targets.is_empty() {
+                "<p class=\"muted\">登録済みの分散同期先はありません。 / No distributed sync targets registered yet.</p>".to_string()
+            } else {
+                let mut rows = String::new();
+                for t in &targets {
+                    let host = t.get("host").and_then(|v| v.as_str()).unwrap_or("?");
+                    let port = t.get("port").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let label = t.get("label").and_then(|v| v.as_str()).unwrap_or("");
+                    let id = t.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                    rows.push_str(&format!(
+                        "<div class=\"site-card\" data-target-id=\"{id}\"><strong>{host}:{port}</strong> {label} \
+                         <button class=\"dist-sync-remove-btn\" data-target-id=\"{id}\">Remove (削除)</button></div>"
+                    ));
+                }
+                rows
+            };
+            if let Some(el) = try_by_id("dist-sync-target-list") {
+                el.set_inner_html(&html);
+            }
+        }
+        Err(e) => set_text("dist-sync-result", &format!("❌ list failed: {e}")),
+    }
+}
+
+fn on_refresh_dist_sync_targets() {
+    spawn_local(async move {
+        refresh_dist_sync_targets(same_origin_base_url()).await;
+    });
+}
+
+fn on_set_email_fallback() {
+    let admin_token = input_value("dist-sync-admin-token");
+    let smtp_host = input_value("dist-sync-smtp-host");
+    let smtp_port: u16 = input_value("dist-sync-smtp-port").parse().unwrap_or(587);
+    let smtp_username = input_value("dist-sync-smtp-username");
+    let smtp_password_env = input_value("dist-sync-smtp-password-env");
+    let from_address = input_value("dist-sync-smtp-from");
+    let to_address = input_value("dist-sync-smtp-to");
+
+    if smtp_host.trim().is_empty() || to_address.trim().is_empty() {
+        set_text(
+            "dist-sync-fallback-result",
+            "❌ SMTP host / To address は必須です。 / SMTP host and To address are required.",
+        );
+        return;
+    }
+
+    let base_url = same_origin_base_url();
+    spawn_local(async move {
+        match crate::api_dist_sync::set_disaster_fallback_email(
+            &base_url,
+            &admin_token,
+            &smtp_host,
+            smtp_port,
+            &smtp_username,
+            &smtp_password_env,
+            &from_address,
+            &to_address,
+        )
+        .await
+        {
+            Ok(_) => set_text(
+                "dist-sync-fallback-result",
+                "✅ メール退避先を設定しました。 / Email fallback destination configured.",
+            ),
+            Err(e) => set_text("dist-sync-fallback-result", &format!("❌ {e}")),
+        }
+    });
+}
+
+fn on_set_gdrive_fallback() {
+    let admin_token = input_value("dist-sync-admin-token");
+    let folder = input_value("dist-sync-gdrive-folder");
+    let client_id_env = input_value("dist-sync-gdrive-client-id-env");
+    let client_secret_env = input_value("dist-sync-gdrive-client-secret-env");
+    let refresh_token_env = input_value("dist-sync-gdrive-refresh-token-env");
+
+    if folder.trim().is_empty() || refresh_token_env.trim().is_empty() {
+        set_text(
+            "dist-sync-fallback-result",
+            "❌ Backup folder name / Refresh token env var は必須です。 / \
+             Backup folder name and refresh token env var are required.",
+        );
+        return;
+    }
+
+    let base_url = same_origin_base_url();
+    spawn_local(async move {
+        match crate::api_dist_sync::set_disaster_fallback_google_drive(
+            &base_url,
+            &admin_token,
+            &folder,
+            &client_id_env,
+            &client_secret_env,
+            &refresh_token_env,
+        )
+        .await
+        {
+            Ok(_) => set_text(
+                "dist-sync-fallback-result",
+                "✅ Googleドライブ退避先を設定しました。 / Google Drive fallback destination configured.",
+            ),
+            Err(e) => set_text("dist-sync-fallback-result", &format!("❌ {e}")),
+        }
+    });
+}
+
+fn on_verify_dist_sync() {
+    let admin_token = input_value("dist-sync-admin-token");
+    let base_url = same_origin_base_url();
+    spawn_local(async move {
+        match crate::api_dist_sync::run_first_time_setup(&base_url, &admin_token).await {
+            Ok(report) => {
+                let ready = report.get("any_offsite_target_ready").and_then(|v| v.as_bool()).unwrap_or(false);
+                let msg = if ready {
+                    "✅ 1つ以上の同期先/退避先が準備できました。 / One or more sync/fallback targets are ready."
+                } else {
+                    "ℹ️ 準備できた同期先/退避先はまだありません(接続情報を確認してください、または未設定でもファイルサーバー自体は使用できます)。 / \
+                     No sync/fallback target is ready yet (check connection details, or continue without one — this does not block normal use)."
+                };
+                set_text("dist-sync-fallback-result", msg);
+            }
+            Err(e) => set_text("dist-sync-fallback-result", &format!("❌ {e}")),
+        }
+    });
+}
+
+fn on_skip_dist_sync() {
+    set_text(
+        "dist-sync-fallback-result",
+        "⏭️ スキップしました。後からいつでもこの画面で設定できます。 / \
+         Skipped. You can configure this at any time from this screen later.",
+    );
+}
 
 fn local_storage() -> Option<web_sys::Storage> {
     crate::dom::window().local_storage().ok().flatten()
@@ -98,5 +305,47 @@ pub fn wire() -> Result<(), JsValue> {
     }
     wire_click("setup-wizard-apache-btn", || on_choose_compat_mode("apache"))?;
     wire_click("setup-wizard-nginx-btn", || on_choose_compat_mode("nginx"))?;
+
+    wire_click("dist-sync-register-btn", on_register_dist_sync_target)?;
+    wire_click("dist-sync-refresh-btn", on_refresh_dist_sync_targets)?;
+    wire_click("dist-sync-set-email-fallback-btn", on_set_email_fallback)?;
+    wire_click("dist-sync-set-gdrive-fallback-btn", on_set_gdrive_fallback)?;
+    wire_click("dist-sync-verify-btn", on_verify_dist_sync)?;
+    wire_click("dist-sync-skip-btn", on_skip_dist_sync)?;
+    wire_dist_sync_remove_delegation()?;
+    Ok(())
+}
+
+/// 動的生成される「削除」ボタンを、コンテナ1つのイベント委譲で処理する
+/// (`free_domain_ui.rs`と同じ設計方針——ボタンごとに`forget()`し続ける
+/// クロージャがメモリを増やし続けないため)。
+fn wire_dist_sync_remove_delegation() -> Result<(), JsValue> {
+    use wasm_bindgen::JsCast;
+    let container = by_id("dist-sync-target-list");
+    let closure = Closure::<dyn FnMut(Event)>::new(move |evt: Event| {
+        let Some(target) = evt.target() else { return };
+        let Ok(el) = target.dyn_into::<web_sys::Element>() else { return };
+        let Some(btn) = el.closest(".dist-sync-remove-btn").ok().flatten() else { return };
+        let Some(id) = btn.get_attribute("data-target-id") else { return };
+        if id.is_empty() {
+            return;
+        }
+        let admin_token = input_value("dist-sync-admin-token");
+        let base_url = same_origin_base_url();
+        spawn_local(async move {
+            match crate::api_dist_sync::delete_target(&base_url, &admin_token, &id).await {
+                Ok(_) => {
+                    set_text("dist-sync-result", "🗑️ 削除しました。 / Removed.");
+                    refresh_dist_sync_targets(base_url).await;
+                }
+                Err(e) => set_text("dist-sync-result", &format!("❌ {e}")),
+            }
+        });
+    });
+    container
+        .dyn_ref::<web_sys::HtmlElement>()
+        .ok_or_else(|| JsValue::from_str("dist-sync-target-list is not an HtmlElement"))?
+        .set_onclick(Some(closure.as_ref().unchecked_ref()));
+    closure.forget();
     Ok(())
 }

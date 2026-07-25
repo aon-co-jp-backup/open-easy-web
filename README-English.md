@@ -80,6 +80,28 @@ middleware, etc. — see those repos' CLAUDE.md for details).
   poem-cosmo-tauri)
   process per domain, a site's domain can be dynamically registered
   with an already-running shared backend instance.
+- **Distributed sync clone DB + disaster recovery (added 2026-07-25)**:
+  Step 5 of the First-time Setup Guide lets you register/remove one or
+  more "distributed sync targets" (other VPS instances this file
+  server's site data continuously replicates to, over SFTP) and,
+  optionally, a disaster fallback destination (email or Google Drive,
+  with automatic compression before upload / decompression on
+  restore). This reuses the sister repository `open-raid-z`'s
+  disconnect-tolerant journal, disaster-recovery orchestration, and
+  offsite-backup targets (`open_raid_z_core`) as-is — it is not
+  reimplemented here. **Configuration is optional** — skipping it does
+  not block normal use of the file server. The admin API
+  (`POST`/`GET`/`DELETE /admin/dist-sync/targets`,
+  `POST /admin/dist-sync/disaster-fallback`,
+  `POST /admin/dist-sync/first-time-setup`) is disabled unless the
+  `OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN` environment variable is set.
+  **Honest disclosure**: GPU/NPU (DirectX) acceleration for
+  compression always safely falls back to the CPU implementation as of
+  2026-07, same as `open_raid_z_core::accel` (not claimed as
+  implemented when it isn't). No integration test against a real VPS
+  or a real cloud account has been run — only local mocks (unreachable
+  addresses, no real SMTP/cloud connection). See the 2026-07-25 HANDOFF
+  entry in `CLAUDE.md` for details.
 - **Easy free-domain wizard (DuckDNS, up to 20 domains, added 2026-07-23)**:
   for non-static-IP DDNS environments, a single-screen wizard drives
   `open-web-server`'s new admin API end to end: (a) an external link to

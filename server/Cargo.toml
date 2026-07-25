@@ -31,6 +31,12 @@ rand = "0.8"
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "rustls-tls"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 thiserror = "1"
+# 分散同期(dist_sync.rs)向け: open-raid-zの切断耐性ジャーナル/オフサイト
+# 退避/ディザスタリカバリ/CPU圧縮を再現実装せず再利用する(ユーザー指示、
+# CLAUDE.md参照)。`aruaru-dist`のpath依存パターン(`default-features =
+# false`でWinFsp/dxc/Windows SDK不要のCPUフォールバックのみ使う)を踏襲。
+open_raid_z_core = { path = "../../open-raid-z/open_runo_zfs_source/open_raid_z_core", default-features = false, features = ["offsite_backup"] }
+uuid = { version = "1", features = ["v4", "serde"] }
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json", "multipart"] }
