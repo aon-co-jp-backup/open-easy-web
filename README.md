@@ -63,6 +63,15 @@ Cache-Controlミドルウェア等、詳細は両リポジトリのCLAUDE.md参�
   (`easyweb-tls-monitor.timer` → `scripts/check-all-tls.sh`)」を有効化できる。
 - **VPSへのデプロイ**: Windows PowerShellから `scripts/deploy-vps.ps1` を
   実行するだけで、ビルド → VPSへのアップロード → 起動までを自動化できる。
+- **分散同期・ディザスタリカバリ(2026-07-25〜27追加)**: 姉妹リポジトリ
+  `open-raid-z`の切断耐性ジャーナル(`open_raid_z_core::disaster_recovery`)
+  を再利用し、アップロードされたサイトファイルの実書き込みを
+  `DisasterRecoveryManager::protect_write`経由で保護する(電源断・
+  ディスク切断時もジャーナルに記録済みのため、再起動時に自動リプレイで
+  復旧できる)。登録済みVPS同期先(SFTP)へのファイル複製、Email/
+  Googleドライブへのオフサイト退避先設定にも対応(`/admin/dist-sync/*`
+  管理API)。正直な開示: 実SMTPサーバー/実Googleドライブアカウントでの
+  E2E確認は未実施(ローカルモックのみで検証)、詳細は`CLAUDE.md`参照。
 - **アカウント認証(パスワード不使用)**: 固定パスワードを一切使わず、
   メール1・メール2(セカンドメール)・電話番号のいずれかへのワンタイム
   パスワード(OTP)でログインする。認証アプリ(TOTP、Google Authenticator
