@@ -19,12 +19,15 @@
 //! 要求どおり両者は同一の抽象を共有する)へマッピングし
 //! `DisasterRecoveryManager`を構築する橋渡し、の2点のみ。
 //!
-//! **正直な開示**: (1) 実際にこのサーバーが管理するデータ(アップロード
-//! 済みサイトファイル等)を`DisasterRecoveryManager::protect_write`経由で
-//! 保護する配線までは、このパスでは行っていない
-//! (`upload.rs`/`main.rs`のファイル書き込み経路を変更するのは影響範囲が
-//! 大きいため——今回は「同期先の登録・退避先の設定・再接続時自動復旧の
-//! 起動」という管理APIとバックグラウンドループの土台を提供する)。
+//! **正直な開示**: (1) 2026-07-26に`protect_site_write`を新設し、
+//! `main.rs`の`upload_files`から実際のサイトファイル書き込みを
+//! `DisasterRecoveryManager::protect_write`(切断耐性ジャーナル)経由に
+//! 配線した(ジャーナルのfsync+`std::fs::write`はブロッキングI/Oのため
+//! `tokio::task::spawn_blocking`へ退避)。書き込み成功後は登録済みの
+//! Email/Googleドライブ退避先へベストエフォートで複製される
+//! (`best_effort_offsite_backup`)。ただし実クラウドアカウント(実Email
+//! SMTP・実Googleドライブ)への結合テストは依然として行っていない
+//! ——下記テストもローカルモックのみ。
 //! (2) GPU/NPU圧縮は`open_raid_z_core::accel::AccelBackend`がそのまま
 //! 常にCPUへ安全にフォールバックする(open-raid-z側で2026-07時点の
 //! 既知の制約として文書化済み、このリポジトリ側で新たに実装したものでは
@@ -45,6 +48,7 @@ use uuid::Uuid;
 
 use open_raid_z_core::accel::AccelBackend;
 use open_raid_z_core::disaster_recovery::{DisasterRecoveryConfig, DisasterRecoveryManager, FirstTimeSetupReport};
+use open_raid_z_core::error::BridgeError;
 use open_raid_z_core::offsite_backup::{
     EmailBackupTargetConfig, GoogleDriveBackupTargetConfig, OffsiteBackupTarget, SftpBackupTarget, SftpBackupTargetConfig,
 };
@@ -159,13 +163,17 @@ impl DistSyncRegistry {
             .targets
             .read()
             .unwrap()
-            .values()
-            .map(|t| SftpBackupTargetConfig {
+            .iter()
+            .map(|(id, t)| SftpBackupTargetConfig {
                 host: t.host.clone(),
                 port: t.port,
                 username: t.username.clone(),
                 password_env: Some(t.password_env.clone()),
                 remote_backup_dir: t.remote_backup_dir.clone(),
+                // TOFU方式のホスト鍵検証(2026-07-26新設): 分散同期先ごとに
+                // 独立したknown_hosts風ファイルをjournal_dir配下へ持たせる
+                // (VPS間で鍵を混同しないよう、同期先idをファイル名に含める)。
+                known_hosts_path: Some(self.journal_dir.join("dist-sync-known-hosts").join(format!("{id}.txt"))),
             })
             .collect();
 
@@ -205,13 +213,17 @@ impl DistSyncRegistry {
         self.targets
             .read()
             .unwrap()
-            .values()
-            .map(|t| SftpBackupTargetConfig {
+            .iter()
+            .map(|(id, t)| SftpBackupTargetConfig {
                 host: t.host.clone(),
                 port: t.port,
                 username: t.username.clone(),
                 password_env: Some(t.password_env.clone()),
                 remote_backup_dir: t.remote_backup_dir.clone(),
+                // TOFU方式のホスト鍵検証(2026-07-26新設): 分散同期先ごとに
+                // 独立したknown_hosts風ファイルをjournal_dir配下へ持たせる
+                // (VPS間で鍵を混同しないよう、同期先idをファイル名に含める)。
+                known_hosts_path: Some(self.journal_dir.join("dist-sync-known-hosts").join(format!("{id}.txt"))),
             })
             .collect()
     }
@@ -262,6 +274,28 @@ pub async fn replicate_written_file(registry: &Arc<DistSyncRegistry>, label: Str
     }
 }
 
+/// 実際にアップロードされたサイトファイルの書き込みを
+/// `DisasterRecoveryManager::protect_write`(切断耐性ジャーナル)経由で
+/// 保護する。`apply`には実際のファイル書き込み(`std::fs::write`)を渡す
+/// ——本体への書き込みが電源断/ディスク切断で失敗しても、ジャーナル自体は
+/// 既にディスク上へ永続化済みのため、再起動後の`replay_pending`で復旧
+/// できる(`open_raid_z_core::disaster_recovery`の既存契約どおり)。
+///
+/// `dataset`には`"{site}/{相対パス}"`を渡す(ジャーナルエントリの識別に
+/// 使うだけで、実際の書き込み先パスは`dest`が持つ)。
+///
+/// ジャーナルのfsyncと`std::fs::write`はいずれもブロッキングI/Oのため、
+/// 呼び出し側は`tokio::task::spawn_blocking`へ退避してから呼ぶこと
+/// (`main.rs`の`upload_files`参照)。
+pub fn protect_site_write(registry: &DistSyncRegistry, dataset: &str, data: Vec<u8>, dest: PathBuf) -> anyhow::Result<()> {
+    let manager = registry.build_manager()?;
+    manager.protect_write(dataset, 0, data, |bytes| {
+        std::fs::write(&dest, bytes)
+            .map_err(|e| BridgeError::JournalFailed(format!("site file write failed for {dest:?}: {e}")))
+    })?;
+    Ok(())
+}
+
 /// アップロード完了後に呼ぶ、非ブロッキングの複製起動ヘルパー。
 /// `tokio::spawn`で[`replicate_written_file`]をデタッチ実行するため、
 /// 呼び出し側(`upload_files`ハンドラ)はこの関数を呼んでも一切待たされない
@@ -275,6 +309,50 @@ pub fn spawn_replication(registry: &Arc<DistSyncRegistry>, label: String, data: 
     tokio::spawn(async move {
         replicate_written_file(&registry, label, data).await;
     });
+}
+
+/// 起動時に呼ぶ、未committedなジャーナルエントリの自動リプレイ。
+/// 前回の終了(クラッシュ・電源断・ディスク切断)が`protect_write`の
+/// `apply`失敗時に発生していた場合、ジャーナルには残っているが本体
+/// (webroot上の実ファイル)には反映されていない可能性のある書き込みを
+/// 再生する。`entry.dataset`は`protect_site_write`が
+/// `"{site}/{サイト内相対パス}"`の形式で書き込んでいるため、その形式を
+/// 前提に`sites_root`からの絶対パスへ復元する
+/// (`entry.dataset`にスラッシュが1つも無い壊れたエントリはスキップし
+/// `tracing::warn!`で記録するのみ、パニックしない)。
+///
+/// ジャーナルのfsync・実ファイル書き込みはいずれもブロッキングI/Oのため、
+/// 呼び出し側は`tokio::task::spawn_blocking`へ退避してから呼ぶこと
+/// (`main.rs`の起動シーケンス参照)。
+pub fn replay_pending_writes(registry: &DistSyncRegistry, sites_root: &std::path::Path) -> anyhow::Result<usize> {
+    let manager = registry.build_manager()?;
+    let sites_root = sites_root.to_path_buf();
+    let replayed = manager.replay_local_journal(|entry| {
+        let Some((site, rel)) = entry.dataset.split_once('/') else {
+            tracing::warn!(dataset = %entry.dataset, "起動時ジャーナルリプレイ: datasetの形式が不正なためスキップします");
+            return Ok(());
+        };
+        let Some(safe_site) = crate::upload::safe_relative_path(site) else {
+            tracing::warn!(dataset = %entry.dataset, "起動時ジャーナルリプレイ: サイト名が不正なためスキップします");
+            return Ok(());
+        };
+        let Some(safe_rel) = crate::upload::safe_relative_path(rel) else {
+            tracing::warn!(dataset = %entry.dataset, "起動時ジャーナルリプレイ: 相対パスが不正なためスキップします");
+            return Ok(());
+        };
+        let dest = sites_root.join(safe_site).join(safe_rel);
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| BridgeError::JournalFailed(format!("リプレイ先ディレクトリ作成失敗 {dest:?}: {e}")))?;
+        }
+        std::fs::write(&dest, &entry.data).map_err(|e| BridgeError::JournalFailed(format!("リプレイ書き込み失敗 {dest:?}: {e}")))?;
+        tracing::info!(dataset = %entry.dataset, "起動時ジャーナルリプレイ: 未反映だった書き込みを復元しました");
+        Ok(())
+    })?;
+    if replayed > 0 {
+        tracing::info!(count = replayed, "起動時ジャーナルリプレイ完了");
+    }
+    Ok(replayed)
 }
 
 fn json_response(status: StatusCode, value: &impl serde::Serialize) -> Response<BoxBody> {
@@ -470,6 +548,93 @@ mod tests {
         // 間接的な確認)。
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         assert!(!registry.has_sync_targets());
+    }
+
+    #[test]
+    fn protect_site_write_writes_file_and_commits_journal_entry() {
+        // 実際に`protect_site_write`(main.rsのupload_filesが呼ぶ配線経路)
+        // を通した書き込みが、(a) 実ファイルへ実際に反映され、(b) ジャーナル
+        // エントリがcommitted扱い(=pendingディレクトリから削除済み)に
+        // なることを実際のファイルシステム上で確認する(型チェックのみに
+        // 留めない)。
+        let tmp = tempfile::tempdir().unwrap();
+        let journal_dir = tmp.path().join("journal");
+        let registry = DistSyncRegistry::new(journal_dir.clone());
+
+        let dest = tmp.path().join("webroot").join("example.tokyo").join("index.html");
+        std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
+
+        protect_site_write(&registry, "example.tokyo/index.html", b"<html>hello</html>".to_vec(), dest.clone())
+            .expect("protect_site_write should succeed when the destination is writable");
+
+        let written = std::fs::read(&dest).expect("file should have been written to disk");
+        assert_eq!(written, b"<html>hello</html>");
+
+        let pending_dir = journal_dir.join("pending");
+        let remaining: Vec<_> = std::fs::read_dir(&pending_dir).unwrap().collect();
+        assert!(remaining.is_empty(), "journal entry should be marked committed (removed from pending) after a successful write");
+    }
+
+    #[test]
+    fn protect_site_write_keeps_journal_entry_pending_when_apply_fails() {
+        // 本体への書き込みが失敗した場合(ここでは親ディレクトリが存在しない
+        // 無効な書き込み先で意図的に失敗させる、電源断/ディスク切断の代替)、
+        // ジャーナルエントリは committed にならず pending のまま残ること
+        // (=再接続後のリプレイ対象として復旧可能であること)を確認する。
+        let tmp = tempfile::tempdir().unwrap();
+        let journal_dir = tmp.path().join("journal");
+        let registry = DistSyncRegistry::new(journal_dir.clone());
+
+        // 親ディレクトリを作らない、存在しないネスト先 = std::fs::write が失敗する。
+        let dest = tmp.path().join("no-such-parent-dir").join("index.html");
+
+        let result = protect_site_write(&registry, "example.tokyo/index.html", b"<html>hello</html>".to_vec(), dest.clone());
+        assert!(result.is_err(), "protect_site_write should surface the underlying write failure to the caller");
+        assert!(!dest.exists(), "the file should not exist since the underlying write failed");
+
+        let pending_dir = journal_dir.join("pending");
+        let remaining: Vec<_> = std::fs::read_dir(&pending_dir).unwrap().collect();
+        assert_eq!(remaining.len(), 1, "the journal entry should remain pending (not committed) so it can be replayed after reconnect");
+    }
+
+    #[test]
+    fn replay_pending_writes_restores_uncommitted_entry_after_simulated_crash() {
+        // 「クラッシュ時にジャーナルへは記録されたが本体への書き込みが
+        // まだ行われていない」状態を、`protect_write`のapplyクロージャで
+        // わざと失敗させることで再現し(電源断/ディスク切断の代替)、
+        // その後`replay_pending_writes`を呼んだ際に実際にファイルが
+        // 復元されることを確認する(main.rsの起動時配線と同じ経路)。
+        let tmp = tempfile::tempdir().unwrap();
+        let journal_dir = tmp.path().join("journal");
+        let sites_root = tmp.path().join("sites");
+        std::fs::create_dir_all(&sites_root).unwrap();
+        let registry = DistSyncRegistry::new(journal_dir.clone());
+
+        // apply失敗を意図的に起こす(存在しない親ディレクトリの下へ書く)。
+        let bogus_dest = tmp.path().join("no-such-parent").join("index.html");
+        let manager = registry.build_manager().unwrap();
+        let result = manager.protect_write("example.tokyo/index.html", 0, b"<html>restored</html>".to_vec(), |bytes| {
+            std::fs::write(&bogus_dest, bytes).map_err(|e| BridgeError::JournalFailed(e.to_string()))
+        });
+        assert!(result.is_err(), "the simulated crash write should fail");
+
+        // ジャーナルにはまだpendingエントリが残っているはず。
+        let pending_dir = journal_dir.join("pending");
+        assert_eq!(std::fs::read_dir(&pending_dir).unwrap().count(), 1);
+
+        // サーバー再起動を模して、新しいregistryインスタンス(同じjournal_dir)
+        // から`replay_pending_writes`を呼ぶ。今度は正しい`sites_root`配下へ
+        // 実際に復元されることを確認する。
+        let restarted_registry = DistSyncRegistry::new(journal_dir.clone());
+        let replayed = replay_pending_writes(&restarted_registry, &sites_root).expect("replay should succeed");
+        assert_eq!(replayed, 1);
+
+        let restored = std::fs::read(sites_root.join("example.tokyo").join("index.html"))
+            .expect("the file should have been restored under sites_root/example.tokyo/index.html");
+        assert_eq!(restored, b"<html>restored</html>");
+
+        // リプレイ後、ジャーナルのpendingは空になっている(committed済み)。
+        assert_eq!(std::fs::read_dir(&pending_dir).unwrap().count(), 0);
     }
 
     /// `open_raid_z_core`側`tests/offsite_backup_integration.rs`と同じ

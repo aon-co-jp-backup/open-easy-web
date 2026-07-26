@@ -230,6 +230,98 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-26(続き) 起動時ジャーナルリプレイ(`replay_local_journal`)を
+  実配線——直下のエントリの「次にすべきこと(2)」を解消**:
+  1. **`server/src/dist_sync.rs`に`replay_pending_writes(registry,
+     sites_root)`を新設**: `DisasterRecoveryManager::replay_local_journal`
+     を呼び、`entry.dataset`(`"{site}/{相対パス}"`形式)を
+     `upload::safe_relative_path`で検証しつつ`sites_root`からの絶対パスへ
+     復元し`std::fs::write`する。dataset形式が壊れている・パス検証に
+     失敗したエントリは`tracing::warn!`でスキップするのみでパニックしない。
+  2. **`main.rs`の`main()`に配線**: `AppState::from_env()`直後、
+     `tokio::task::spawn_blocking`で`replay_pending_writes`を呼ぶ。失敗
+     してもサーバー起動自体は継続する(ログのみ、既存の「補助機能の失敗は
+     権威パスをブロックしない」方針を踏襲)。
+  3. **検証**: 新規テスト
+     `dist_sync::tests::replay_pending_writes_restores_uncommitted_entry_after_simulated_crash`
+     で、`protect_write`のapplyクロージャをわざと失敗させて「クラッシュで
+     ジャーナルには残っているが本体未反映」の状態を再現し、新しい
+     `DistSyncRegistry`インスタンス(=サーバー再起動を模す)から
+     `replay_pending_writes`を呼んだ際に実際にファイルが復元され、
+     ジャーナルの`pending/`が空になることを確認(`cargo test`
+     58→59件、全green)。さらに実バイナリ(`cargo build`→
+     `target/debug/open-easy-web-server.exe`)を実際に環境変数
+     (`OPEN_EASYWEB_SITES_ROOT`等)付きで起動し、起動シーケンス自体が
+     パニックせず`listening`ログまで到達することを確認(型チェック・
+     ユニットテストのみで完了と報告しない方針の徹底)。
+  4. **正直な開示**: 実バイナリ起動での確認は「ジャーナルが空の状態での
+     正常起動」のみ行った——実プロセスを起動した状態でクラッシュ→
+     再起動によるリプレイ復元までを実バイナリ経由で確認したわけではなく、
+     その部分は上記3.のユニットテスト(`protect_write`/
+     `replay_pending_writes`関数を直接呼ぶ、実ファイルシステム上の
+     副作用は本物)止まり。
+  - 次にすべきこと: (1) 実SMTPサーバー/実Googleドライブアカウントでの
+    E2Eディザスタ退避検証、(2) open-raid-zのSFTPホスト鍵検証
+    (`check_server_key`が常に`Ok(true)`)の実装、(3) 実プロセスの
+    kill→再起動によるリプレイ復元の実地検証(現状はユニットテストのみ)。
+
+- **2026-07-26 `DisasterRecoveryManager::protect_write`(切断耐性ジャーナル)
+  経由の実書き込み配線を新規実装——直下の2026-07-25(続き)エントリの
+  「次にすべきこと(1)」で残課題として明記されていたギャップを解消
+  (ユーザー指示: runo.tokyo/open-directx/open-cuda/aruaru-llm等7リポジトリの
+  未着手・未完成事項の洗い出し→実装を継続、まずSETバックアップ系の
+  実接続配線から着手)**:
+  1. **`server/src/dist_sync.rs`に`protect_site_write(registry, dataset,
+     data, dest)`を新設**: `DistSyncRegistry::build_manager()`で
+     `DisasterRecoveryManager`を構築し、`manager.protect_write(dataset, 0,
+     data, |bytes| std::fs::write(&dest, bytes))`を呼ぶ(dataset識別子には
+     `"{site}/{相対パス}"`、apply実処理には実際の`std::fs::write`を渡す)。
+     `open_raid_z_core::error::BridgeError`を新規importして`apply`失敗を
+     `BridgeError::JournalFailed`として表現。
+  2. **`server/src/main.rs`の`upload_files`を書き換え**: 従来の
+     `tokio::fs::write(&dest, &field.data).await`直呼び出しを、
+     `tokio::task::spawn_blocking`経由で`dist_sync::protect_site_write`を
+     呼ぶ形に置換(ジャーナルのfsync+実ファイル書き込みはいずれも
+     ブロッキングI/Oのため、非同期ランタイムのワーカースレッドを塞がない
+     ようにspawn_blockingへ退避)。書き込み成功後の`spawn_replication`
+     (VPS同期先へのSFTP複製)呼び出しはそのまま維持(既存のdist_sync複製
+     経路と併存)。
+  3. **新規テスト2件を`dist_sync.rs`に追加**(型チェック・ビルド成功だけで
+     終わらせず、実ファイルシステム上の副作用を直接確認):
+     - `protect_site_write_writes_file_and_commits_journal_entry`:
+       実際にファイルへ内容が書き込まれること(`std::fs::read`で
+       バイト列一致を確認)、かつジャーナルの`pending/`ディレクトリが
+       空になっている(=`mark_committed`が実際に呼ばれ、リプレイ対象
+       から外れている)ことを確認。
+     - `protect_site_write_keeps_journal_entry_pending_when_apply_fails`:
+       親ディレクトリが存在しない書き込み先を意図的に指定して
+       `std::fs::write`を失敗させ、(a) `protect_site_write`が`Err`を
+       返すこと、(b) ファイルが実際に存在しないこと、(c) ジャーナルの
+       `pending/`ディレクトリにエントリが1件残っていること(=電源断/
+       ディスク切断相当の失敗時、再接続後のリプレイで復旧できる状態が
+       実際に保たれていること)を確認。
+  4. **検証(実測)**: `cargo build`(server)警告なしで成功。
+     `cargo test`(server)**56→58件、全green**(実行結果:
+     `test result: ok. 58 passed; 0 failed; 0 ignored; 0 measured; 0
+     filtered out`)。既存の`site_actions_require_a_valid_session_over_real_http`
+     等、実HTTP経由のアップロード系テストも無変更のまま全green
+     ——既存の複製経路(dist_sync)・認証系との後方互換を確認。
+  5. **正直な開示(引き続き未検証の範囲)**: (1) 実クラウドアカウント
+     (実SMTP・実Googleドライブ)への結合テストは依然として行っていない
+     (`DisasterRecoveryManager`が内部で使う`EmailBackupTarget`/
+     `GoogleDriveBackupTarget`はこのパスでも一度もインスタンス化した
+     状態で実接続していない、ローカルモックのみの検証方針を踏襲)。
+     (2) 実ディスク切断・LAN切断シナリオでの実機検証(VM/実ハードウェア)
+     は未実施(ユニットテストで人工的に書き込み失敗を再現したのみ)。
+     (3) `create_folder`・vhost設定書き込みは引き続き対象外(前回エントリ
+     と同じスコープの境界)。
+  - 次にすべきこと: (1) 実SMTPサーバー/実Googleドライブアカウントでの
+    E2Eディザスタ退避検証、(2) 起動時の`replay_pending`(未commitな
+    ジャーナルエントリの自動リプレイ)を`main.rs`起動シーケンスに
+    配線(現状`protect_write`は書き込み時の保護のみで、再起動時の
+    自動リプレイ呼び出しはまだ配線していない)、(3) open-raid-zの
+    SFTPホスト鍵検証(`check_server_key`が常に`Ok(true)`)の実装。
+
 - **2026-07-25(続き) 実サイトファイル書き込み経路を分散同期(dist_sync)に
   実配線——下記2026-07-25エントリの「正直な開示(1)」で明記されていた
   ギャップ(「実際のサイトファイル書き込みはまだ`protect_write`経由で

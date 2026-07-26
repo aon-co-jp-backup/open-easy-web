@@ -362,8 +362,27 @@ async fn upload_files(state: &AppState, site: &str, req: Request<Incoming>) -> R
                 return error_response(StatusCode::INTERNAL_SERVER_ERROR, "failed to create subdirectory");
             }
         }
-        if tokio::fs::write(&dest, &field.data).await.is_err() {
-            return error_response(StatusCode::INTERNAL_SERVER_ERROR, format!("failed to write {filename}"));
+        // 実書き込みは`DisasterRecoveryManager::protect_write`(切断耐性
+        // ジャーナル)経由で保護する(`dist_sync.rs`の`protect_site_write`
+        // 参照)。ジャーナルのfsync+実ファイル書き込みはいずれもブロッキング
+        // I/Oのため`spawn_blocking`へ退避する。本体への書き込みが失敗しても
+        // ジャーナルは既に永続化済みなので、再接続後のリプレイで復旧できる。
+        let dataset = format!("{site}/{}", rel.to_string_lossy());
+        let registry = Arc::clone(&state.dist_sync);
+        let data_for_write = field.data.clone();
+        let dest_for_write = dest.clone();
+        let write_result = tokio::task::spawn_blocking(move || {
+            dist_sync::protect_site_write(&registry, &dataset, data_for_write, dest_for_write)
+        })
+        .await;
+        match write_result {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                return error_response(StatusCode::INTERNAL_SERVER_ERROR, format!("failed to write {filename}: {e}"));
+            }
+            Err(e) => {
+                return error_response(StatusCode::INTERNAL_SERVER_ERROR, format!("write task panicked for {filename}: {e}"));
+            }
         }
         // 実際にサイトファイルが書き込まれた直後、分散同期先(VPS群)が
         // 1件でも登録されていれば、その書き込みをSFTP経由で複製する
@@ -985,6 +1004,26 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let state = Arc::new(AppState::from_env());
+
+    // 起動時に、前回終了時(クラッシュ・電源断・ディスク切断)にジャーナルへ
+    // 記録されたが本体へ未反映だった書き込みを復元する(`dist_sync.rs`の
+    // `replay_pending_writes`参照)。ブロッキングI/Oのため`spawn_blocking`
+    // へ退避。失敗してもサーバー起動自体は妨げない(ログのみ、既存の
+    // 「補助機能の失敗は権威パスをブロックしない」方針を踏襲)。
+    {
+        let dist_sync = Arc::clone(&state.dist_sync);
+        let sites_root = state.sites_root.clone();
+        match tokio::task::spawn_blocking(move || dist_sync::replay_pending_writes(&dist_sync, &sites_root)).await {
+            Ok(Ok(count)) => {
+                if count > 0 {
+                    tracing::info!(count, "起動時ジャーナルリプレイで未反映の書き込みを復元しました");
+                }
+            }
+            Ok(Err(e)) => tracing::warn!(error = %e, "起動時ジャーナルリプレイに失敗しました(サーバー起動は継続します)"),
+            Err(e) => tracing::warn!(error = %e, "起動時ジャーナルリプレイタスクがパニックしました(サーバー起動は継続します)"),
+        }
+    }
+
     let bind_addr: std::net::SocketAddr = std::env::var("OPEN_EASYWEB_SERVER_BIND")
         .unwrap_or_else(|_| "0.0.0.0:8090".into())
         .parse()?;
