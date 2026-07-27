@@ -230,6 +230,36 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-27(続き) バージョン表示を日付形式に変更+「今すぐ確認」機能を
+  追加(ユーザー指示: 「バージョンは、日付にしてその表示機能を持たせて
+  例えば 最新は、2026.07.27 11:15」「今すぐUPDATAしますか?の日本語と
+  英語とイタリア語とフランス語とドイツ語とロシア語も併記」)**:
+  1. **`server/build.rs`を新設**: `Cargo.toml`の`version`(セマンティック
+     バージョン、cargo/crates.io向けの慣習のため変更しない)とは別に、
+     このバイナリが**実際にビルドされた日時**(UTC、実行時の現在時刻では
+     なく固定値)を`OPEN_EASYWEB_BUILD_VERSION_COMPACT`
+     (`YYYYMMDDHHMM`、内部比較用)・`OPEN_EASYWEB_BUILD_VERSION_DISPLAY`
+     (`"2026.07.27 11:15"`、表示用)としてコンパイル時に埋め込む
+     (依存を増やさないため、うるう年を正しく扱う日付計算〈Howard
+     Hinnantのアルゴリズム〉を自前実装)。
+  2. **`auto_update.rs`の`is_newer`を日付比較へ変更**: `current`/
+     `candidate`双方から数字以外の文字を除去し12桁の数値として比較
+     (区切り文字`.`/`-`の有無を問わない)。GitHub Releasesのタグ運用も
+     同じ`vYYYY.MM.DD.HHMM`形式を前提とする。
+  3. **`POST /admin/auto-update/check-now`を新設**: 深夜0時を待たず
+     今すぐ確認・適用を実行する(`x-admin-token`認証、バックグラウンド
+     実行でHTTPレスポンスは即座に返す)。
+  4. **正直な開示**: 表示言語の多言語対応(日本語/英語/イタリア語/
+     フランス語/ドイツ語/ロシア語の併記)は、このパスでは着手できて
+     いない(リミット到達のため中断、次回課題として明記)。テスト実行時
+     に環境変数競合による1件のflaky失敗を発見・`env_test_lock`で解消
+     (`cargo test`66件、全green)。
+  - 次にすべきこと: (1) UI文言の6言語併記(日/英/伊/仏/独/露)、
+    (2) 「今すぐ確認」ボタンのGUI配線(`api_auto_update.rs`/
+    `setup_wizard_ui.rs`、バックエンドAPIは実装済み)、(3) 実際に
+    GitHub Releasesタグを`vYYYY.MM.DD.HHMM`形式で運用開始する際の
+    `release.yml`更新。
+
 - **2026-07-27 深夜バックグラウンド自動アップデート機能を新規実装
   (ユーザー指示: 「open-easy-web-serverとopen-web-serverは、AUTO-UPDATE
   で真夜中にバックグラウンドで自動UPDATEして」「一瞬でVERSIONUPで

@@ -130,18 +130,28 @@ pub async fn latest_release_tag(client: &reqwest::Client) -> Result<String> {
     latest_release_tag_from(client, "https://api.github.com", REPO).await
 }
 
-/// `"1.2.3"`形式のバージョン文字列同士を比較し、`candidate`が`current`
-/// より新しいかを返す(依存を増やさないための簡易semver、プレリリース
-/// 識別子は非対応——このプロジェクトのタグ運用〈`vX.Y.Z`のみ〉に絞った
-/// 現実的な実装)。壊れた形式は「新しくない」として安全側に倒す
-/// (誤って壊れたタグに反応して無限アップデートループへ陥らないため)。
+/// 日付そのものをバージョンとして扱う(2026-07-27追加、ユーザー指示
+/// 「バージョンは、日付にしてその表示機能を持たせて 例えば 最新は、
+/// 2026.07.27 11:15」)——`current_version()`(このバイナリが実際に
+/// ビルドされた日時、`build.rs`が`OPEN_EASYWEB_BUILD_VERSION_COMPACT`
+/// 環境変数へコンパイル時に埋め込む)は「今この瞬間の時刻」ではなく
+/// **このバイナリがビルドされた時点の固定値**であり、実行中に変化
+/// しない。GitHub Releasesのタグも同じ`YYYY.MM.DD.HHMM`形式(区切り
+/// 文字は`.`または`-`のどちらでもよい)で運用する前提。
+///
+/// `current`/`candidate`いずれも数字以外の文字(`.`/`-`/先頭の`v`等)を
+/// 取り除いた上で、12桁の`YYYYMMDDHHMM`数値として比較する——同じ桁数の
+/// 数値文字列同士なら、文字列比較がそのまま時系列比較になるため、依存を
+/// 増やさず単純な実装で済む。桁数が合わない・数値化できない壊れた形式は
+/// 「新しくない」として安全側に倒す(誤って壊れたタグに反応して無限
+/// アップデートループへ陥らないため)。
 pub fn is_newer(current: &str, candidate: &str) -> bool {
-    fn parse(v: &str) -> Option<(u64, u64, u64)> {
-        let mut it = v.split('.');
-        let major = it.next()?.parse().ok()?;
-        let minor = it.next()?.parse().ok()?;
-        let patch = it.next()?.parse().ok()?;
-        Some((major, minor, patch))
+    fn parse(v: &str) -> Option<u64> {
+        let digits: String = v.chars().filter(|c| c.is_ascii_digit()).collect();
+        if digits.len() != 12 {
+            return None;
+        }
+        digits.parse().ok()
     }
     match (parse(current), parse(candidate)) {
         (Some(cur), Some(cand)) => cand > cur,
@@ -273,9 +283,18 @@ pub fn duration_until_next_midnight_utc() -> Duration {
     Duration::from_secs(secs_until_midnight)
 }
 
-/// 現在ビルドされているバージョン(`Cargo.toml`の`version`)。
+/// 現在実行中のバイナリが**ビルドされた日時**(`YYYYMMDDHHMM`、`build.rs`
+/// がコンパイル時に埋め込む固定値——プロセスの起動時刻でも現在時刻でも
+/// ない)。`is_newer`での比較・GitHubタグとの突き合わせに使う内部形式。
 pub fn current_version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
+    env!("OPEN_EASYWEB_BUILD_VERSION_COMPACT")
+}
+
+/// ユーザー向け表示形式(例: `"2026.07.27 11:15"`)。`current_version()`
+/// と同じビルド時刻を表すが、人間が読みやすいように区切り文字を入れた
+/// もの(`GET /admin/auto-update`のレスポンス・ブラウザGUI表示で使う)。
+pub fn current_version_display() -> &'static str {
+    env!("OPEN_EASYWEB_BUILD_VERSION_DISPLAY")
 }
 
 /// 深夜バックグラウンド自動アップデートの常駐ループ。`main()`から
@@ -309,7 +328,12 @@ pub async fn run_daily_check_loop(auto_update_state: std::sync::Arc<AutoUpdateSt
 
 /// 1回分のアップデート確認・適用サイクル。失敗しても現在動作中の
 /// プロセスには一切影響しない(呼び出し元が結果をログするだけ)。
-async fn check_and_apply_update(bind_addr: SocketAddr, stop_accepting: &std::sync::Arc<std::sync::atomic::AtomicBool>) -> Result<()> {
+/// 1回分のアップデート確認・適用サイクルを、深夜0時を待たずに即座に
+/// 実行する(`POST /admin/auto-update/check-now`から呼ぶ、`enabled`
+/// 設定に関わらず「今すぐ確認」自体は常に実行できる——確認・適用の
+/// 都度実行はユーザーが能動的に押した結果であり、深夜の自動実行とは
+/// 別の操作として扱う)。
+pub async fn check_and_apply_update(bind_addr: SocketAddr, stop_accepting: &std::sync::Arc<std::sync::atomic::AtomicBool>) -> Result<()> {
     // Windows等`#[cfg(unix)]`以外のビルドでは`bind_addr`をヘルスチェック
     // 用途に使わない(逐次切り替え方式のため)。未使用警告を避けるための
     // 明示的な参照(挙動には影響しない)。
@@ -360,20 +384,34 @@ async fn check_and_apply_update(bind_addr: SocketAddr, stop_accepting: &std::syn
 mod tests {
     use super::*;
 
+    /// `OPEN_EASYWEB_AUTO_UPDATE`等のプロセス全体のグローバル環境変数を
+    /// 読み書きするテスト同士が、`cargo test`の既定の並行実行(複数OS
+    /// スレッド)で競合しないようにする排他ロック(open-redmineの
+    /// `env_test_lock`と同じ理由・同じパターン——実際に`FAILED`
+    /// [`auto_update_state_persists_and_reloads_gui_toggle`が別テストの
+    /// 環境変数設定と競合]を再現・確認した上で導入した)。
+    fn env_test_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     #[test]
-    fn is_newer_detects_major_minor_patch_increments() {
-        assert!(is_newer("0.1.0", "0.1.1"));
-        assert!(is_newer("0.1.0", "0.2.0"));
-        assert!(is_newer("0.1.0", "1.0.0"));
-        assert!(!is_newer("0.1.1", "0.1.0"));
-        assert!(!is_newer("0.1.0", "0.1.0"));
+    fn is_newer_detects_later_build_dates() {
+        // YYYYMMDDHHMM形式。区切り文字(`.`/`-`)の有無を問わず数字だけを
+        // 見て比較することも確認する。
+        assert!(is_newer("2026.07.27 11:15", "2026.07.27 11:16"));
+        assert!(is_newer("202607271115", "202607280000"));
+        assert!(is_newer("2026-07-27-1115", "2027-01-01-0000"));
+        assert!(!is_newer("202607271116", "202607271115"));
+        assert!(!is_newer("202607271115", "202607271115"));
     }
 
     #[test]
     fn is_newer_treats_malformed_versions_as_not_newer() {
-        assert!(!is_newer("0.1.0", "not-a-version"));
-        assert!(!is_newer("garbage", "0.1.0"));
-        assert!(!is_newer("0.1", "0.2.0"));
+        assert!(!is_newer("202607271115", "not-a-version"));
+        assert!(!is_newer("garbage", "202607271115"));
+        // 桁数が合わない(12桁の数字が揃わない)場合も「新しくない」扱い。
+        assert!(!is_newer("2026.07", "2026.08.01.0000"));
     }
 
     #[tokio::test]
@@ -383,13 +421,13 @@ mod tests {
             .mock("GET", "/repos/aon-co-jp/open-easy-web/releases/latest")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{"tag_name": "v0.3.1"}"#)
+            .with_body(r#"{"tag_name": "v2026.07.27.1115"}"#)
             .create_async()
             .await;
 
         let client = reqwest::Client::new();
         let tag = latest_release_tag_from(&client, &server.url(), "aon-co-jp/open-easy-web").await.unwrap();
-        assert_eq!(tag, "0.3.1");
+        assert_eq!(tag, "2026.07.27.1115");
     }
 
     #[tokio::test]
@@ -456,6 +494,7 @@ mod tests {
 
     #[test]
     fn auto_update_state_defaults_to_env_var_when_no_settings_file_exists() {
+        let _guard = env_test_lock();
         std::env::set_var("OPEN_EASYWEB_AUTO_UPDATE", "true");
         let dir = std::env::temp_dir().join(format!("open-easyweb-autoupdate-state-test-{}", std::process::id()));
         let state = AutoUpdateState::load(dir.join("settings.json"));
@@ -466,6 +505,7 @@ mod tests {
 
     #[test]
     fn auto_update_state_persists_and_reloads_gui_toggle() {
+        let _guard = env_test_lock();
         let dir = std::env::temp_dir().join(format!("open-easyweb-autoupdate-persist-test-{}", std::process::id()));
         let settings_path = dir.join("settings.json");
         let state = AutoUpdateState::load(settings_path.clone());
