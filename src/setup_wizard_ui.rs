@@ -27,6 +27,53 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{Event, HtmlButtonElement, HtmlInputElement};
 
+/// Step 6(深夜バックグラウンド自動アップデート)の設定表示・切り替え。
+async fn refresh_auto_update_status(base_url: String) {
+    let admin_token = input_value("auto-update-admin-token");
+    match crate::api_auto_update::get_status(&base_url, &admin_token).await {
+        Ok(value) => {
+            let enabled = value.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+            let current_version = value.get("current_version").and_then(|v| v.as_str()).unwrap_or("?");
+            if let Some(checkbox) = try_by_id("auto-update-enabled-toggle").and_then(|el| el.dyn_into::<HtmlInputElement>().ok()) {
+                checkbox.set_checked(enabled);
+            }
+            set_text(
+                "auto-update-status",
+                &format!(
+                    "現在のバージョン: {current_version} / 自動アップデート: {} / Current version: {current_version}, auto-update: {}",
+                    if enabled { "有効" } else { "無効" },
+                    if enabled { "enabled" } else { "disabled" }
+                ),
+            );
+        }
+        Err(e) => set_text("auto-update-status", &format!("❌ {e}")),
+    }
+}
+
+fn on_refresh_auto_update_status() {
+    spawn_local(async move {
+        refresh_auto_update_status(same_origin_base_url()).await;
+    });
+}
+
+fn on_toggle_auto_update(evt: Event) {
+    let Some(checkbox) = evt.target().and_then(|t| t.dyn_into::<HtmlInputElement>().ok()) else {
+        return;
+    };
+    let enabled = checkbox.checked();
+    let admin_token = input_value("auto-update-admin-token");
+    let base_url = same_origin_base_url();
+    spawn_local(async move {
+        match crate::api_auto_update::set_enabled(&base_url, &admin_token, enabled).await {
+            Ok(value) => {
+                let message = value.get("message_ja").and_then(|v| v.as_str()).unwrap_or("✅ 設定を更新しました。");
+                set_text("auto-update-status", message);
+            }
+            Err(e) => set_text("auto-update-status", &format!("❌ {e}")),
+        }
+    });
+}
+
 const COMPAT_MODE_STORAGE_KEY: &str = "openeasyweb_compat_mode_v1";
 
 /// Step 5(分散同期・ディザスタリカバリ)は、この`open-easy-web-server`
@@ -290,6 +337,17 @@ fn wire_click(id: &str, f: impl Fn() + 'static) -> Result<(), JsValue> {
     Ok(())
 }
 
+/// チェックボックス等の`change`イベント配線(`wire_click`のチェック
+/// ボックス版、`on_toggle_auto_update`のようにイベント自体〈チェック後の
+/// 状態〉を必要とするコールバック向け)。
+fn wire_change(id: &str, f: impl Fn(Event) + 'static) -> Result<(), JsValue> {
+    let input: HtmlInputElement = by_id(id).dyn_into()?;
+    let closure = Closure::<dyn FnMut(Event)>::new(move |evt: Event| f(evt));
+    input.set_onchange(Some(closure.as_ref().unchecked_ref()));
+    closure.forget();
+    Ok(())
+}
+
 /// 直前に選択したモードを`localStorage`から読み出す(テスト・他モジュールの
 /// 参照用に公開)。
 pub fn selected_compat_mode() -> Option<String> {
@@ -313,6 +371,9 @@ pub fn wire() -> Result<(), JsValue> {
     wire_click("dist-sync-verify-btn", on_verify_dist_sync)?;
     wire_click("dist-sync-skip-btn", on_skip_dist_sync)?;
     wire_dist_sync_remove_delegation()?;
+
+    wire_click("auto-update-refresh-status-btn", on_refresh_auto_update_status)?;
+    wire_change("auto-update-enabled-toggle", on_toggle_auto_update)?;
     Ok(())
 }
 

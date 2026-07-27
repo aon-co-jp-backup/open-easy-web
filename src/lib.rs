@@ -16,6 +16,7 @@
 //! - DB(aruaru-db等)への接続機能は持たない(意図的にスコープ外)。
 
 mod api_auth;
+mod api_auto_update;
 mod api_dist_sync;
 mod api_free_domain;
 mod api_upload;

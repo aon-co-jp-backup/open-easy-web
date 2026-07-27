@@ -37,10 +37,17 @@ thiserror = "1"
 # false`でWinFsp/dxc/Windows SDK不要のCPUフォールバックのみ使う)を踏襲。
 open_raid_z_core = { path = "../../open-raid-z/open_runo_zfs_source/open_raid_z_core", default-features = false, features = ["offsite_backup"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+# 深夜自動アップデート(auto_update.rs)向け: リリースアセット(tar.gz/zip)
+# の展開、およびLinuxでのSO_REUSEPORTを使ったほぼゼロダウンタイム切り替え。
+flate2 = "1"
+tar = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+socket2 = { version = "0.5", features = ["all"] }
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 tempfile = "3"
+mockito = "1"
 # dist_syncの実複製テスト(インプロセスrussh SFTPサーバー)向け。
 # open_raid_z_core側`tests/offsite_backup_integration.rs`と同じ
 # バージョン・featureに揃える(実クラウド/実VPSには一切接続しない、

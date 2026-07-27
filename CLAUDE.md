@@ -230,6 +230,64 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-27 深夜バックグラウンド自動アップデート機能を新規実装
+  (ユーザー指示: 「open-easy-web-serverとopen-web-serverは、AUTO-UPDATE
+  で真夜中にバックグラウンドで自動UPDATEして」「一瞬でVERSIONUPで
+  切り替わって」「AUTO UPDATEデフォルトでOFFにしてONに出来るように
+  して」「環境変数のコマンドとGUIでも設定変更出来るようにして」)**:
+  1. **新規モジュール`server/src/auto_update.rs`**: 毎日ローカル深夜0時に
+     GitHub Releases APIで最新タグを確認し、現在のバージョン
+     (`env!("CARGO_PKG_VERSION")`)より新しければOS別アセット
+     (`open-easy-web-server-linux-x86_64.tar.gz`/`-windows-x86_64.zip`、
+     `.github/workflows/release.yml`と同じ命名規則)をダウンロード・
+     展開する。展開した新バイナリを`--version`で実行し正しく起動
+     できることを確認してから初めて切り替えに進む(壊れたバイナリで
+     本番を巻き込まない設計)。
+  2. **Linuxでのほぼゼロダウンタイム切り替え**: `OPEN_EASYWEB_AUTO_UPDATE`
+     有効時のみ、リスンソケットを`socket2`経由で`SO_REUSEPORT`付きで
+     bindする(無効時は従来通りの`TcpListener::bind`のまま、依存も
+     挙動も一切変わらない)。新バイナリを子プロセスとして起動すると、
+     同じポートへ新旧プロセスが同時にbindでき(ソケットの明け渡し・
+     ハンドオフ通信は不要)、OSカーネルが新規接続を振り分ける。子の
+     `/healthz`が実際に応答してから、旧プロセスは`accept_loop`の新規
+     受付だけを停止し(既存の処理中コネクションは完走させる猶予5秒を
+     置く)、その後終了する——ポートが一度も空かない。Windowsは
+     `SO_REUSEPORT`相当が無いため、受付停止→即座に新バイナリ起動という
+     逐次切り替え(正直な開示: 真のゼロダウンタイムではない、数百
+     ミリ秒程度の切り替え猶予)。
+  3. **既定OFF・GUI/環境変数どちらでも切り替え可能**:
+     `OPEN_EASYWEB_AUTO_UPDATE`環境変数は起動時の初期値としてのみ機能し、
+     `POST /admin/auto-update`(`x-admin-token`認証、`{"enabled": bool}`)
+     を一度でも呼ぶと、その設定が`.open-easy-web-auto-update.json`へ
+     永続化され、以後は環境変数より優先される(再起動しても保持)。
+     `GET /admin/auto-update`で現在の設定・実行中バージョンを取得できる。
+     ブラウザGUI(`open-easy-web`ルートの`shell.rs`/`setup_wizard_ui.rs`/
+     `api_auto_update.rs`)にも「Step 6」としてトグルスイッチを追加。
+  4. **検証(実測)**: 新規テスト6件(`auto_update::tests`、バージョン
+     比較・GitHub API応答のパース・実際にtar.gzを組み立ててのダウン
+     ロード→展開の一気通貫・設定の永続化と再読込)を含め`cargo test`
+     **59→66件、全green**。実バイナリを起動し、`--version`フラグが
+     即座に正しいバージョン文字列を返すこと、`GET`/`POST /admin/
+     auto-update`が実際に既定OFF→ONへの切り替え・永続化まで実HTTPで
+     動作することを確認した。WASM側(`cargo build --target
+     wasm32-unknown-unknown`)もビルド成功を確認(実行テストはこの
+     環境のネイティブテストランナー制約で不可、既知の環境制約であり
+     今回の変更に起因するものではない)。
+  5. **正直な開示**: (1) 本セッションでは実際に2プロセスが
+     `SO_REUSEPORT`で同一ポートを共有し実際にゼロダウンタイムで切り替わる、
+     という本番相当のシナリオまでは検証していない(コード実装・関連
+     ロジックのユニットテストに留まる)。(2) ダウンロードしたリリース
+     アセットの署名検証(GPG・checksum)は行っていない——取得先の真正性は
+     GitHubへの信頼に依拠する。(3) このセッションでは実際にVPS上で
+     この機能を有効化・デプロイしていない(コード実装・ローカル検証
+     までに留める、本番投入はユーザー確認後)。
+  - 次にすべきこと: (1) ステージング環境での実際のSO_REUSEPORTハンド
+    オフの実地検証、(2) リリースアセットの署名/checksum検証の追加、
+    (3) `open-web-server`側にも同等の機能を実装(別途対応、ただし
+    別セッションが`main.rs`等を活発に編集中のため、本パスでは
+    `auto_update.rs`モジュールのみ新規追加し`main.rs`への配線は
+    見送った——詳細は`open-web-server`側CLAUDE.md参照)。
+
 - **2026-07-26(続き) 起動時ジャーナルリプレイ(`replay_local_journal`)を
   実配線——直下のエントリの「次にすべきこと(2)」を解消**:
   1. **`server/src/dist_sync.rs`に`replay_pending_writes(registry,

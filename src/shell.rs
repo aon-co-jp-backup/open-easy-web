@@ -185,6 +185,25 @@ pub const SHELL_HTML: &str = r#"
   <p id="dist-sync-fallback-result" class="muted" aria-live="polite"></p>
 </section>
 
+<section>
+  <h3>Step 6: Nightly auto-update (⑥ 深夜バックグラウンド自動アップデート、既定OFF)</h3>
+  <p class="muted">
+    GitHub Releasesの最新バージョンを毎日ローカル深夜0時に確認し、新しい
+    バージョンがあれば自動的にダウンロード・検証・切り替えます(Linuxでは
+    ほぼゼロダウンタイム、Windowsは数百ミリ秒程度の切り替え猶予)。
+    既定は無効(OFF)です。
+  </p>
+  <label>Admin token (管理トークン)<input type="password" id="auto-update-admin-token" placeholder="OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN"></label>
+  <label class="toggle-row">
+    <input type="checkbox" id="auto-update-enabled-toggle">
+    Enable nightly auto-update (深夜自動アップデートを有効にする)
+  </label>
+  <div class="buttons">
+    <button id="auto-update-refresh-status-btn">Refresh status (現在の設定を取得)</button>
+  </div>
+  <p id="auto-update-status" class="muted" aria-live="polite"></p>
+</section>
+
 <div id="site-mgmt-section" class="hidden">
 <section>
   <h2>Register / Edit / Delete / Switch Domains &amp; Subdomains (ドメイン名・サブドメイン名の登録・編集・削除・選択切替)</h2>

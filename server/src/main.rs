@@ -9,6 +9,7 @@
 
 mod appserver_registration;
 mod auth;
+mod auto_update;
 mod dist_sync;
 mod mail;
 mod php_detector;
@@ -57,6 +58,9 @@ struct AppState {
     /// 分散同期先(VPS群)+ディザスタ用オフサイト退避先(Email/Googleドライブ)
     /// のレジストリ(`dist_sync.rs`参照、open_raid_z_coreの再利用)。
     dist_sync: Arc<dist_sync::DistSyncRegistry>,
+    /// 深夜バックグラウンド自動アップデートの有効/無効設定
+    /// (`auto_update.rs`参照、環境変数またはGUI/API経由で変更可能)。
+    auto_update: Arc<auto_update::AutoUpdateState>,
 }
 
 /// 唯一ログインを許可するアカウント(ユーザー指示、2026-07-15、
@@ -117,6 +121,10 @@ impl AppState {
             dist_sync: Arc::new(dist_sync::DistSyncRegistry::new(env_path(
                 "OPEN_EASYWEB_DIST_SYNC_JOURNAL_DIR",
                 "/var/www/.open-easy-web-dist-sync-journal",
+            ))),
+            auto_update: Arc::new(auto_update::AutoUpdateState::load(env_path(
+                "OPEN_EASYWEB_AUTO_UPDATE_SETTINGS_FILE",
+                "/var/www/.open-easy-web-auto-update.json",
             ))),
         }
     }
@@ -248,6 +256,53 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
             return unauthorized;
         }
         return dist_sync::run_first_time_setup(&state.dist_sync).await;
+    }
+
+    // `/admin/auto-update` — 深夜バックグラウンド自動アップデートの
+    // 有効/無効を取得・変更する(`auto_update.rs`参照)。`x-admin-token`
+    // ヘッダによる認証必須(既存の`dist_sync`管理APIと同じ方式を再利用)。
+    if path == "/admin/auto-update" {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        return match method {
+            Method::GET => json_response(
+                StatusCode::OK,
+                &serde_json::json!({
+                    "enabled": state.auto_update.is_enabled(),
+                    "current_version": auto_update::current_version(),
+                }),
+            ),
+            Method::POST => {
+                let bytes = match req.into_body().collect().await {
+                    Ok(c) => c.to_bytes(),
+                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
+                };
+                #[derive(serde::Deserialize)]
+                struct Payload {
+                    enabled: bool,
+                }
+                let payload: Payload = match serde_json::from_slice(&bytes) {
+                    Ok(p) => p,
+                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
+                };
+                match state.auto_update.set_enabled(payload.enabled) {
+                    Ok(()) => json_response(
+                        StatusCode::OK,
+                        &serde_json::json!({
+                            "enabled": payload.enabled,
+                            "message_ja": if payload.enabled {
+                                "深夜バックグラウンド自動アップデートを有効にしました(次の深夜0時から確認を開始します)。"
+                            } else {
+                                "深夜バックグラウンド自動アップデートを無効にしました。"
+                            },
+                        }),
+                    ),
+                    Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, format!("failed to persist setting: {e}")),
+                }
+            }
+            _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "unsupported method"),
+        };
     }
 
     match (&method, path.as_str()) {
@@ -977,14 +1032,28 @@ async fn route(
     Ok(dispatch(state, req).await)
 }
 
-async fn accept_loop(listener: TcpListener, state: Arc<AppState>) -> anyhow::Result<()> {
+/// `stop`が`true`になったら新規接続の受付を止めて戻る(既存の接続処理は
+/// `tokio::spawn`済みのタスクとして独立に完走する、途中で打ち切らない)。
+/// 深夜自動アップデートのゼロダウンタイム切り替え(`auto_update.rs`参照)
+/// で、新バイナリが健全になったのを確認してから旧プロセスがこの受付を
+/// 停止するために使う。`stop`を一切操作しない既存の呼び出し方
+/// (`Arc::new(AtomicBool::new(false))`を渡すだけ)であれば、無限ループで
+/// 受付し続ける従来の挙動と完全に同じ。
+async fn accept_loop(listener: TcpListener, state: Arc<AppState>, stop: Arc<std::sync::atomic::AtomicBool>) -> anyhow::Result<()> {
     loop {
-        let (stream, _peer) = match listener.accept().await {
-            Ok(pair) => pair,
-            Err(e) => {
-                tracing::warn!(error = %e, "failed to accept connection");
-                continue;
-            }
+        if stop.load(std::sync::atomic::Ordering::SeqCst) {
+            tracing::info!("accept_loop: stopping (auto-update handoff to new process)");
+            return Ok(());
+        }
+        let (stream, _peer) = tokio::select! {
+            res = listener.accept() => match res {
+                Ok(pair) => pair,
+                Err(e) => {
+                    tracing::warn!(error = %e, "failed to accept connection");
+                    continue;
+                }
+            },
+            _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => continue,
         };
         let io = TokioIo::new(stream);
         let state = state.clone();
@@ -997,8 +1066,23 @@ async fn accept_loop(listener: TcpListener, state: Arc<AppState>) -> anyhow::Res
     }
 }
 
+/// `--version`引数を処理する。深夜自動アップデート
+/// (`auto_update::verify_binary_runs`)が、ダウンロードした新バイナリが
+/// 実際に起動できることを確認するために使う——tracing初期化・ポート
+/// bind・その他起動処理を一切行わず、即座にバージョン文字列を出力して
+/// 終了する(壊れたバイナリでも高速かつ副作用無く判定できるようにする
+/// ため、`main()`の一番最初でチェックする)。
+fn handle_version_flag_and_exit_if_present() {
+    if std::env::args().nth(1).as_deref() == Some("--version") {
+        println!("open-easy-web-server {}", auto_update::current_version());
+        std::process::exit(0);
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    handle_version_flag_and_exit_if_present();
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
@@ -1028,9 +1112,52 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "0.0.0.0:8090".into())
         .parse()?;
 
-    tracing::info!(%bind_addr, "open-easy-web-server listening");
-    let listener = TcpListener::bind(bind_addr).await?;
-    accept_loop(listener, state).await
+    // 深夜自動アップデートが有効な場合のみ`SO_REUSEPORT`(Unix限定)で
+    // bindする——新旧プロセスが同じポートへ同時にbindでき、ハンドオフ
+    // 通信無しでほぼゼロダウンタイムの切り替えができるようにするため
+    // (`auto_update.rs`モジュールdoc参照)。無効時(既定)は従来通りの
+    // 通常bindのままで、挙動は一切変わらない。
+    let listener = bind_listener(bind_addr, state.auto_update.is_enabled()).await?;
+    tracing::info!(%bind_addr, auto_update_enabled = state.auto_update.is_enabled(), "open-easy-web-server listening");
+
+    let stop_accepting = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    {
+        let auto_update_state = Arc::clone(&state.auto_update);
+        let stop_accepting = Arc::clone(&stop_accepting);
+        tokio::spawn(async move {
+            auto_update::run_daily_check_loop(auto_update_state, bind_addr, stop_accepting).await;
+        });
+    }
+
+    accept_loop(listener, state, stop_accepting).await
+}
+
+/// `reuse_port`が`true`(深夜自動アップデート有効時のみ)ならUnix系OSで
+/// `SO_REUSEPORT`を設定してからbindする(`socket2`経由、Windowsでは
+/// `SO_REUSEPORT`相当が無いため通常のbindにフォールバックする)。
+/// `reuse_port`が`false`(既定)の場合は、従来通り`TcpListener::bind`を
+/// そのまま呼ぶだけで、依存も増やさない・挙動も一切変えない。
+async fn bind_listener(addr: std::net::SocketAddr, reuse_port: bool) -> anyhow::Result<TcpListener> {
+    if !reuse_port {
+        return Ok(TcpListener::bind(addr).await?);
+    }
+    #[cfg(unix)]
+    {
+        use socket2::{Domain, Protocol, Socket, Type};
+        let domain = if addr.is_ipv6() { Domain::IPV6 } else { Domain::IPV4 };
+        let socket = Socket::new(domain, Type::STREAM, Some(Protocol::TCP))?;
+        socket.set_reuse_address(true)?;
+        socket.set_reuse_port(true)?;
+        socket.set_nonblocking(true)?;
+        socket.bind(&addr.into())?;
+        socket.listen(1024)?;
+        Ok(TcpListener::from_std(socket.into())?)
+    }
+    #[cfg(not(unix))]
+    {
+        tracing::warn!("OPEN_EASYWEB_AUTO_UPDATE is enabled but SO_REUSEPORT is not available on this OS; falling back to a normal bind (handoff will not be zero-downtime here)");
+        Ok(TcpListener::bind(addr).await?)
+    }
 }
 
 #[cfg(test)]
@@ -1067,12 +1194,13 @@ mod tests {
             smtp: None,
             sms: None,
             dist_sync: Arc::new(dist_sync::DistSyncRegistry::new(dir.path().join("dist-sync-journal"))),
+            auto_update: Arc::new(auto_update::AutoUpdateState::load(dir.path().join("auto-update.json"))),
         });
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let server_state = state.clone();
         tokio::spawn(async move {
-            let _ = accept_loop(listener, server_state).await;
+            let _ = accept_loop(listener, server_state, Arc::new(std::sync::atomic::AtomicBool::new(false))).await;
         });
         (addr, state)
     }
@@ -1446,6 +1574,7 @@ mod tests {
             sms: None,
             smtp: None,
             dist_sync: Arc::new(dist_sync::DistSyncRegistry::new(dir.path().join("dist-sync-journal"))),
+            auto_update: Arc::new(auto_update::AutoUpdateState::load(dir.path().join("auto-update.json"))),
         };
         assert!(state.site_dir("../etc").is_none());
         assert_eq!(state.site_dir("audiocafe.tokyo"), Some(PathBuf::from("/var/www/audiocafe.tokyo")));
