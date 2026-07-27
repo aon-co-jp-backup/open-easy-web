@@ -29,3 +29,10 @@ node_modules/
 # Logs
 *.log
 logs/
+
+# Android build artifacts (Gradleが再生成する、リポジトリに含めない)
+android/.gradle/
+android/app/build/
+android/build/
+android/.idea/
+android/local.properties
