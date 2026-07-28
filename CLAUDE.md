@@ -230,6 +230,27 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-29 open-easy-web自身の本番ページにデモ環境案内リンクを追加+`/demo`テナント登録(ユーザー指示、RS-Sync/open-redmineと同じ「本番/デモ分離」パターンをopen-easy-web自身にも適用)**:
+  1. **`src/shell.rs`**: `app-header`の紹介文直下に、日本語・英語併記で
+     `/demo`への案内リンクを追加。新規テスト
+     `shell_html_links_to_demo_environment_bilingually`で回帰確認
+     (`cargo test shell::`5件全green)。
+  2. **`easy-web.tokyo/demo`テナントを新規登録**(`POST /admin/tenants`、
+     `backend_addr=127.0.0.1:8080`——本番と同一バックエンド、既存の
+     rs-sync/open-redmineデモと同じく現状はエイリアス、独立データ無し
+     と正直に開示)。
+  3. **デプロイ**: 前日整備した`/root/open-easy-web-app`のクリーンな
+     デプロイ経路(`git pull`→`cargo build --target
+     wasm32-unknown-unknown --release`→`wasm-bindgen`→`static/`更新)
+     で反映。**実ブラウザで確認**(Claude Browser pane、
+     `https://easy-web.tokyo/`): デモリンクの日英併記テキストが
+     実際にDOM上にレンダリングされていることを`get_page_text`で確認
+     (静的HTML直接grepでは検出できない——このテキストはWASM経由で
+     動的にDOM挿入されるため、実ブラウザでの確認が必須という既存の
+     教訓通り)。`https://easy-web.tokyo/demo`も`200`を確認。
+  - 次にすべきこと: 特になし(RS-Sync/open-redmine/open-easy-web自身の
+    3つとも本番/デモ分離パターンで揃った)。
+
 - **2026-07-28(続き2) バックエンド(open-easy-web-server)側も同じソースツリー乖離を発見・解消(直前エントリの「次にすべきこと(1)」に対応)**:
   1. **確認**: `/root/RUNO/open-easy-web/open-easy-web-server`も同じく
      `aon-co-jp/RUNO`のチェックアウトで、`src/`に`auto_update.rs`・
