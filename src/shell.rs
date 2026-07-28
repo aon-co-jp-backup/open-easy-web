@@ -581,15 +581,47 @@ pub const SHELL_HTML: &str = r#"
     RS-Sync(<a href="https://github.com/aon-co-jp/rs-sync" target="_blank" rel="noopener noreferrer">aon-co-jp/rs-sync</a>)は、
     GitHub・RS-Git・Gitea・Gitbucketなど複数アカウント/複数プロバイダに
     またがるリポジトリの一方向/双方向ミラー同期を行うRust+Poem製Webアプリ。
-    既定では<code>https://runo.tokyo/rs-sync/</code>(VPS上でnginxが
-    `127.0.0.1:8096`へリバースプロキシ)で稼働中のインスタンスを指す。
-    別の場所で動かしている場合は上記URLを書き換えてください。 /
+    既定では<code>https://runo.tokyo/rs-sync/</code>(VPS上でopen-web-server
+    自身の「分身の術」テナントルーティング〈`domains.toml`、
+    <code>POST /admin/tenants</code>で登録〉経由で`127.0.0.1:8096`へ
+    転送)で稼働中のインスタンスを指す。別の場所で動かしている場合は
+    上記URLを書き換えてください。 /
     RS-Sync is a Rust+Poem web app that mirrors repositories one-way or
     two-way across multiple GitHub/RS-Git/Gitea/Gitbucket accounts. By
     default this points at the instance running at
-    <code>https://runo.tokyo/rs-sync/</code> (nginx reverse-proxies to
+    <code>https://runo.tokyo/rs-sync/</code> (routed via open-web-server's
+    own "ninja clone" tenant routing, registered in <code>domains.toml</code>
+    via <code>POST /admin/tenants</code>, forwarding to
     <code>127.0.0.1:8096</code> on the VPS). Adjust the URL above if you run
     RS-Sync elsewhere.
+  </p>
+
+  <div class="form-grid">
+    <div>
+      <label for="ext-tool-open-redmine-url">open-redmine URL (Redmine互換のRust製チケット管理ツール)</label>
+      <input id="ext-tool-open-redmine-url" type="text" value="https://easy-web.tokyo/open-redmine/" placeholder="例: https://easy-web.tokyo/open-redmine/" />
+    </div>
+  </div>
+  <div class="buttons">
+    <button
+      id="ext-tool-open-redmine-launch"
+      onclick="window.open((document.getElementById('ext-tool-open-redmine-url').value || 'https://easy-web.tokyo/open-redmine/'), '_blank', 'noopener,noreferrer')"
+    >🔗 open-redmineを起動 / Launch open-redmine</button>
+  </div>
+  <p class="muted">
+    open-redmine(<a href="https://github.com/aon-co-jp/open-redmine" target="_blank" rel="noopener noreferrer">aon-co-jp/open-redmine</a>)は、
+    Redmine互換のRust+Poem製チケット/プロジェクト管理ツール。既定では
+    <code>https://easy-web.tokyo/open-redmine/</code>(open-web-serverの
+    「分身の術」テナントルーティング経由で`127.0.0.1:8100`へ転送)で
+    稼働中のインスタンスを指す。別の場所で動かしている場合は上記URLを
+    書き換えてください。 /
+    open-redmine (<a href="https://github.com/aon-co-jp/open-redmine" target="_blank" rel="noopener noreferrer">aon-co-jp/open-redmine</a>)
+    is a Redmine-compatible Rust+Poem ticket/project-tracking tool. By
+    default this points at the instance running at
+    <code>https://easy-web.tokyo/open-redmine/</code> (routed via
+    open-web-server's "ninja clone" tenant routing, forwarding to
+    <code>127.0.0.1:8100</code> on the VPS). Adjust the URL above if you run
+    open-redmine elsewhere.
   </p>
 </section>
 
@@ -648,6 +680,18 @@ mod tests {
         assert!(SHELL_HTML.contains(r#"id="ext-tool-rs-sync-launch""#));
         assert!(SHELL_HTML.contains("https://runo.tokyo/rs-sync/"));
         assert!(SHELL_HTML.contains("aon-co-jp/rs-sync"));
+    }
+
+    /// 2026-07-27追記(続き): open-redmineを「外部ツール」セクションへ
+    /// ワンクリック起動リンクとして登録したことの回帰確認
+    /// (ユーザー指示: 「easy-web.tokyo/open-redmineとして登録して
+    /// easy-web.tokyoからクリックで使える様にして」)。
+    #[test]
+    fn shell_html_registers_open_redmine_as_a_launchable_external_tool() {
+        assert!(SHELL_HTML.contains(r#"id="ext-tool-open-redmine-url""#));
+        assert!(SHELL_HTML.contains(r#"id="ext-tool-open-redmine-launch""#));
+        assert!(SHELL_HTML.contains("https://easy-web.tokyo/open-redmine/"));
+        assert!(SHELL_HTML.contains("aon-co-jp/open-redmine"));
     }
 
     /// 2026-07-27追記: aruaru-db・open-raid-zが「忍者の分身の術」パターンに

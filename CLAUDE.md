@@ -230,6 +230,43 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-27(続き4) open-redmineを「外部ツール」セクションへ登録
+  + VPS本番(easy-web.tokyo/runo.tokyo)側のテナントルーティング欠落を
+  発見・修正(ユーザー指示「open-redmineの完成度と実用性も高めて
+  easy-web.tokyo/open-redmineとして登録してeasy-web.tokyoからクリックで
+  使える様にして」、直前のRS-Sync登録作業で発見した本番構成の実態を踏襲)**:
+  1. **VPS実態調査**: このVPSでは**nginxは稼働しておらず**(`systemctl`は
+     `not active`、pidファイルも破損)、`open-web-server`自身がTLS終端+
+     テナントルーティング(`domains.toml`、`POST /admin/tenants`で動的
+     追加・永続化)を行っていた——以前のHANDOFF記載やnginx conf.dの内容は
+     この移行後は参照用の残骸であり、実際の経路とは無関係と判明。
+  2. **open-redmine(バイナリ名`rs-chiketto`、port 8100)は既に
+     `runo.tokyo/open-redmine`へは登録済みだったが、`easy-web.tokyo`には
+     未登録**だったため、`POST /admin/tenants`
+     (`host=easy-web.tokyo, backend_addr=127.0.0.1:8100,
+     path_prefix=/open-redmine`)で追加。`curl https://easy-web.tokyo/
+     open-redmine/`が実際に200を返すことを確認済み(`domains.toml`にも
+     永続化されたため再起動後も維持される)。
+  3. **`src/shell.rs`の「外部ツール」セクションにopen-redmineの
+     URL入力欄+起動ボタンを追加**(RS-Syncと同じ静的リンクパターン)。
+     既定値`https://easy-web.tokyo/open-redmine/`。RS-Syncの説明文の
+     「nginx」表記も、実態(open-web-server自身のテナントルーティング)に
+     合わせて訂正した。
+  4. **検証**: `cargo test`**8件全green**(新規
+     `shell_html_registers_open_redmine_as_a_launchable_external_tool`
+     含む)。実ブラウザでの`easy-web.tokyo`本番ページ上のクリック動作
+     検証は次回以降(前回RS-Syncのpkg再ビルド手順と同一の`wasm-bindgen`
+     手順で反映予定)。
+  - **正直な開示**: 「open-redmineの完成度向上」自体(機能追加・バグ修正)
+    は今回のパスでは未着手——今回は「登録してクリックで使えるように」の
+    配線のみ対応した。open-redmine自体の機能拡充は別途スコープとして
+    次回対応する。
+  - 次にすべきこと: (1) VPS上の`open-easy-web-wasm`をrebuildして
+    `easy-web.tokyo`の実ページにopen-redmineリンクを反映、(2) VPS上の
+    `open-easy-web-wasm`ソース自体がgit repoと大きく乖離している問題
+    (新モジュール多数が未反映)の解消、(3) open-redmine自体の機能・
+    使い勝手の向上(別スコープ)。
+
 - **2026-07-27(続き3) RS-Sync(GitHub複数アカウント同期ツール)を「外部
   ツール」セクションへワンクリック起動リンクとして登録(ユーザー指示
   「GithubHub複数アカウントを同期するシステムにリポジトリを作って開発した
