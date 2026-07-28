@@ -230,6 +230,38 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-28 RS-Sync/open-redmineの外部ツールリンクをeasy-web.tokyoの新URLへ更新+デモリンク追加(ユーザー指示「複数のGITHUBアカウントとopen-giteaとの同期をopen-easy-webに登録のopen-giteaで簡単同期管理したい」への対応の一環)**:
+  1. **`src/shell.rs`更新**: RS-Syncの既定URLを廃止済みの
+     `https://runo.tokyo/rs-sync/`から`https://easy-web.tokyo/rs-sync/`
+     (本番)へ変更。RS-Sync・open-redmine両方のカードに、
+     `/demo`パスへの案内リンクを日英併記で追加(現状は本番と同一
+     バックエンドを指すエイリアス、独立デモデータは無いと正直に開示)。
+  2. **検証**: `cargo test shell::`4件全green(`cargo test`は
+     server/ではなくルートクレート側で実行する必要がある——`shell.rs`は
+     WASMフロントエンド側のモジュールで、`server/`クレートには含まれない
+     ため`cd server && cargo test`では0件ヒットになる、次回同様の作業を
+     する際の注意点として記録)。GitHubへpush済み。
+  3. **正直な開示・未着手**: **VPS上のWASMビルドへの反映は今回未実施**。
+     VPS側`/root/RUNO/open-easy-web/open-easy-web-wasm`は実は
+     `aon-co-jp/RUNO`メタリポジトリのチェックアウトであり、
+     `aon-co-jp/open-easy-web`本体のソースツリーとは構造が一致しない
+     (以前のHANDOFFで既知の課題として記録済みの「VPS上のopen-easy-web-wasm
+     ソース自体がgit repoと大きく乖離している問題」がまさにこれ)。
+     今回はこの根深い既存問題を無理に力技で解消せず、正直に未着手のまま
+     残した——ソースコード変更(GitHub側)のみ完了。
+  4. **関連作業・横串メモ**: 同日、RS-Sync(open-giteaプロバイダの
+     認証欠落バグ修正+本番をeasy-web.tokyoへ移設)・open-redmine
+     (runo.tokyoテナント削除+デモリンク追加)・runo.tokyo(rs-sync
+     デモ廃止に伴う参照削除)でも同時に作業した。詳細は
+     [RS-Sync](https://github.com/aon-co-jp/RS-Sync/blob/main/CLAUDE.md)の
+     同日HANDOFFを参照(このセッションの続きはどのリポジトリから再開
+     しても良いよう、各リポジトリのCLAUDE.mdに同じ日付のエントリを
+     置いてある)。
+  - 次にすべきこと: (1) VPS上の`open-easy-web-wasm`ソースツリーの
+    乖離問題を解消してから`cargo build --target wasm32-unknown-unknown`
+    →`wasm-bindgen`→反映、(2) RS-Sync側で実GitHub PATを使ったフル
+    E2E(ユーザー操作が必要、RS-Sync側CLAUDE.md参照)。
+
 - **2026-07-27(続き4) open-redmineを「外部ツール」セクションへ登録
   + VPS本番(easy-web.tokyo/runo.tokyo)側のテナントルーティング欠落を
   発見・修正(ユーザー指示「open-redmineの完成度と実用性も高めて
