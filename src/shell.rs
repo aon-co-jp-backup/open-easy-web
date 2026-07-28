@@ -626,32 +626,34 @@ pub const SHELL_HTML: &str = r#"
 
   <div class="form-grid">
     <div>
-      <label for="ext-tool-rs-git-url">RS-Git URL (自前運用Gitフォージ)</label>
-      <input id="ext-tool-rs-git-url" type="text" value="https://easy-web.tokyo/rs-git/ui/" placeholder="例: https://easy-web.tokyo/rs-git/ui/" />
+      <label for="ext-tool-rs-git-url">open-gitea URL (自前運用Gitフォージ、旧RS-Git)</label>
+      <input id="ext-tool-rs-git-url" type="text" value="https://easy-web.tokyo/open-gitea/ui/" placeholder="例: https://easy-web.tokyo/open-gitea/ui/" />
     </div>
   </div>
   <div class="buttons">
     <button
       id="ext-tool-rs-git-launch"
-      onclick="window.open((document.getElementById('ext-tool-rs-git-url').value || 'https://easy-web.tokyo/rs-git/ui/'), '_blank', 'noopener,noreferrer')"
-    >🔗 RS-Gitを起動 / Launch RS-Git</button>
+      onclick="window.open((document.getElementById('ext-tool-rs-git-url').value || 'https://easy-web.tokyo/open-gitea/ui/'), '_blank', 'noopener,noreferrer')"
+    >🔗 open-giteaを起動 / Launch open-gitea</button>
   </div>
   <p class="muted">
-    RS-Git(<a href="https://github.com/aon-co-jp/RS-Git" target="_blank" rel="noopener noreferrer">aon-co-jp/RS-Git</a>)は、
-    Rust+Poem製の自前運用Gitフォージ(セルフホスト版GitHub相当)。既定では
-    <code>https://easy-web.tokyo/rs-git/ui/</code>(open-web-serverの
+    open-gitea(<a href="https://github.com/aon-co-jp/open-gitea" target="_blank" rel="noopener noreferrer">aon-co-jp/open-gitea</a>、
+    2026-07-27にRS-Gitから改名)は、Rust+Poem製の自前運用Gitフォージ
+    (セルフホスト版GitHub相当、Gitea(Go製)のRust版を目指す)。既定では
+    <code>https://easy-web.tokyo/open-gitea/ui/</code>(open-web-serverの
     「分身の術」テナントルーティング経由で`127.0.0.1:8090`へ転送。UIは
     アプリ側の設計で`/ui/`配下にあるため末尾に`ui/`が必要)で稼働中の
     インスタンスを指す。別の場所で動かしている場合は上記URLを
     書き換えてください。 /
-    RS-Git (<a href="https://github.com/aon-co-jp/RS-Git" target="_blank" rel="noopener noreferrer">aon-co-jp/RS-Git</a>)
-    is a self-hosted Rust+Poem Git forge (a self-hosted GitHub equivalent).
+    open-gitea (<a href="https://github.com/aon-co-jp/open-gitea" target="_blank" rel="noopener noreferrer">aon-co-jp/open-gitea</a>,
+    renamed from RS-Git on 2026-07-27) is a self-hosted Rust+Poem Git forge
+    (a self-hosted GitHub equivalent, aiming for a Rust take on Gitea).
     By default this points at
-    <code>https://easy-web.tokyo/rs-git/ui/</code> (routed via
+    <code>https://easy-web.tokyo/open-gitea/ui/</code> (routed via
     open-web-server's "ninja clone" tenant routing, forwarding to
     <code>127.0.0.1:8090</code> on the VPS; the trailing <code>ui/</code> is
     required because the app itself mounts its UI under that path). Adjust
-    the URL above if you run RS-Git elsewhere.
+    the URL above if you run open-gitea elsewhere.
   </p>
 </section>
 
@@ -732,8 +734,8 @@ mod tests {
     fn shell_html_registers_rs_git_as_a_launchable_external_tool() {
         assert!(SHELL_HTML.contains(r#"id="ext-tool-rs-git-url""#));
         assert!(SHELL_HTML.contains(r#"id="ext-tool-rs-git-launch""#));
-        assert!(SHELL_HTML.contains("https://easy-web.tokyo/rs-git/ui/"));
-        assert!(SHELL_HTML.contains("aon-co-jp/RS-Git"));
+        assert!(SHELL_HTML.contains("https://easy-web.tokyo/open-gitea/ui/"));
+        assert!(SHELL_HTML.contains("aon-co-jp/open-gitea"));
     }
 
     /// 2026-07-27追記: aruaru-db・open-raid-zが「忍者の分身の術」パターンに

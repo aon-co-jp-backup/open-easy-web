@@ -1950,3 +1950,14 @@ open-web-serverがApache＋Nginxのハイブリッド仕様のWebサーバーと
      確認済み。
   - 次にすべきこと: VPS上の`open-easy-web-wasm`をrebuildして本番の
     `easy-web.tokyo`ページに反映(前回のRS-Sync/open-redmineと同じ手順)。
+
+- **2026-07-27(続き6) RS-Git改名(→open-gitea)に伴うリンク更新(ユーザー指示「RS-Gitをopen-giteaに改名して」を受け、`open-gitea`リポジトリ側での改名完了後の追従)**:
+  1. `src/shell.rs`の外部ツールリンクを`RS-Git`→`open-gitea`表記・URL
+     (`https://easy-web.tokyo/rs-git/ui/`→`https://easy-web.tokyo/
+     open-gitea/ui/`)へ更新。VPS側で`/open-gitea`パスも新規に
+     `POST /admin/tenants`で登録済み(旧`/rs-git`パスも後方互換のため
+     残置、両方とも200を返すことを確認)。
+  2. **検証**: `cargo test`9件全green(該当テストも新名称・新URLで
+     更新)。
+  - 次にすべきこと: VPS上の`open-easy-web-wasm`をrebuildして本番反映
+    (前回と同じ手順)。
