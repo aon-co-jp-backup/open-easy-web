@@ -568,32 +568,40 @@ pub const SHELL_HTML: &str = r#"
   <div class="form-grid">
     <div>
       <label for="ext-tool-rs-sync-url">RS-Sync URL (GitHub複数アカウント・複数プロバイダのリポジトリ同期ツール)</label>
-      <input id="ext-tool-rs-sync-url" type="text" value="https://runo.tokyo/rs-sync/" placeholder="例: https://runo.tokyo/rs-sync/" />
+      <input id="ext-tool-rs-sync-url" type="text" value="https://easy-web.tokyo/rs-sync/" placeholder="例: https://easy-web.tokyo/rs-sync/" />
     </div>
   </div>
   <div class="buttons">
     <button
       id="ext-tool-rs-sync-launch"
-      onclick="window.open((document.getElementById('ext-tool-rs-sync-url').value || 'https://runo.tokyo/rs-sync/'), '_blank', 'noopener,noreferrer')"
+      onclick="window.open((document.getElementById('ext-tool-rs-sync-url').value || 'https://easy-web.tokyo/rs-sync/'), '_blank', 'noopener,noreferrer')"
     >🔗 RS-Syncを起動 / Launch RS-Sync</button>
   </div>
   <p class="muted">
     RS-Sync(<a href="https://github.com/aon-co-jp/rs-sync" target="_blank" rel="noopener noreferrer">aon-co-jp/rs-sync</a>)は、
-    GitHub・RS-Git・Gitea・Gitbucketなど複数アカウント/複数プロバイダに
+    GitHub・open-gitea・Gitea・Gitbucketなど複数アカウント/複数プロバイダに
     またがるリポジトリの一方向/双方向ミラー同期を行うRust+Poem製Webアプリ。
-    既定では<code>https://runo.tokyo/rs-sync/</code>(VPS上でopen-web-server
+    既定では<code>https://easy-web.tokyo/rs-sync/</code>(VPS上でopen-web-server
     自身の「分身の術」テナントルーティング〈`domains.toml`、
     <code>POST /admin/tenants</code>で登録〉経由で`127.0.0.1:8096`へ
-    転送)で稼働中のインスタンスを指す。別の場所で動かしている場合は
-    上記URLを書き換えてください。 /
+    転送)で稼働中のインスタンスを指す(2026-07-28、runo.tokyo上のデモ
+    インスタンスは廃止しeasy-web.tokyoへ移設した)。別の場所で動かしている
+    場合は上記URLを書き換えてください。デモ環境は
+    <a href="https://easy-web.tokyo/rs-sync/demo" target="_blank" rel="noopener noreferrer">https://easy-web.tokyo/rs-sync/demo</a>
+    (現状は本番と同一バックエンドを指すエイリアスで、独立したデモ専用
+    データはまだ無いと正直に開示)。 /
     RS-Sync is a Rust+Poem web app that mirrors repositories one-way or
-    two-way across multiple GitHub/RS-Git/Gitea/Gitbucket accounts. By
+    two-way across multiple GitHub/open-gitea/Gitea/Gitbucket accounts. By
     default this points at the instance running at
-    <code>https://runo.tokyo/rs-sync/</code> (routed via open-web-server's
+    <code>https://easy-web.tokyo/rs-sync/</code> (routed via open-web-server's
     own "ninja clone" tenant routing, registered in <code>domains.toml</code>
     via <code>POST /admin/tenants</code>, forwarding to
-    <code>127.0.0.1:8096</code> on the VPS). Adjust the URL above if you run
-    RS-Sync elsewhere.
+    <code>127.0.0.1:8096</code> on the VPS; the old runo.tokyo demo instance
+    was decommissioned 2026-07-28 and moved here). Adjust the URL above if
+    you run RS-Sync elsewhere. A demo link is available at
+    <a href="https://easy-web.tokyo/rs-sync/demo" target="_blank" rel="noopener noreferrer">https://easy-web.tokyo/rs-sync/demo</a>
+    (honest disclosure: currently just an alias pointing at the same
+    backend as production, not an isolated demo dataset).
   </p>
 
   <div class="form-grid">
@@ -613,15 +621,23 @@ pub const SHELL_HTML: &str = r#"
     Redmine互換のRust+Poem製チケット/プロジェクト管理ツール。既定では
     <code>https://easy-web.tokyo/open-redmine/</code>(open-web-serverの
     「分身の術」テナントルーティング経由で`127.0.0.1:8100`へ転送)で
-    稼働中のインスタンスを指す。別の場所で動かしている場合は上記URLを
-    書き換えてください。 /
+    稼働中のインスタンスを指す(2026-07-28、runo.tokyo側のテナント登録は
+    削除しeasy-web.tokyoに一本化)。別の場所で動かしている場合は上記URLを
+    書き換えてください。デモ環境は
+    <a href="https://easy-web.tokyo/open-redmine/demo" target="_blank" rel="noopener noreferrer">https://easy-web.tokyo/open-redmine/demo</a>
+    (現状は本番と同一バックエンドを指すエイリアスで、独立したデモ専用
+    データはまだ無いと正直に開示)。 /
     open-redmine (<a href="https://github.com/aon-co-jp/open-redmine" target="_blank" rel="noopener noreferrer">aon-co-jp/open-redmine</a>)
     is a Redmine-compatible Rust+Poem ticket/project-tracking tool. By
     default this points at the instance running at
     <code>https://easy-web.tokyo/open-redmine/</code> (routed via
     open-web-server's "ninja clone" tenant routing, forwarding to
-    <code>127.0.0.1:8100</code> on the VPS). Adjust the URL above if you run
-    open-redmine elsewhere.
+    <code>127.0.0.1:8100</code> on the VPS; the runo.tokyo tenant entry was
+    removed 2026-07-28, consolidating on easy-web.tokyo). Adjust the URL
+    above if you run open-redmine elsewhere. A demo link is available at
+    <a href="https://easy-web.tokyo/open-redmine/demo" target="_blank" rel="noopener noreferrer">https://easy-web.tokyo/open-redmine/demo</a>
+    (honest disclosure: currently just an alias pointing at the same
+    backend as production, not an isolated demo dataset).
   </p>
 
   <div class="form-grid">
@@ -710,7 +726,8 @@ mod tests {
         assert!(SHELL_HTML.contains(r#"id="external-tools-section""#));
         assert!(SHELL_HTML.contains(r#"id="ext-tool-rs-sync-url""#));
         assert!(SHELL_HTML.contains(r#"id="ext-tool-rs-sync-launch""#));
-        assert!(SHELL_HTML.contains("https://runo.tokyo/rs-sync/"));
+        assert!(SHELL_HTML.contains("https://easy-web.tokyo/rs-sync/"));
+        assert!(SHELL_HTML.contains("https://easy-web.tokyo/rs-sync/demo"));
         assert!(SHELL_HTML.contains("aon-co-jp/rs-sync"));
     }
 
@@ -723,6 +740,7 @@ mod tests {
         assert!(SHELL_HTML.contains(r#"id="ext-tool-open-redmine-url""#));
         assert!(SHELL_HTML.contains(r#"id="ext-tool-open-redmine-launch""#));
         assert!(SHELL_HTML.contains("https://easy-web.tokyo/open-redmine/"));
+        assert!(SHELL_HTML.contains("https://easy-web.tokyo/open-redmine/demo"));
         assert!(SHELL_HTML.contains("aon-co-jp/open-redmine"));
     }
 
