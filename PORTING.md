@@ -11,6 +11,27 @@
 > 2026-07-20、デプロイ先既定パス変更・ネットワークドライブ移設時の
 > 注意事項を追記)。
 
+## -1. VPS上のデプロイ先ソースツリーがgit repoと乖離する罠(2026-07-28発見・解消)
+
+**移設・再デプロイのたびに必ず確認すること**: VPSの`OPEN_EASYWEB_STATIC_DIR`
+が指すディレクトリが、実際に`aon-co-jp/open-easy-web`の`git clone`
+そのものであることを確認する。2026-07-28時点で発見した実例:
+`/root/RUNO/open-easy-web/open-easy-web-wasm`は`aon-co-jp/RUNO`
+(別の、エコシステム全体のメタ索引リポジトリ)のチェックアウトであり、
+ソースファイル(`shell.rs`等6ファイルのみ)は`aon-co-jp/open-easy-web`
+本体(15以上のモジュール)とは全くの別物・古いスナップショットだった。
+このため、GitHub側の`src/shell.rs`をいくら修正・pushしても、VPS上の
+WASMビルドには一切反映されない状態が続いていた(RS-Sync/open-redmineの
+リンクURL更新が本番に反映されない、という形で発覚)。
+**解消方法**: `/root/open-easy-web-app`に`aon-co-jp/open-easy-web`を
+クリーンclone→`cargo build --target wasm32-unknown-unknown --release`→
+`wasm-bindgen`→`index.html`+`pkg/`を`static/`にまとめ→
+`open-easy-web.service`の`OPEN_EASYWEB_STATIC_DIR`をこの新しい
+`static/`ディレクトリへ向けて`systemctl restart`。`curl`で取得した
+`.wasm`バイナリに新しい文字列(更新後のURL等)が実際に含まれることを
+`grep`で確認してから完了とすること(型チェック・ビルド成功のみでは
+不十分、という既存方針の徹底)。
+
 ## 0. このリポジトリのスコープ
 
 `open-easy-web` は「第二のKUSANAGI」——アプリのアップロード後にIP

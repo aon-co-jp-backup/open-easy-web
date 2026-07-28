@@ -230,6 +230,32 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-28(続き) VPS上のWASMソースツリー乖離問題を解消(直前エントリの「次にすべきこと(1)」に対応、ユーザー報告「easy-web.tokyoからruno.tokyo/rs-syncを起動できません」への対応)**:
+  1. **原因確認**: VPSの`.wasm`バイナリを`grep`したところ`runo.tokyo/
+     rs-sync`(廃止済みURL)が3件・新URLが0件——直前エントリで既知の
+     問題としていた「VPS上のopen-easy-web-wasmソースがgit repoと乖離」
+     が実際にこの不具合の原因だったことを確認した。
+  2. **解消**: `/root/open-easy-web-app`に`aon-co-jp/open-easy-web`を
+     クリーンclone→`cargo build --target wasm32-unknown-unknown
+     --release`→`wasm-bindgen --target web --no-typescript`→
+     `index.html`+`pkg/`を`static/`にまとめ、systemdの
+     `OPEN_EASYWEB_STATIC_DIR`をこの新ディレクトリへ切り替えて
+     `systemctl restart`。詳細な再発防止手順は`PORTING.md`「-1.」に
+     記録した(次回移設・再デプロイ時に必ず確認すること)。
+  3. **検証**: `curl https://easy-web.tokyo/pkg/open_easy_web_bg.wasm`を
+     取得し`grep`で、旧URL`runo.tokyo/rs-sync`が0件・新URL
+     `easy-web.tokyo/rs-sync`が6件になったことを確認。`https://
+     easy-web.tokyo/`自体も200のまま(既存の他機能への影響なし)。
+  4. **正直な開示・未着手**: 旧`/root/RUNO/open-easy-web/`配下(バック
+     エンド`open-easy-web-server`含む)は今回変更していない——静的
+     フロントエンドの配信元だけを新しいクリーンcloneへ切り替えた
+     (バックエンドAPIルートは無変更で、新フロントエンドが呼ぶ既存API
+     と互換であることは確認済み)。バックエンド側も同様の乖離が無いかは
+     未確認、次回の課題として残す。
+  - 次にすべきこと: (1) `/root/RUNO/open-easy-web/open-easy-web-server`
+    (バックエンド)側も同様に`aon-co-jp/open-easy-web`と乖離していないか
+    確認、(2) 乖離があれば同様にクリーンcloneへ切り替え。
+
 - **2026-07-28 RS-Sync/open-redmineの外部ツールリンクをeasy-web.tokyoの新URLへ更新+デモリンク追加(ユーザー指示「複数のGITHUBアカウントとopen-giteaとの同期をopen-easy-webに登録のopen-giteaで簡単同期管理したい」への対応の一環)**:
   1. **`src/shell.rs`更新**: RS-Syncの既定URLを廃止済みの
      `https://runo.tokyo/rs-sync/`から`https://easy-web.tokyo/rs-sync/`
