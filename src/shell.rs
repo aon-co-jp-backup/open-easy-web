@@ -9,6 +9,12 @@ pub const SHELL_HTML: &str = r#"
     WebAssembly、フレームワーク不使用)。
   </p>
   <p class="muted">選択中のサイト: <strong id="active-site-name">(未設定)</strong></p>
+  <p class="muted">
+    これは管理者向け本番環境です。試しに使ってみたい方はデモ環境をどうぞ:
+    <a href="/demo">https://easy-web.tokyo/demo</a><br>
+    This is the admin/production environment. If you just want to try it out, use the demo instead:
+    <a href="/demo">https://easy-web.tokyo/demo</a>
+  </p>
 </header>
 
 <section id="setup-wizard-section">
@@ -717,6 +723,15 @@ pub const SHELL_HTML: &str = r#"
 #[cfg(test)]
 mod tests {
     use super::SHELL_HTML;
+
+    /// 2026-07-29追記: 本番ページ自体(open-easy-webのapp-header)に
+    /// `/demo`へのデモ案内リンクを日英併記で追加したことの回帰確認。
+    #[test]
+    fn shell_html_links_to_demo_environment_bilingually() {
+        assert!(SHELL_HTML.contains(r#"<a href="/demo">https://easy-web.tokyo/demo</a>"#));
+        assert!(SHELL_HTML.contains("これは管理者向け本番環境です"));
+        assert!(SHELL_HTML.contains("This is the admin/production environment"));
+    }
 
     /// 2026-07-27追記: RS-Sync(GitHub複数アカウント/複数プロバイダ同期
     /// ツール)を「外部ツール」セクションへワンクリック起動リンクとして
