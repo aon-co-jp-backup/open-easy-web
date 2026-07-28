@@ -62,6 +62,15 @@ middleware, etc. — see those repos' CLAUDE.md for details).
   `easyweb-tls-monitor.timer` (expiry monitor, daily).
 - **VPS deploy**: `scripts/deploy-vps.ps1` (Windows PowerShell)
   automates build → upload → launch.
+  > ⚠️ **Watch out for deploy-directory drift (discovered 2026-07-28)**:
+  > confirm the VPS deploy directory really is a `git clone` of
+  > `aon-co-jp/open-easy-web`. A past incident had files manually placed,
+  > uncommitted, inside a checkout of a different meta-repo
+  > (`aon-co-jp/RUNO`) — GitHub-side updates never reached production for
+  > a long time, on both the frontend and the backend. Before declaring a
+  > deploy done, diff `ls <deploy dir>/src` against the local `src/` /
+  > `server/src/` and confirm the module count matches. See `PORTING.md`
+  > for the full incident writeup and prevention steps.
 - **Password-free account authentication**: no fixed passwords at all —
   log in via a one-time password (OTP) sent to whichever contact you
   registered (primary email, a second email, or a phone number).

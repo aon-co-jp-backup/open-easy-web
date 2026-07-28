@@ -197,6 +197,17 @@ scripts/audit-orphaned-services.sh aruaru-web
 .\scripts\deploy-vps.ps1 -VpsHost 203.0.113.10 -VpsUser root -StartServer
 ```
 
+> ⚠️ **デプロイ先ソースツリーの乖離に注意(2026-07-28発見・教訓)**:
+> VPS上のデプロイ先ディレクトリが、実際に`aon-co-jp/open-easy-web`の
+> `git clone`そのものであることを必ず確認すること。過去に別の
+> メタリポジトリ(`aon-co-jp/RUNO`)のチェックアウト配下へ、未コミット
+> のまま手動でファイルを配置してしまい、GitHub側をいくら更新しても
+> 本番に一切反映されない状態が長期間続いていた実例がある(フロント
+> エンド・バックエンドの両方で発生)。`ls <デプロイ先>/src`と
+> ローカルの`src/`・`server/src/`を突き合わせ、モジュール数が一致する
+> ことを確認してから完了と報告すること。詳細な再発防止手順は
+> `PORTING.md`を参照。
+
 ## vhost生成・ドメイン/サブドメインの登録
 
 ```bash
