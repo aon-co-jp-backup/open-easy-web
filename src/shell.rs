@@ -539,25 +539,28 @@ pub const SHELL_HTML: &str = r#"
   <div class="form-grid">
     <div>
       <label for="ext-tool-rs-sync-url">RS-Sync URL (GitHub複数アカウント・複数プロバイダのリポジトリ同期ツール)</label>
-      <input id="ext-tool-rs-sync-url" type="text" value="http://127.0.0.1:8095/" placeholder="例: http://127.0.0.1:8095/" />
+      <input id="ext-tool-rs-sync-url" type="text" value="https://runo.tokyo/rs-sync/" placeholder="例: https://runo.tokyo/rs-sync/" />
     </div>
   </div>
   <div class="buttons">
     <button
       id="ext-tool-rs-sync-launch"
-      onclick="window.open((document.getElementById('ext-tool-rs-sync-url').value || 'http://127.0.0.1:8095/'), '_blank', 'noopener,noreferrer')"
+      onclick="window.open((document.getElementById('ext-tool-rs-sync-url').value || 'https://runo.tokyo/rs-sync/'), '_blank', 'noopener,noreferrer')"
     >🔗 RS-Syncを起動 / Launch RS-Sync</button>
   </div>
   <p class="muted">
     RS-Sync(<a href="https://github.com/aon-co-jp/rs-sync" target="_blank" rel="noopener noreferrer">aon-co-jp/rs-sync</a>)は、
     GitHub・RS-Git・Gitea・Gitbucketなど複数アカウント/複数プロバイダに
-    またがるリポジトリの一方向/双方向ミラー同期を行うRust+Poem製Webアプリ
-    (既定ポート8095、`RS_SYNC_PORT`環境変数で変更可)。上記URLは実際に
-    RS-Syncを起動しているホスト:ポートに合わせて書き換えてください。 /
+    またがるリポジトリの一方向/双方向ミラー同期を行うRust+Poem製Webアプリ。
+    既定では<code>https://runo.tokyo/rs-sync/</code>(VPS上でnginxが
+    `127.0.0.1:8096`へリバースプロキシ)で稼働中のインスタンスを指す。
+    別の場所で動かしている場合は上記URLを書き換えてください。 /
     RS-Sync is a Rust+Poem web app that mirrors repositories one-way or
-    two-way across multiple GitHub/RS-Git/Gitea/Gitbucket accounts (default
-    port 8095, override with the <code>RS_SYNC_PORT</code> env var). Adjust
-    the URL above to match wherever your RS-Sync instance actually runs.
+    two-way across multiple GitHub/RS-Git/Gitea/Gitbucket accounts. By
+    default this points at the instance running at
+    <code>https://runo.tokyo/rs-sync/</code> (nginx reverse-proxies to
+    <code>127.0.0.1:8096</code> on the VPS). Adjust the URL above if you run
+    RS-Sync elsewhere.
   </p>
 </section>
 
@@ -614,7 +617,7 @@ mod tests {
         assert!(SHELL_HTML.contains(r#"id="external-tools-section""#));
         assert!(SHELL_HTML.contains(r#"id="ext-tool-rs-sync-url""#));
         assert!(SHELL_HTML.contains(r#"id="ext-tool-rs-sync-launch""#));
-        assert!(SHELL_HTML.contains("http://127.0.0.1:8095/"));
+        assert!(SHELL_HTML.contains("https://runo.tokyo/rs-sync/"));
         assert!(SHELL_HTML.contains("aon-co-jp/rs-sync"));
     }
 }
