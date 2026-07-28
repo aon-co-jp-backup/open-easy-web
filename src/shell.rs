@@ -298,11 +298,40 @@ pub const SHELL_HTML: &str = r#"
     </div>
     <div class="form-grid-full">
       <p class="muted">
-        共有バックエンドへの登録(任意、2026-07-16新設・「分身の術」構想):
-        既に稼働中のopen-web-server/poem-cosmo-tauri/aruaru-llmインスタンス
-        へこのドメインを動的登録し、ドメインごとの個別インストールを
-        不要にします。管理APIのURLを入力すると、一覧のカードに
-        「🔗 共有バックエンドへ登録」ボタンが表示されます。
+        共有バックエンドへの登録(任意、2026-07-16新設・「忍者の分身の術」
+        構想 — 忍術のように、実体(インスタンス)は1つだけ稼働させておき、
+        各ドメインからは「分身」として同じ実体へ動的に登録するだけで
+        済ませる): 既に稼働中のopen-web-server/poem-cosmo-tauri/
+        aruaru-llmインスタンスへこのドメインを動的登録し、ドメインごとの
+        個別インストールを不要にします。管理APIのURLを入力すると、一覧の
+        カードに「🔗 共有バックエンドへ登録」ボタンが表示されます。
+      </p>
+      <p class="muted">
+        <strong>2026-07-27追記(aruaru-db・open-raid-zの扱いについて、
+        正直な開示)</strong>: <code>aruaru-db</code>は、下の「DB接続文字列」
+        欄に稼働中インスタンスの接続文字列を入力するだけで、複数ドメインが
+        同じDBインスタンスを共有できます——これも「忍者の分身の術」と
+        同じ発想(実体は1つ、各ドメインは接続文字列を指すだけの「分身」)
+        であり、専用のUI(ドロップダウンやボタン)を新設せずとも既に
+        この欄で実現できています。一方、<code>open-raid-z</code>は
+        ドメイン単位でテナント登録する対象の「アプリケーションサーバー」
+        ではなく、VPS1台につき1回インストールしてマウントする
+        ストレージ基盤(ファイルシステム層)のため、この「分身の術」欄の
+        対象には含めていません(ドメインごとに使い分ける性質のものでは
+        ないため)。 /
+        <strong>Added 2026-07-27 (honest disclosure on how aruaru-db and
+        open-raid-z fit in)</strong>: for <code>aruaru-db</code>, entering the
+        connection string of an already-running instance into the "DB
+        connection string" field below is enough for multiple domains to
+        share that same DB instance — this is the same "ninja clone" idea
+        (one real body/instance, each domain is just a "clone" pointing at
+        the same connection string), and it is already achievable through
+        this existing field without adding a dedicated dropdown or button.
+        <code>open-raid-z</code>, on the other hand, is not a per-domain
+        "application server" to register as a tenant here — it is a storage
+        layer (filesystem-level) that you install and mount once per VPS, so
+        it is intentionally left out of this "ninja clone" section (it isn't
+        the kind of thing you switch per domain).
       </p>
     </div>
     <div>
@@ -314,7 +343,7 @@ pub const SHELL_HTML: &str = r#"
       <input id="site-shared-admin-key" type="password" placeholder="x-admin-token / x-api-key" />
     </div>
     <div>
-      <label for="site-shared-db-uri">DB connection string, required for open-web-server only (DB接続文字列)</label>
+      <label for="site-shared-db-uri">DB connection string — shared aruaru-db instance via "ninja clone", required for open-web-server (DB接続文字列 — 「忍者の分身の術」で共有するaruaru-db等のインスタンス、open-web-server利用時は必須)</label>
       <input id="site-shared-db-uri" type="text" placeholder="例: postgres://localhost/shop" />
     </div>
     <div>
@@ -619,5 +648,16 @@ mod tests {
         assert!(SHELL_HTML.contains(r#"id="ext-tool-rs-sync-launch""#));
         assert!(SHELL_HTML.contains("https://runo.tokyo/rs-sync/"));
         assert!(SHELL_HTML.contains("aon-co-jp/rs-sync"));
+    }
+
+    /// 2026-07-27追記: aruaru-db・open-raid-zが「忍者の分身の術」パターンに
+    /// どう当てはまる/当てはまらないかの説明文(日英併記)が「分身の術」
+    /// フォーム欄の近くにあることの回帰確認。
+    #[test]
+    fn shell_html_explains_ninja_clone_pattern_for_aruaru_db_and_open_raid_z_bilingually() {
+        assert!(SHELL_HTML.contains("忍者の分身の術"));
+        assert!(SHELL_HTML.contains("ninja clone"));
+        assert!(SHELL_HTML.contains("aruaru-db"));
+        assert!(SHELL_HTML.contains("open-raid-z"));
     }
 }
