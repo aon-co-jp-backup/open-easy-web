@@ -527,6 +527,40 @@ pub const SHELL_HTML: &str = r#"
   </div>
 </section>
 
+<section id="external-tools-section">
+  <h2>External Tools (外部ツール)</h2>
+  <p class="muted">
+    open-easy-webの管理対象外(別バイナリ・別ポートで動作)だが、日常運用で
+    よく使う社内向けWEBアプリをここに登録し、ワンクリックで呼び出せるように
+    します。 / Web apps that open-easy-web does not manage itself (they run as
+    separate binaries on separate ports) but are used often during day-to-day
+    operations, registered here for one-click access.
+  </p>
+  <div class="form-grid">
+    <div>
+      <label for="ext-tool-rs-sync-url">RS-Sync URL (GitHub複数アカウント・複数プロバイダのリポジトリ同期ツール)</label>
+      <input id="ext-tool-rs-sync-url" type="text" value="http://127.0.0.1:8095/" placeholder="例: http://127.0.0.1:8095/" />
+    </div>
+  </div>
+  <div class="buttons">
+    <button
+      id="ext-tool-rs-sync-launch"
+      onclick="window.open((document.getElementById('ext-tool-rs-sync-url').value || 'http://127.0.0.1:8095/'), '_blank', 'noopener,noreferrer')"
+    >🔗 RS-Syncを起動 / Launch RS-Sync</button>
+  </div>
+  <p class="muted">
+    RS-Sync(<a href="https://github.com/aon-co-jp/rs-sync" target="_blank" rel="noopener noreferrer">aon-co-jp/rs-sync</a>)は、
+    GitHub・RS-Git・Gitea・Gitbucketなど複数アカウント/複数プロバイダに
+    またがるリポジトリの一方向/双方向ミラー同期を行うRust+Poem製Webアプリ
+    (既定ポート8095、`RS_SYNC_PORT`環境変数で変更可)。上記URLは実際に
+    RS-Syncを起動しているホスト:ポートに合わせて書き換えてください。 /
+    RS-Sync is a Rust+Poem web app that mirrors repositories one-way or
+    two-way across multiple GitHub/RS-Git/Gitea/Gitbucket accounts (default
+    port 8095, override with the <code>RS_SYNC_PORT</code> env var). Adjust
+    the URL above to match wherever your RS-Sync instance actually runs.
+  </p>
+</section>
+
 <section id="site-ops-section" class="hidden">
   <h2>Create Folder / Upload Files (フォルダー作成 / アップロード)</h2>
   <p class="muted">
@@ -567,3 +601,20 @@ pub const SHELL_HTML: &str = r#"
 
 <p id="status" class="muted" aria-live="polite"></p>
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::SHELL_HTML;
+
+    /// 2026-07-27追記: RS-Sync(GitHub複数アカウント/複数プロバイダ同期
+    /// ツール)を「外部ツール」セクションへワンクリック起動リンクとして
+    /// 登録したことの回帰確認。
+    #[test]
+    fn shell_html_registers_rs_sync_as_a_launchable_external_tool() {
+        assert!(SHELL_HTML.contains(r#"id="external-tools-section""#));
+        assert!(SHELL_HTML.contains(r#"id="ext-tool-rs-sync-url""#));
+        assert!(SHELL_HTML.contains(r#"id="ext-tool-rs-sync-launch""#));
+        assert!(SHELL_HTML.contains("http://127.0.0.1:8095/"));
+        assert!(SHELL_HTML.contains("aon-co-jp/rs-sync"));
+    }
+}
