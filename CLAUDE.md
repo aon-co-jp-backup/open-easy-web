@@ -1933,3 +1933,20 @@ open-web-serverがApache＋Nginxのハイブリッド仕様のWebサーバーと
 ミッションクリティカルな用途向けに、24時間365日ノンストップの
 サーバー対応WEBサイト開発を全面的にバックアップするフレームワーク・
 ミドルウェアとして機能することを目指す。
+
+- **2026-07-27(続き5) RS-Gitを「外部ツール」セクションへ登録(ユーザー指示「easy-web.tokyoのTOPページにリンク集で、open-redmineとrs-syncとRGitなどへのリンクと実装をお願いします」)**:
+  1. **VPS上で`easy-web.tokyo`への未登録を発見・修正**: RS-Git(バイナリ名
+     `rgit`、port 8090)を`POST /admin/tenants`で`easy-web.tokyo`の
+     `/rs-git`パスへ登録。**RS-Git自身のUIは`/ui/`配下にマウントされて
+     いる**ため(直接`curl http://127.0.0.1:8090/`は404、`/ui/`は200)、
+     実際のURLは`https://easy-web.tokyo/rs-git/ui/`である点を確認・
+     README/UI双方に明記した。
+  2. **`src/shell.rs`にRS-Git用のURL入力欄+起動ボタンを追加**(RS-Sync・
+     open-redmineと同じ静的リンクパターン)。既定値
+     `https://easy-web.tokyo/rs-git/ui/`。
+  3. **検証**: `cargo test`**9件全green**(新規
+     `shell_html_registers_rs_git_as_a_launchable_external_tool`含む)。
+     `curl https://easy-web.tokyo/rs-git/ui/`が実際に200を返すことを
+     確認済み。
+  - 次にすべきこと: VPS上の`open-easy-web-wasm`をrebuildして本番の
+    `easy-web.tokyo`ページに反映(前回のRS-Sync/open-redmineと同じ手順)。
