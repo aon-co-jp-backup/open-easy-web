@@ -230,6 +230,44 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-28(続き2) バックエンド(open-easy-web-server)側も同じソースツリー乖離を発見・解消(直前エントリの「次にすべきこと(1)」に対応)**:
+  1. **確認**: `/root/RUNO/open-easy-web/open-easy-web-server`も同じく
+     `aon-co-jp/RUNO`のチェックアウトで、`src/`に`auto_update.rs`・
+     `dist_sync.rs`の2モジュールが丸ごと欠落していた(実際の
+     `aon-co-jp/open-easy-web`本体の`server/src/`と`ls`で突き合わせて
+     確認)——つまり本番バックエンドは分散同期・ディザスタリカバリ・
+     深夜自動アップデート機能を一切持たない、フロントエンドより
+     さらに古いスナップショットで動いていた。
+  2. **解消**: `/root/open-easy-web-app/server`(直前エントリで既に
+     クリーンcloneした同じリポジトリ)で`cargo build --release`
+     (2分20秒、警告なし)。データ永続化パス(`OPEN_EASYWEB_SITES_ROOT`
+     既定`/var/www`等)はいずれも絶対パスでWorkingDirectoryに依存しない
+     設計であることをソースで確認済みのため、切り替えによるデータ
+     消失リスクは無いと判断した。systemdユニットの
+     `WorkingDirectory`/`ExecStart`を新バイナリ
+     (`/root/open-easy-web-app/server/target/release/
+     open-easy-web-server`——旧バイナリ名`open-easyweb-server`から
+     ハイフンの有無が変わっている点に注意)へ切り替え、
+     `systemctl restart`。
+  3. **検証(実測)**: `https://easy-web.tokyo/`→200(既存機能への影響
+     なし)。新規追加された`GET /admin/dist-sync/targets`・
+     `GET /admin/auto-update`がいずれも期待通り503
+     (`OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN`未設定時の安全側デフォルト、
+     設計通りの動作)を返すことを確認——モジュール自体が実際に配線
+     されていることの裏付け。既存のOTP認証フロー
+     (`POST /api/auth/request-otp`、`{"contact": "..."}`)も
+     `200`(実SMTP経由でメール送信)を確認し、バックエンド切り替えに
+     よる既存機能の回帰が無いことを確認した。
+  4. **正直な開示**: (1) 新規追加された分散同期・自動アップデート機能
+     自体の実運用(実際に`OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN`等を設定
+     しての動作確認)は今回のスコープ外(あくまで「配線されている
+     ことの確認」まで)。(2) 旧`/root/RUNO/`配下のディレクトリは削除
+     せず残置した(即座に問題が見つかった場合に切り戻せるように)。
+  - 次にすべきこと: (1) 落ち着いたタイミングで旧`/root/RUNO/open-easy-web/`
+    配下(フロントエンド・バックエンドとも)の削除、(2) 分散同期・
+    自動アップデート機能を実際に有効化して運用するかどうかの判断
+    (現状は安全側で無効のまま)。
+
 - **2026-07-28(続き) VPS上のWASMソースツリー乖離問題を解消(直前エントリの「次にすべきこと(1)」に対応、ユーザー報告「easy-web.tokyoからruno.tokyo/rs-syncを起動できません」への対応)**:
   1. **原因確認**: VPSの`.wasm`バイナリを`grep`したところ`runo.tokyo/
      rs-sync`(廃止済みURL)が3件・新URLが0件——直前エントリで既知の

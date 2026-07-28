@@ -11,7 +11,16 @@
 > 2026-07-20、デプロイ先既定パス変更・ネットワークドライブ移設時の
 > 注意事項を追記)。
 
-## -1. VPS上のデプロイ先ソースツリーがgit repoと乖離する罠(2026-07-28発見・解消)
+## -1. VPS上のデプロイ先ソースツリーがgit repoと乖離する罠(2026-07-28発見・解消、フロント/バックエンド両方で発生)
+
+**フロントエンドだけでなくバックエンド(`open-easy-web-server`)も同様に
+乖離しうる**——2026-07-28、`/root/RUNO/open-easy-web/open-easy-web-server`
+も同じ`aon-co-jp/RUNO`チェックアウトで、`auto_update.rs`・`dist_sync.rs`の
+2モジュールが丸ごと欠落していた実例あり。バイナリ名が
+`open-easyweb-server`(旧)→`open-easy-web-server`(新、ハイフン位置が
+違う)へ変わっている点も切り替え時の見落としポイント。切り替え前に
+必ず`ls <VPSのserver/src>`と`ls <ローカルのserver/src>`を突き合わせて
+モジュール数が一致するか確認すること。
 
 **移設・再デプロイのたびに必ず確認すること**: VPSの`OPEN_EASYWEB_STATIC_DIR`
 が指すディレクトリが、実際に`aon-co-jp/open-easy-web`の`git clone`
