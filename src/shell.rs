@@ -12,12 +12,12 @@ pub const SHELL_HTML: &str = r#"
   <p class="muted">
     これは管理者向け本番環境です。試しに使ってみたい方はデモ環境をどうぞ:
     <a href="/demo">https://easy-web.tokyo/demo</a><br>
-    This is the admin/production environment. If you just want to try it out, use the demo instead:
+    This is the admin/production environment. If you just want to try it out, use the demo instead:<br>
     <a href="/demo">https://easy-web.tokyo/demo</a>
   </p>
 </header>
 
-<section id="setup-wizard-section">
+<section id="setup-wizard-section" class="hidden">
   <h2>First-time Setup Guide (初回セットアップガイド)</h2>
   <p class="muted">
     VPSを借りたら最初にこの画面を確認してください。SFTPソフトで

@@ -89,6 +89,18 @@ pub fn start() -> Result<(), JsValue> {
         .set_onchange(Some(site_import_change_closure.as_ref().unchecked_ref()));
     site_import_change_closure.forget();
 
+    // 2026-07-29追記(ユーザー指示): First-time Setup Guide(初回セットアップ
+    // ガイド)は本番(`easy-web.tokyo/`)では表示せず、デモ環境
+    // (`easy-web.tokyo/demo`)でのみ表示する。本番/デモは同一のWASM
+    // バイナリ・同一のSHELL_HTMLを共有しているため、実行時に
+    // `location().pathname()`を見て表示/非表示を切り替える(RS-Syncの
+    // `/demo`判定と同じ手法)。
+    if dom::window().location().pathname().map(|p| p.contains("/demo")).unwrap_or(false) {
+        if let Ok(section) = by_id("setup-wizard-section").dyn_into::<web_sys::Element>() {
+            section.class_list().remove_1("hidden").ok();
+        }
+    }
+
     profiles::render_site_manager();
     profiles::sync_active_site_label();
     auth_ui::wire()?;

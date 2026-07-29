@@ -29,6 +29,7 @@ features = [
     "BlobPropertyBag",
     "console",
     "Document",
+    "DomTokenList",
     "Element",
     "Event",
     "EventTarget",
