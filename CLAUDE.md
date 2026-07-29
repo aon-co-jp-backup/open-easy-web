@@ -230,6 +230,29 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-29(続き) First-time Setup Guideを本番から非表示にし、デモ環境限定へ変更(ユーザー指示)**:
+  1. **`src/shell.rs`**: `setup-wizard-section`(Step 1〜の初回セットアップ
+     ガイド)に`class="hidden"`を追加(既定非表示)。英語の
+     「use the demo instead:」文にも日本語文と同じ`<br>`を追加し、
+     URLの前で改行されるよう修正。
+  2. **`src/lib.rs`の`start()`**: `dom::window().location().pathname()`が
+     `/demo`を含む場合のみ、`setup-wizard-section`から`hidden`クラスを
+     除去して表示する(RS-Syncの`/demo`判定と同じ「本番/デモは同一
+     バイナリ・同一HTML、実行時にURLで出し分け」という手法)。
+  3. **`Cargo.toml`**: `class_list()`(`DomTokenList`を返す)呼び出しに
+     必要な`web-sys`の`DomTokenList` featureが未列挙でビルドエラーに
+     なったため追加。
+  4. **検証**: `cargo build --target wasm32-unknown-unknown --release`・
+     `cargo test shell::`(5件全green)いずれも成功。VPS上でクリーンな
+     デプロイ経路(`git pull`→ビルド→`wasm-bindgen`→`static/`更新)で
+     反映し、**実ブラウザで確認**: `https://easy-web.tokyo/`は
+     First-time Setup Guide(Step 1〜)が一切表示されず、`https://
+     easy-web.tokyo/demo`では引き続きStep 1から全ステップが表示される
+     ことを`get_page_text`で確認した(Step 6の自動アップデート設定・
+     DuckDNS設定・アカウントログインは`setup-wizard-section`に含まれない
+     独立セクションのため、本番でも従来通り表示されることも確認)。
+  - 次にすべきこと: 特になし。
+
 - **2026-07-29 open-easy-web自身の本番ページにデモ環境案内リンクを追加+`/demo`テナント登録(ユーザー指示、RS-Sync/open-redmineと同じ「本番/デモ分離」パターンをopen-easy-web自身にも適用)**:
   1. **`src/shell.rs`**: `app-header`の紹介文直下に、日本語・英語併記で
      `/demo`への案内リンクを追加。新規テスト
