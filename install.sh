@@ -65,6 +65,44 @@ else
     echo "==> 既存のsystemdサービスが見つかったため上書きしません(${SERVICE_FILE})"
 fi
 
+echo ""
+echo "==> 既存の関連DATAを取り込みますか?(2026-07-29追記、ユーザー指示)"
+echo "    以前に稼働していたopen-easy-webのバックアップ(ユーザー情報・"
+echo "    AI検出重み・自動アップデート設定等)があれば、ここで復元できます。"
+printf "    取り込みますか? [y/N]: "
+read -r restore_answer || restore_answer="n"
+case "$restore_answer" in
+    [yY]*)
+        echo "    復元元を選んでください: 1) ローカルのtar.gz  2) GitHubリポジトリ  3) rclone(Googleドライブ等)"
+        printf "    番号を入力 [1-3]: "
+        read -r restore_kind || restore_kind=""
+        case "$restore_kind" in
+            1)
+                printf "    tar.gzのパス: "; read -r p
+                "$(dirname "$0")/scripts/data-portability.sh" restore local "$p"
+                ;;
+            2)
+                printf "    リポジトリURL: "; read -r repo_url
+                printf "    ブランチ [main]: "; read -r branch; branch="${branch:-main}"
+                printf "    GitHubトークン: "; read -r gh_token
+                "$(dirname "$0")/scripts/data-portability.sh" restore github "$repo_url" "$branch" "$gh_token"
+                ;;
+            3)
+                printf "    rcloneリモート(例: gdrive:backups/open-easy-web.tar.gz): "; read -r remote
+                "$(dirname "$0")/scripts/data-portability.sh" restore rclone "$remote"
+                ;;
+            *)
+                echo "    選択が無効なため、データ復元をスキップします。"
+                ;;
+        esac
+        ;;
+    *)
+        echo "    データ復元はスキップしました(新規インストールとして続行)。"
+        ;;
+esac
+
 echo "==> 完了。次のコマンドで必須環境変数を設定してから起動してください:"
 echo "    sudo systemctl edit open-easy-web  # OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL 等を追記"
 echo "    sudo systemctl enable --now open-easy-web"
+echo ""
+echo "==> アンインストール時にデータを退避したい場合は uninstall.sh を使ってください。"

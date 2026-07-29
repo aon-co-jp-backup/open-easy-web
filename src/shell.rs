@@ -108,15 +108,25 @@ pub const SHELL_HTML: &str = r#"
   <h3>Step 5: Distributed sync &amp; disaster recovery (⑤ このファイルサーバーの分散同期・ディザスタリカバリ設定、任意)</h3>
   <p class="muted">
     このファイルサーバー(上記でセットアップしたopen-easy-webインスタンス)が
-    抱えるサイトデータを、他のVPSへ継続的に複製する「分散同期クローンDB」・
+    抱えるサイトデータを、他の接続先へ継続的に複製する「分散同期クローンDB」・
     ネット切断や非常時にメール/Googleドライブへ自動退避する「ディザスタ
     リカバリ」を、ここでまとめて設定できます。<strong>設定は任意です——
-    スキップしてもこのファイルサーバーは通常どおり使用できます。</strong> /
+    スキップしてもこのファイルサーバーは通常どおり使用できます。</strong>
+    2026-07-29追記: 下の「同期先」はVPS専用ではなく、SFTPで接続できる
+    ものであれば<strong>レンタルサーバー・別のPC・タブレット・スマホ
+    (Termux等のSFTPサーバーアプリ導入時)・NASドライブ</strong>など何でも
+    登録できます(ホスト名+ポート+ユーザー名+パスワードのみが必要な
+    汎用SFTP接続のため)。 /
     You can configure "distributed sync clone DB" (continuously replicating
-    this file server's site data to other VPS instances) and "disaster
+    this file server's site data to other targets) and "disaster
     recovery" (automatic fallback to email/Google Drive on disconnection or
     emergency) together here. <strong>This step is optional — skipping it
     does not block normal use of this file server.</strong>
+    Added 2026-07-29: the "sync target" below isn't VPS-only — anything
+    reachable over SFTP works, including a <strong>rented server, another
+    PC, a tablet, a phone (with an SFTP server app like Termux), or a NAS
+    drive</strong> (it's a generic SFTP connection needing only host, port,
+    username, and password).
   </p>
   <p class="muted">
     管理トークン(サーバー起動時の <code>OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN</code>
@@ -130,7 +140,7 @@ pub const SHELL_HTML: &str = r#"
     <label>Admin token (管理トークン)<input type="password" id="dist-sync-admin-token" placeholder="OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN"></label>
   </div>
 
-  <h4>5a. Register a VPS clone target (他VPSへの分散同期先を登録)</h4>
+  <h4>5a. Register a sync target — VPS, rented server, PC, tablet, phone, or NAS (他の接続先への分散同期先を登録——VPS・レンタルサーバー・PC・タブレット・スマホ・NAS)</h4>
   <div class="form-grid">
     <label>Host (ホスト)<input type="text" id="dist-sync-host" placeholder="vps2.example.tokyo"></label>
     <label>Port (ポート)<input type="number" id="dist-sync-port" value="22"></label>
@@ -140,7 +150,7 @@ pub const SHELL_HTML: &str = r#"
     <label>Label, optional (任意のラベル)<input type="text" id="dist-sync-label" placeholder="東京VPS #2"></label>
   </div>
   <div class="buttons">
-    <button id="dist-sync-register-btn">Register VPS sync target (VPS同期先を登録)</button>
+    <button id="dist-sync-register-btn">Register sync target (同期先を登録)</button>
     <button id="dist-sync-refresh-btn">Refresh list (一覧を更新)</button>
   </div>
   <p id="dist-sync-result" class="muted" aria-live="polite"></p>

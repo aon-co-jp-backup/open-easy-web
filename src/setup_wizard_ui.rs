@@ -133,7 +133,7 @@ fn on_register_dist_sync_target() {
             Ok(_) => {
                 set_text(
                     "dist-sync-result",
-                    "✅ VPS同期先を登録しました。 / VPS sync target registered.",
+                    "✅ 同期先を登録しました(VPS/レンタルサーバー/PC/タブレット/スマホ/NAS等)。 / Sync target registered (VPS/rented server/PC/tablet/phone/NAS/etc).",
                 );
                 refresh_dist_sync_targets(base_url).await;
             }
