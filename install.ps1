@@ -44,4 +44,36 @@ if ($existing) {
 }
 
 Write-Host ""
+Write-Host "==> 既存の関連DATAを取り込みますか?(2026-07-29追記、ユーザー指示)"
+$restoreAnswer = Read-Host "    取り込みますか? [y/N]"
+if ($restoreAnswer -match '^[yY]') {
+    Write-Host "    復元元を選んでください: 1) ローカルのtar.gz  2) GitHubリポジトリ  3) rclone(Googleドライブ等)"
+    $kind = Read-Host "    番号を入力 [1-3]"
+    $portabilityScript = Join-Path $PSScriptRoot "scripts\data-portability.ps1"
+    switch ($kind) {
+        "1" {
+            $p = Read-Host "    tar.gzのパス"
+            & $portabilityScript restore local $p
+        }
+        "2" {
+            $repoUrl = Read-Host "    リポジトリURL"
+            $branch = Read-Host "    ブランチ [main]"
+            if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
+            $ghToken = Read-Host "    GitHubトークン"
+            & $portabilityScript restore github $repoUrl -Branch $branch -GithubToken $ghToken
+        }
+        "3" {
+            $remote = Read-Host "    rcloneリモート(例: gdrive:backups/open-easy-web.tar.gz)"
+            & $portabilityScript restore rclone $remote
+        }
+        default {
+            Write-Host "    選択が無効なため、データ復元をスキップします。"
+        }
+    }
+} else {
+    Write-Host "    データ復元はスキップしました(新規インストールとして続行)。"
+}
+
+Write-Host ""
+Write-Host "==> アンインストール時にデータを退避したい場合は uninstall.ps1 を使ってください。"
 Write-Host "==> 完了。"
