@@ -72,6 +72,13 @@ struct PersistedSettings {
 pub struct AutoUpdateState {
     settings_path: PathBuf,
     enabled: std::sync::RwLock<bool>,
+    /// 2026-07-29追記(ユーザー指示、RS-Syncのスケジューラ無言停止バグを
+    /// 受けての横展開): `run_daily_check_loop`が1サイクルの開始時に
+    /// 更新するハートビート。このループは1日1回しか回らないため、
+    /// RS-Sync(1分間隔)と違い「更新が無い=異常」の閾値は日単位になる
+    /// (`GET /admin/auto-update`のレスポンスに含め、25時間を超えて
+    /// 更新が無ければ異常とみなす、呼び出し側の責務)。
+    last_cycle_started_at: std::sync::RwLock<std::time::Instant>,
 }
 
 impl AutoUpdateState {
@@ -82,7 +89,16 @@ impl AutoUpdateState {
             Ok(bytes) => serde_json::from_slice::<PersistedSettings>(&bytes).map(|s| s.enabled).unwrap_or(false),
             Err(_) => std::env::var("OPEN_EASYWEB_AUTO_UPDATE").map(|v| v == "true" || v == "1").unwrap_or(false),
         };
-        Self { settings_path, enabled: std::sync::RwLock::new(enabled) }
+        Self { settings_path, enabled: std::sync::RwLock::new(enabled), last_cycle_started_at: std::sync::RwLock::new(std::time::Instant::now()) }
+    }
+
+    pub fn mark_cycle_started(&self) {
+        *self.last_cycle_started_at.write().unwrap() = std::time::Instant::now();
+    }
+
+    /// 直近のサイクル開始から経過した秒数。
+    pub fn seconds_since_last_cycle(&self) -> u64 {
+        self.last_cycle_started_at.read().unwrap().elapsed().as_secs()
     }
 
     pub fn is_enabled(&self) -> bool {
@@ -315,13 +331,27 @@ pub async fn run_daily_check_loop(auto_update_state: std::sync::Arc<AutoUpdateSt
         tracing::info!(wait_secs = wait.as_secs(), "auto_update: sleeping until next check (local midnight)");
         tokio::time::sleep(wait).await;
 
+        // ハートビート更新(2026-07-29追記): disabled時もタイムアウト時も
+        // 必ず「サイクル自体は起動した」ことを記録する——RS-Sync側で発生した
+        // 「ループが無言のまま永久停止」バグをここでも早期検知できるように。
+        auto_update_state.mark_cycle_started();
+
         if !auto_update_state.is_enabled() {
             tracing::debug!("auto_update: disabled, skipping this cycle");
             continue;
         }
 
-        if let Err(e) = check_and_apply_update(bind_addr, &stop_accepting).await {
-            tracing::warn!(error = %e, "auto_update: update cycle failed (server continues running the current version)");
+        // 2026-07-29追記: 内部のHTTPクライアント(`reqwest::Client`)は
+        // タイムアウト未設定のままだと理論上は無期限にハングしうる
+        // (RS-Sync側で見つかった実障害と同種のリスク)。ここは非同期の
+        // `reqwest::Client`のため一つのタスクがハングしても他のタスクの
+        // 実行自体は止まらないが、それでも「アップデートが永久に確認
+        // されない」状態に陥るのを避けるため、サイクル全体に外側から
+        // 30分のタイムアウトを掛ける。
+        match tokio::time::timeout(Duration::from_secs(30 * 60), check_and_apply_update(bind_addr, &stop_accepting)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => tracing::warn!(error = %e, "auto_update: update cycle failed (server continues running the current version)"),
+            Err(_) => tracing::warn!("auto_update: update cycle timed out after 30 minutes (server continues running the current version)"),
         }
     }
 }
@@ -393,6 +423,20 @@ mod tests {
     fn env_test_lock() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
         LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// 2026-07-29追記: ハートビート(`mark_cycle_started`/
+    /// `seconds_since_last_cycle`)の基本契約を確認する回帰テスト。
+    #[test]
+    fn heartbeat_reflects_recent_mark_cycle_started_call() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AutoUpdateState::load(dir.path().join("settings.json"));
+        // `load`直後もインスタンス生成時刻がセットされているため、
+        // 経過秒数はごく小さい値になるはず。
+        assert!(state.seconds_since_last_cycle() < 5);
+
+        state.mark_cycle_started();
+        assert!(state.seconds_since_last_cycle() < 2);
     }
 
     #[test]

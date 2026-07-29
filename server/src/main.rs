@@ -277,13 +277,23 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
             return unauthorized;
         }
         return match method {
-            Method::GET => json_response(
-                StatusCode::OK,
-                &serde_json::json!({
-                    "enabled": state.auto_update.is_enabled(),
-                    "current_version": auto_update::current_version_display(),
-                }),
-            ),
+            Method::GET => {
+                // 2026-07-29追記(ユーザー指示、RS-Sync側のスケジューラ
+                // 無言停止バグの横展開): `last_cycle_started_at`が25時間
+                // 以上更新されていなければ、深夜バックグラウンドループ
+                // 自体が停止している可能性があるとみなす。
+                let seconds_since = state.auto_update.seconds_since_last_cycle();
+                let healthy = seconds_since < 25 * 3600;
+                json_response(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "enabled": state.auto_update.is_enabled(),
+                        "current_version": auto_update::current_version_display(),
+                        "scheduler_healthy": healthy,
+                        "scheduler_seconds_since_cycle": seconds_since,
+                    }),
+                )
+            }
             Method::POST => {
                 let bytes = match req.into_body().collect().await {
                     Ok(c) => c.to_bytes(),
