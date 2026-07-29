@@ -181,6 +181,30 @@ python -m http.server 8080
 > with `cargo build --target-dir <local-temp-dir>` and run `wasm-bindgen`
 > against that local copy instead.
 
+## Server-side (open-easy-web-server) install (added 2026-07-23)
+
+The backend API binary is distributed separately via `install.sh` (Linux,
+systemd) / `install.ps1` (Windows) / GitHub Releases (built by
+`.github/workflows/release.yml` on tag push). This package does not
+include the WASM frontend — build it separately via the steps above.
+
+```
+curl -fsSL https://github.com/aon-co-jp/open-easy-web/releases/latest/download/open-easy-web-server-linux-x86_64.tar.gz | tar xz
+sudo ./install.sh
+```
+
+### Data portability on install/uninstall (added 2026-07-29)
+
+`install.sh`/`install.ps1` now ask whether to restore existing data at
+startup — from a local tar.gz, a GitHub repository, or an rclone remote
+(Google Drive and other clouds). The matching `uninstall.sh`/`uninstall.ps1`
+(new) ask whether to back up data the same three ways before removal.
+Implemented in `scripts/data-portability.sh` (`.ps1`). This project never
+handles Google Drive OAuth itself (same policy as elsewhere in this
+ecosystem) — it relies on an `rclone` remote you configure yourself ahead
+of time. Whether a GitHub backup repo is public or private is entirely up
+to how you created that repo.
+
 ## Launch by IP
 
 ```bash

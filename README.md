@@ -170,6 +170,18 @@ curl -fsSL https://github.com/aon-co-jp/open-easy-web/releases/latest/download/o
 sudo ./install.sh
 ```
 
+### インストール/アンインストール時のデータ移行(2026-07-29追加)
+
+`install.sh`/`install.ps1`は、実行時に「既存の関連DATAを取り込むか」を
+尋ねます。取り込む場合はローカルのtar.gz・GitHubリポジトリ・rclone
+(Googleドライブ等)のいずれかから復元できます。対になる
+`uninstall.sh`/`uninstall.ps1`(新設)は、アンインストール前に同じ
+3方式でデータを退避するか尋ねます。実体は`scripts/data-portability.sh`
+(`.ps1`)——GoogleドライブそのものへのOAuth認証は本ソフトウェアから
+代行しません(`rclone config`で事前にご自身が設定したリモートを使う
+方式です)。GitHubリポジトリの公開/非公開は、リポジトリ作成時にご自身で
+選んだ設定に従います。
+
 ## IPアドレスから起動する
 
 ```bash

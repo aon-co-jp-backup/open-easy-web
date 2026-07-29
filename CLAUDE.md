@@ -253,6 +253,32 @@ python -m http.server 8080   # index.html + pkg/ を配信
      独立セクションのため、本番でも従来通り表示されることも確認)。
   - 次にすべきこと: 特になし。
 
+- **2026-07-29(続き5) Windows版`uninstall.ps1`+`data-portability.ps1`を新設、`install.ps1`に復元プロンプトを配線(前回チェックポイントの残課題を解消)**:
+  1. **`scripts/data-portability.ps1`**: 同日先に作成した
+     `scripts/data-portability.sh`(バックアップ/リストアをローカル
+     tar.gz・GitHubリポジトリ・rclone〈Googleドライブ等、OAuth代行は
+     しない既存方針通り〉の3方式に対応)のPowerShell移植。
+  2. **`uninstall.ps1`(新規)**: `install.ps1`の対になるアンインストール
+     スクリプト。停止・削除前にデータ退避するかを尋ね、上記3方式から
+     選べる(`uninstall.sh`と同じ設計)。
+  3. **`install.ps1`に復元プロンプトを追加**: 既存の関連DATAを取り込むか
+     質問し、選んだ方式で`data-portability.ps1 restore`を呼ぶ(`install.sh`
+     と同じ設計)。
+  4. **正直な開示・ハマった点**: 新規作成した`.ps1`3本を
+     `[System.Management.Automation.Language.Parser]::ParseFile()`で
+     検証したところ`MissingEndCurlyBrace`エラーが出たが、これは
+     `ParseFile`のファイル読み込み時のエンコーディング解釈に起因する
+     誤検知で、実際のファイル内容(バイト列)に構文エラーは無かった
+     ——`ReadAllText`で読んだ文字列をそのまま`ParseInput()`へ渡すと
+     3本とも0件のエラーで通ることを確認した。次回同様の検証を行う際は
+     `ParseFile`ではなく`ParseInput`(または実際に`powershell.exe -File`
+     で実行)を使うこと。
+  - 次にすべきこと: (1) 実Windows環境での`install.ps1`/`uninstall.ps1`
+    実行確認(この開発環境では構文検証のみ、実際のサービス登録・削除・
+    バックアップ往復は未実施)、(2) フォルダ同期(RS-Sync)のSFTP実機検証、
+    (3) トークン期限切れ通知の実地確認(いずれもrs-sync側CLAUDE.md
+    HANDOFF続き5から継続)。
+
 - **2026-07-29 open-easy-web自身の本番ページにデモ環境案内リンクを追加+`/demo`テナント登録(ユーザー指示、RS-Sync/open-redmineと同じ「本番/デモ分離」パターンをopen-easy-web自身にも適用)**:
   1. **`src/shell.rs`**: `app-header`の紹介文直下に、日本語・英語併記で
      `/demo`への案内リンクを追加。新規テスト

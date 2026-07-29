@@ -326,6 +326,31 @@ connection-info`)を呼び出すが、`api_auth.rs`(自サーバーAPI、
   リネームして依存させることで回避できる(このリポジトリでは
   `rand_for_test_keys`という名前でリネーム)。
 
+## 14. インストール/アンインストール時のデータ移行(2026-07-29新設)
+
+`scripts/data-portability.sh`(`.ps1`)——ローカルtar.gz・GitHub
+リポジトリ・rclone(Googleドライブ等)の3方式でバックアップ/リストア
+できる小さなスクリプト。`install.sh`/`install.ps1`が起動時に「既存の
+関連DATAを取り込むか」を尋ね、対になる`uninstall.sh`/`uninstall.ps1`が
+削除前に同じ3方式で退避するかを尋ねる。移植時の要点:
+
+- バックアップ対象は`OPEN_EASYWEB_USERS_STATE`/`OPEN_EASYWEB_AI_STATE`/
+  `OPEN_EASYWEB_AUTO_UPDATE_SETTINGS_FILE`(いずれも既定パスは
+  `/var/www/.open-easy-web-*.json`、Windowsは
+  `C:\ProgramData\open-easy-web\...`)+`dist_sync`のジャーナルディレクトリ。
+  アップロード済みサイトファイル自体(`OPEN_EASYWEB_SITES_ROOT`)は
+  既定で対象外(巨大になりうるため、`--include-sites-root`明示時のみ)。
+- **Googleドライブ等へのOAuth認証はこのスクリプトから代行しない**
+  (このエコシステム共通方針)——`rclone config`でユーザー自身が事前に
+  設定したリモートを使う。GitHubの公開/非公開はリポジトリ作成時に
+  ユーザー自身が選んだ設定に従うのみ。
+- **罠(2026-07-29発見)**: 新規作成した`.ps1`を
+  `[System.Management.Automation.Language.Parser]::ParseFile()`で構文
+  検証すると`MissingEndCurlyBrace`という誤検知が出ることがある(実際の
+  ファイル内容に構文エラーは無い、`ParseFile`のエンコーディング解釈に
+  起因)。`[System.IO.File]::ReadAllText()`で読んだ文字列を
+  `ParseInput()`へ渡す形で検証すると正しく判定できる。
+
 ## 10. 「ルートで`cargo test`しても実は何も検証していない」構造の罠
 (2026-07-23発見)
 
