@@ -221,30 +221,15 @@ pub const SHELL_HTML: &str = r#"
 </section>
 
 <section>
-  <h3>Step 7: Database encryption (⑦ DATABASE暗号化、既定ON)</h3>
+  <h3>Database encryption (DATABASE暗号化、常時自動)</h3>
   <p class="muted">
     アカウントのメールアドレス・電話番号・認証アプリ(TOTP)シークレット等
-    を保存するDATABASEファイルを、ディスク上でAES-256-GCM(ランダムな
-    nonceを毎回生成する高速な暗号化)で自動的に保護します。管理者が
-    ログイン・データ読み書きする際は裏で自動的に復号されるため、
-    暗号化の有無を意識する必要はありません——万一ファイルそのものが
-    盗まれても、中身は暗号化されたままです。既定は有効(ON)です。<br>
-    Automatically protects the DATABASE file (account emails, phone
-    numbers, authenticator app secrets) at rest using AES-256-GCM
-    (a fresh random nonce every time). Encryption/decryption happens
-    transparently in the background — administrators never need to think
-    about it. If the file itself is stolen, its contents remain
-    encrypted. Default: ON.
+    を保存するDATABASEファイルは、ディスク上で常にAES-256-GCM(ランダムな
+    nonceを毎回生成する高速な暗号化)で自動的に保護されます。設定項目は
+    無く、管理者が意識する必要はありません(裏で自動的に暗号化・復号
+    されます)——万一ファイルそのものが盗まれても、中身は暗号化された
+    ままです。
   </p>
-  <label>Admin token (管理トークン)<input type="password" id="db-encryption-admin-token" placeholder="OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN"></label>
-  <label class="toggle-row">
-    <input type="checkbox" id="db-encryption-enabled-toggle" checked>
-    Encrypt the database (DATABASEを暗号化する)
-  </label>
-  <div class="buttons">
-    <button id="db-encryption-refresh-status-btn">Refresh status (現在の設定を取得)</button>
-  </div>
-  <p id="db-encryption-status" class="muted" aria-live="polite"></p>
 </section>
 
 <div id="site-mgmt-section" class="hidden">

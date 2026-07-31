@@ -323,8 +323,8 @@ mod tests {
     use super::*;
 
     fn test_encryption() -> Arc<DbEncryptionState> {
-        let dir = std::env::temp_dir().join(format!("owsrv-userstore-enc-{}", uuid::Uuid::new_v4()));
-        Arc::new(DbEncryptionState::load(dir.join("settings.json"), &dir.join("key.bin")))
+        let key_path = std::env::temp_dir().join(format!("owsrv-userstore-enc-{}.key", uuid::Uuid::new_v4()));
+        Arc::new(DbEncryptionState::load(&key_path))
     }
 
     fn store() -> UserStore {

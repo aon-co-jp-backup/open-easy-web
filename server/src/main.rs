@@ -62,10 +62,6 @@ struct AppState {
     /// 深夜バックグラウンド自動アップデートの有効/無効設定
     /// (`auto_update.rs`参照、環境変数またはGUI/API経由で変更可能)。
     auto_update: Arc<auto_update::AutoUpdateState>,
-    /// DATABASE(`users`が永続化するJSONファイル)の暗号化設定
-    /// (`db_encryption.rs`参照、既定ON、環境変数/GUI/対話式コマンドライン
-    /// 経由で変更可能)。
-    db_encryption: Arc<db_encryption::DbEncryptionState>,
     /// 自分自身のリスンアドレス(`auto_update`のヘルスチェック・
     /// 「今すぐ確認」機能が新プロセスへ問い合わせる先として使う)。
     server_bind_addr: std::net::SocketAddr,
@@ -93,14 +89,13 @@ impl AppState {
             "/var/www/.open-easy-web-ai-state.json",
         );
         let weights = php_detector::load_weights(&ai_state_path);
-        let db_encryption = Arc::new(db_encryption::DbEncryptionState::load(
-            env_path("OPEN_EASYWEB_DB_ENCRYPTION_SETTINGS_FILE", "/var/www/.open-easy-web-db-encryption.json"),
-            &env_path("OPEN_EASYWEB_DB_ENCRYPTION_KEY_FILE", "/var/www/.open-easy-web-db-encryption.key"),
-        ));
-        let users = users::UserStore::load(
-            env_path("OPEN_EASYWEB_USERS_STATE", "/var/www/.open-easy-web-users.json"),
-            Arc::clone(&db_encryption),
-        );
+        // DATABASE暗号化(`db_encryption.rs`)は常に自動で有効——管理者が
+        // 意識する設定項目・トグル・質問は無い(ユーザー指示、2026-07-31)。
+        let db_encryption = Arc::new(db_encryption::DbEncryptionState::load(&env_path(
+            "OPEN_EASYWEB_DB_ENCRYPTION_KEY_FILE",
+            "/var/www/.open-easy-web-db-encryption.key",
+        )));
+        let users = users::UserStore::load(env_path("OPEN_EASYWEB_USERS_STATE", "/var/www/.open-easy-web-users.json"), db_encryption);
         let fixed_account_email = fixed_account_email();
         let fixed_account_phone = std::env::var("OPEN_EASYWEB_FIXED_ACCOUNT_PHONE").ok();
         let fixed_account_backup_email =
@@ -141,7 +136,6 @@ impl AppState {
                 "OPEN_EASYWEB_AUTO_UPDATE_SETTINGS_FILE",
                 "/var/www/.open-easy-web-auto-update.json",
             ))),
-            db_encryption,
             server_bind_addr: std::env::var("OPEN_EASYWEB_SERVER_BIND")
                 .unwrap_or_else(|_| "0.0.0.0:8090".into())
                 .parse()
@@ -363,58 +357,10 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         );
     }
 
-    // `/admin/db-encryption` — DATABASE(`users`が永続化するJSONファイル)の
-    // 暗号化ON/OFFを取得・変更する(`db_encryption.rs`参照、既定ON)。
-    // 暗号化そのものは`users.rs`の`load`/`persist`境界で透過的に行われる
-    // ため、このAPIは設定の切り替えのみを担う——管理者がこのAPIを一度も
-    // 呼ばなくても、既定で暗号化は有効な状態で動いている。
-    if path == "/admin/db-encryption" {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        return match method {
-            Method::GET => json_response(
-                StatusCode::OK,
-                &serde_json::json!({
-                    "enabled": state.db_encryption.is_enabled(),
-                }),
-            ),
-            Method::POST => {
-                let bytes = match req.into_body().collect().await {
-                    Ok(c) => c.to_bytes(),
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
-                };
-                #[derive(serde::Deserialize)]
-                struct Payload {
-                    enabled: bool,
-                }
-                let payload: Payload = match serde_json::from_slice(&bytes) {
-                    Ok(p) => p,
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
-                };
-                match state.db_encryption.set_enabled(payload.enabled) {
-                    Ok(()) => json_response(
-                        StatusCode::OK,
-                        &serde_json::json!({
-                            "enabled": payload.enabled,
-                            "message_ja": if payload.enabled {
-                                "DATABASE暗号化を有効にしました(次回の書き込みから適用されます)。"
-                            } else {
-                                "DATABASE暗号化を無効にしました(既に暗号化済みのデータは引き続き読めます)。"
-                            },
-                            "message_en": if payload.enabled {
-                                "Database encryption enabled (applies from the next write)."
-                            } else {
-                                "Database encryption disabled (previously encrypted data remains readable)."
-                            },
-                        }),
-                    ),
-                    Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, format!("failed to persist setting: {e}")),
-                }
-            }
-            _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "unsupported method"),
-        };
-    }
+    // DATABASE暗号化(`db_encryption.rs`)は常時自動で有効であり、ON/OFF
+    // 切り替えの管理API・GUI・対話式質問は意図的に持たない(ユーザー指示、
+    // 2026-07-31「管理者が意識しないで済む用に裏で処理しましょう」)。
+    // `users.rs`の`load`/`persist`境界だけで透過的に暗号化・復号される。
 
     match (&method, path.as_str()) {
         (&Method::GET, "/healthz") => json_response(StatusCode::OK, &serde_json::json!({"status":"ok"})),
@@ -1198,18 +1144,6 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    // DATABASE暗号化の設定がまだ一度も保存されていない(初回起動)かつ
-    // 対話的な端末(TTY)から起動された場合のみ、英語・日本語併記で
-    // Yes/No質問を行う(`db_encryption.rs`参照)。非対話的な起動
-    // (systemdサービス等)では何も尋ねず既定ON のまま進む。
-    db_encryption::maybe_prompt_interactive_setup(
-        &env_path("OPEN_EASYWEB_DB_ENCRYPTION_SETTINGS_FILE", "/var/www/.open-easy-web-db-encryption.json"),
-        &db_encryption::DbEncryptionState::load(
-            env_path("OPEN_EASYWEB_DB_ENCRYPTION_SETTINGS_FILE", "/var/www/.open-easy-web-db-encryption.json"),
-            &env_path("OPEN_EASYWEB_DB_ENCRYPTION_KEY_FILE", "/var/www/.open-easy-web-db-encryption.key"),
-        ),
-    );
-
     let state = Arc::new(AppState::from_env());
 
     // 起動時に、前回終了時(クラッシュ・電源断・ディスク切断)にジャーナルへ
@@ -1311,12 +1245,11 @@ mod tests {
             static_dir: dir.path().to_path_buf(),
             weights: Mutex::new(php_detector::PhpSignalWeights::default()),
             auth: auth::AuthStore::default(),
-            users: users::UserStore::load(dir.path().join("users.json"), Arc::new(db_encryption::DbEncryptionState::load(dir.path().join("db-encryption.json"), &dir.path().join("db-encryption.key")))),
+            users: users::UserStore::load(dir.path().join("users.json"), Arc::new(db_encryption::DbEncryptionState::load(&dir.path().join("db-encryption.key")))),
             smtp: None,
             sms: None,
             dist_sync: Arc::new(dist_sync::DistSyncRegistry::new(dir.path().join("dist-sync-journal"))),
             auto_update: Arc::new(auto_update::AutoUpdateState::load(dir.path().join("auto-update.json"))),
-            db_encryption: Arc::new(db_encryption::DbEncryptionState::load(dir.path().join("db-encryption-2.json"), &dir.path().join("db-encryption-2.key"))),
             server_bind_addr: ([127, 0, 0, 1], 0).into(),
             stop_accepting: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         });
@@ -1694,12 +1627,11 @@ mod tests {
             static_dir: PathBuf::from("."),
             weights: Mutex::new(php_detector::PhpSignalWeights::default()),
             auth: auth::AuthStore::default(),
-            users: users::UserStore::load(dir.path().join("users.json"), Arc::new(db_encryption::DbEncryptionState::load(dir.path().join("db-encryption.json"), &dir.path().join("db-encryption.key")))),
+            users: users::UserStore::load(dir.path().join("users.json"), Arc::new(db_encryption::DbEncryptionState::load(&dir.path().join("db-encryption.key")))),
             sms: None,
             smtp: None,
             dist_sync: Arc::new(dist_sync::DistSyncRegistry::new(dir.path().join("dist-sync-journal"))),
             auto_update: Arc::new(auto_update::AutoUpdateState::load(dir.path().join("auto-update.json"))),
-            db_encryption: Arc::new(db_encryption::DbEncryptionState::load(dir.path().join("db-encryption-2.json"), &dir.path().join("db-encryption-2.key"))),
             server_bind_addr: ([127, 0, 0, 1], 0).into(),
             stop_accepting: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };

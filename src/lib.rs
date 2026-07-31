@@ -17,7 +17,6 @@
 
 mod api_auth;
 mod api_auto_update;
-mod api_db_encryption;
 mod api_dist_sync;
 mod api_free_domain;
 mod api_upload;

@@ -74,52 +74,6 @@ fn on_toggle_auto_update(evt: Event) {
     });
 }
 
-/// Step 7(DATABASE暗号化、既定ON)の設定表示・切り替え(2026-07-31新設)。
-async fn refresh_db_encryption_status(base_url: String) {
-    let admin_token = input_value("db-encryption-admin-token");
-    match crate::api_db_encryption::get_status(&base_url, &admin_token).await {
-        Ok(value) => {
-            let enabled = value.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
-            if let Some(checkbox) = try_by_id("db-encryption-enabled-toggle").and_then(|el| el.dyn_into::<HtmlInputElement>().ok()) {
-                checkbox.set_checked(enabled);
-            }
-            set_text(
-                "db-encryption-status",
-                &format!(
-                    "DATABASE暗号化: {} / Database encryption: {}",
-                    if enabled { "有効(ON)" } else { "無効(OFF)" },
-                    if enabled { "enabled" } else { "disabled" }
-                ),
-            );
-        }
-        Err(e) => set_text("db-encryption-status", &format!("❌ {e}")),
-    }
-}
-
-fn on_refresh_db_encryption_status() {
-    spawn_local(async move {
-        refresh_db_encryption_status(same_origin_base_url()).await;
-    });
-}
-
-fn on_toggle_db_encryption(evt: Event) {
-    let Some(checkbox) = evt.target().and_then(|t| t.dyn_into::<HtmlInputElement>().ok()) else {
-        return;
-    };
-    let enabled = checkbox.checked();
-    let admin_token = input_value("db-encryption-admin-token");
-    let base_url = same_origin_base_url();
-    spawn_local(async move {
-        match crate::api_db_encryption::set_enabled(&base_url, &admin_token, enabled).await {
-            Ok(value) => {
-                let message = value.get("message_ja").and_then(|v| v.as_str()).unwrap_or("✅ 設定を更新しました。");
-                set_text("db-encryption-status", message);
-            }
-            Err(e) => set_text("db-encryption-status", &format!("❌ {e}")),
-        }
-    });
-}
-
 const COMPAT_MODE_STORAGE_KEY: &str = "openeasyweb_compat_mode_v1";
 
 /// Step 5(分散同期・ディザスタリカバリ)は、この`open-easy-web-server`
@@ -420,9 +374,6 @@ pub fn wire() -> Result<(), JsValue> {
 
     wire_click("auto-update-refresh-status-btn", on_refresh_auto_update_status)?;
     wire_change("auto-update-enabled-toggle", on_toggle_auto_update)?;
-
-    wire_click("db-encryption-refresh-status-btn", on_refresh_db_encryption_status)?;
-    wire_change("db-encryption-enabled-toggle", on_toggle_db_encryption)?;
     Ok(())
 }
 
