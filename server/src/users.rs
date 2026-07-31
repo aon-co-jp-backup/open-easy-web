@@ -120,11 +120,26 @@ impl UserStore {
     pub fn load(state_path: PathBuf, encryption: Arc<DbEncryptionState>) -> Self {
         let users = std::fs::read(&state_path)
             .ok()
-            .and_then(|bytes| match encryption.decrypt(&bytes) {
-                Ok(plaintext) => Some(plaintext),
-                Err(e) => {
-                    tracing::warn!(error = %e, "failed to decrypt persisted user registry, starting empty");
-                    None
+            .and_then(|bytes| {
+                match encryption.decrypt(&bytes) {
+                    Ok(plaintext) => Some(plaintext),
+                    Err(e) => {
+                        // 本暗号化機能の導入前(マーカーバイトを一切
+                        // 付けずに素のJSONを書いていた旧フォーマット)の
+                        // ファイルを読み込んだ場合、`decrypt`は先頭バイトを
+                        // 未知のマーカーとしてエラーを返す。既存の運用
+                        // データを失わないよう、その場合はファイル全体を
+                        // そのまま平文JSONとして再解釈するフォールバックを
+                        // 用意する(次回`persist`で新フォーマットへ
+                        // 自動的に書き直される、一度限りの移行パス)。
+                        if serde_json::from_slice::<HashMap<String, UserRecord>>(&bytes).is_ok() {
+                            tracing::info!("persisted user registry was in the pre-encryption plain format; migrating to encrypted format on next write");
+                            Some(bytes)
+                        } else {
+                            tracing::warn!(error = %e, "failed to decrypt persisted user registry, starting empty");
+                            None
+                        }
+                    }
                 }
             })
             .and_then(|plaintext| serde_json::from_slice::<HashMap<String, UserRecord>>(&plaintext).ok())
@@ -442,5 +457,31 @@ mod tests {
 
         let reloaded = UserStore::load(path, encryption);
         assert!(reloaded.exists("user@example.com"));
+    }
+
+    /// 本暗号化機能の導入前(2026-07-31以前)に書かれた、マーカーバイトの
+    /// 無い素のJSONファイルを読み込んでも、既存データを失わずに正しく
+    /// 移行できることを確認する(本番の`/var/www/.open-easy-web-users.json`
+    /// が実際にこの旧フォーマットだったため、デプロイ前に発見・対応した)。
+    #[test]
+    fn migrates_legacy_unencrypted_file_without_losing_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path: PathBuf = dir.path().join("users.json");
+        // マーカーバイトを一切付けない、旧`serde_json::to_string_pretty`
+        // 相当の素のJSONをそのまま書き込む(旧`persist`の再現)。
+        let mut legacy = HashMap::new();
+        legacy.insert(
+            "legacy@example.com".to_string(),
+            UserRecord { email: "legacy@example.com".to_string(), phone: None, backup_email: Some("legacy2@example.com".to_string()), totp_secret: None, pending_totp_secret: None },
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&legacy).unwrap()).unwrap();
+
+        let store = UserStore::load(path.clone(), test_encryption());
+        assert!(store.exists("legacy@example.com"), "legacy plaintext data must be readable after upgrading to the encrypting UserStore");
+
+        // 次回の書き込みで、実際に暗号化フォーマットへ移行することを確認する。
+        store.update_contact("legacy@example.com", ContactField::Phone, "090-0000-0000");
+        let raw = std::fs::read(&path).unwrap();
+        assert_eq!(raw[0], 0x01, "file must be rewritten in the encrypted marker format after the next write");
     }
 }
