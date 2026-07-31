@@ -8,7 +8,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+
+use crate::db_encryption::DbEncryptionState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserRecord {
@@ -81,6 +83,11 @@ impl RegisterError {
 pub struct UserStore {
     state_path: PathBuf,
     users: Mutex<HashMap<String, UserRecord>>,
+    /// ディスク永続化時のDATABASE暗号化(`db_encryption.rs`参照、
+    /// 既定ON)。`enroll`/`persist`双方でこれを経由することで、
+    /// このファイルが実際に管理する最も機微なデータ(メール・電話番号・
+    /// TOTPシークレット)が平文でディスクに残らないようにする。
+    encryption: Arc<DbEncryptionState>,
 }
 
 fn normalize(email: &str) -> String {
@@ -104,17 +111,31 @@ pub fn normalize_phone(phone: &str) -> String {
 }
 
 impl UserStore {
-    pub fn load(state_path: PathBuf) -> Self {
-        let users = std::fs::read_to_string(&state_path)
+    /// **透過的な暗号化**: 呼び出し元(管理者・他モジュール)はこの後の
+    /// `register`/`find_by_email`等を従来通り平文の`UserRecord`として
+    /// 扱えばよく、ディスク上で暗号化されているかどうかを一切意識する
+    /// 必要が無い(ユーザー指示、2026-07-31)。暗号化/復号は`load`/
+    /// `persist`のこの境界だけで完結する——盗まれるリスクがあるのは
+    /// 「ディスク上のファイル」であり、それだけを自動的に保護する設計。
+    pub fn load(state_path: PathBuf, encryption: Arc<DbEncryptionState>) -> Self {
+        let users = std::fs::read(&state_path)
             .ok()
-            .and_then(|s| serde_json::from_str::<HashMap<String, UserRecord>>(&s).ok())
+            .and_then(|bytes| match encryption.decrypt(&bytes) {
+                Ok(plaintext) => Some(plaintext),
+                Err(e) => {
+                    tracing::warn!(error = %e, "failed to decrypt persisted user registry, starting empty");
+                    None
+                }
+            })
+            .and_then(|plaintext| serde_json::from_slice::<HashMap<String, UserRecord>>(&plaintext).ok())
             .unwrap_or_default();
-        Self { state_path, users: Mutex::new(users) }
+        Self { state_path, users: Mutex::new(users), encryption }
     }
 
     fn persist(&self, users: &HashMap<String, UserRecord>) {
-        if let Ok(json) = serde_json::to_string_pretty(users) {
-            if let Err(e) = std::fs::write(&self.state_path, json) {
+        if let Ok(json) = serde_json::to_vec_pretty(users) {
+            let stored = self.encryption.encrypt(&json);
+            if let Err(e) = std::fs::write(&self.state_path, stored) {
                 tracing::warn!(error = %e, "failed to persist user registry");
             }
         }
@@ -301,9 +322,14 @@ impl UserStore {
 mod tests {
     use super::*;
 
+    fn test_encryption() -> Arc<DbEncryptionState> {
+        let dir = std::env::temp_dir().join(format!("owsrv-userstore-enc-{}", uuid::Uuid::new_v4()));
+        Arc::new(DbEncryptionState::load(dir.join("settings.json"), &dir.join("key.bin")))
+    }
+
     fn store() -> UserStore {
         let dir = tempfile::tempdir().unwrap();
-        UserStore::load(dir.path().join("users.json"))
+        UserStore::load(dir.path().join("users.json"), test_encryption())
     }
 
     #[test]
@@ -402,11 +428,19 @@ mod tests {
     fn persists_and_reloads_from_disk() {
         let dir = tempfile::tempdir().unwrap();
         let path: PathBuf = dir.path().join("users.json");
+        let encryption = test_encryption();
         {
-            let store = UserStore::load(path.clone());
+            let store = UserStore::load(path.clone(), Arc::clone(&encryption));
             store.register("user@example.com", Some("+819000000000".into()), None).unwrap();
         }
-        let reloaded = UserStore::load(path);
+        // 実際にディスク上のファイルが平文JSONとして読めない(=本当に
+        // 暗号化されている)ことを直接確認する——マーカーバイト・
+        // ランダムnonce・暗号文のみで、"user@example.com"という文字列が
+        // そのままバイト列に含まれていないことの実証。
+        let raw = std::fs::read(&path).unwrap();
+        assert!(!raw.windows(b"user@example.com".len()).any(|w| w == b"user@example.com"), "plaintext email must not appear in the encrypted file on disk");
+
+        let reloaded = UserStore::load(path, encryption);
         assert!(reloaded.exists("user@example.com"));
     }
 }

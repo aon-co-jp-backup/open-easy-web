@@ -43,6 +43,11 @@ flate2 = "1"
 tar = "0.4"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 socket2 = { version = "0.5", features = ["all"] }
+# DATABASE暗号化(db_encryption.rs)向け: AES-256-GCM。ハードウェア
+# アクセラレーション(AES-NI)が利用可能な環境では高速に動作する標準的な
+# AEAD暗号(ランダムnonceを毎回生成)。既存のTOTP等と同じくRustCryptoの
+# 実績ある実装を採用し、自前実装はしない。
+aes-gcm = "0.10"
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json", "multipart"] }
