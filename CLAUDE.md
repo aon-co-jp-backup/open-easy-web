@@ -230,7 +230,40 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
-- **2026-07-31 DATABASE暗号化(AES-256-GCM、既定ON)をGUI/管理API/対話式CLIで実装(ユーザー指示)**:
+- **2026-07-31(続き) DATABASE暗号化のON/OFF設定・質問・GUIトグルを全撤去し、常時自動暗号化のみに方針転換(ユーザー指示)**:
+  直下のエントリで実装したGUIトグル・管理API(`/admin/db-encryption`)・
+  対話式CLI質問(Yes/No)を、ユーザー指示「コマンドやGUIでもDATABASEの
+  暗号化する?の質問やGUIも無しにしましょう。管理者が意識しないで済む
+  用に裏で処理しましょう!」を受けて**全て撤去**した。
+  1. `server/src/db_encryption.rs`: `enabled`設定・`settings_path`・
+     `set_enabled`/`is_enabled`・対話式プロンプト関数を削除し、
+     鍵管理+`encrypt`/`decrypt`(常時AES-256-GCM、ランダムnonce)
+     のみのシンプルな構成に簡素化。マーカーバイトは既存の平文
+     ファイルとの後方互換のためだけに残置。
+  2. `main.rs`: `/admin/db-encryption`エンドポイント・`main()`冒頭の
+     対話式質問呼び出し・`AppState.db_encryption`フィールドを削除。
+     `UserStore::load`へ鍵管理オブジェクト(`Arc<DbEncryptionState>`)を
+     直接渡すのみ(設定の概念自体が無い)。
+  3. WASM側: `src/shell.rs`のStep 7トグル・入力欄・ボタンを削除し、
+     「常時自動で暗号化される」旨の説明文のみ残す。
+     `src/api_db_encryption.rs`を削除、`setup_wizard_ui.rs`の
+     refresh/toggle配線・`lib.rs`の`mod`宣言も削除。
+  4. **DATABASEの中身(アカウント管理等)自体のGUI/API操作性は
+     無変更**(ユーザー確認済み——暗号化はUserStore::load/persistの
+     境界だけで透過的に行われるため、管理者が触るAPI自体には
+     一切影響しない)。
+  5. **検証**: `cargo test`(server)**71件全green**(前回74件から、
+     ON/OFF切替に関するテスト3件を削除した分減、リグレッション無し)。
+     ルート(WASM)`cargo build --target wasm32-unknown-unknown`
+     警告0件。**実ブラウザで確認**: トグル要素(`#db-encryption-
+     enabled-toggle`)が実際にDOM上から消えたこと、常時自動である旨の
+     説明文が表示されていること、コンソールエラー・白画面が無いことを
+     確認済み。
+  - 次にすべきこと: 実VPSへのデプロイ・実地確認(既存の
+    `.open-easy-web-db-encryption.key`ファイルパスの運用ドキュメント化
+    含む)。
+
+- **2026-07-31 DATABASE暗号化(AES-256-GCM、既定ON)をGUI/管理API/対話式CLIで実装(ユーザー指示、直後のエントリで方針転換・簡素化済み)**:
   ユーザー指示「open-easy-webで管理する機能でDATABASEを暗号化するON
   とOFFをGUIでデフォルトはONにして選択可能に」「管理者が読み書き
   するときは暗号が自動で解除される用に、裏で自動的に暗号化/復号され
