@@ -230,6 +230,50 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-31(続き2) DATABASE暗号化をVPS本番へデプロイ完了+説明文の指定文言への更新+移行バグの事前発見・修正**:
+  1. **説明文の更新**: ユーザー指定の日英文言
+     (「裏で暗号化しておりますが、管理者は意識せずに読み書きできます。
+     裏で暗号化されておりますので、万が一DATAが盗まれても解読が難しい
+     ので安全性が高いです。」/ 対応する英語)へ`src/shell.rs`を更新。
+     実ブラウザ(ローカル配信)で表示・コンソールエラー無しを確認。
+  2. **デプロイ前に発見した実バグ(旧フォーマットからの移行漏れ)**:
+     VPS本番の`/var/www/.open-easy-web-users.json`を確認したところ、
+     マーカーバイトの無い旧フォーマット(暗号化機能導入前の素のJSON)
+     のままだった。このまま`decrypt()`に渡すと先頭バイト(`{`=0x7B)を
+     未知のマーカーとして扱いエラーになり、`UserStore::load`が
+     既存データを失って空の状態から起動してしまう——**デプロイ前に
+     ローカルで気づき、修正してから本番へ反映した**(実害無し)。
+     `users.rs::load`に、`decrypt`失敗時にバイト列全体を素のJSONとして
+     再解釈するフォールバックを追加(次回`persist`で新フォーマットへ
+     自動移行する一度限りの移行パス)。新規テスト
+     `migrates_legacy_unencrypted_file_without_losing_data`で実証、
+     `cargo test`(server)**72件全green**。
+  3. **VPSデプロイ**: `git pull`→`cargo build --release`(server)→
+     `cargo build --target wasm32-unknown-unknown --release`+
+     `wasm-bindgen`(ルート、`static/pkg`へ反映)→デプロイ前に
+     `/var/www/.open-easy-web-users.json`をバックアップ(`.bak-20260731-
+     pre-encryption`)→`systemctl restart open-easy-web`。
+  4. **実地検証(型チェックのみで完了と報告しない、既存運用ルール
+     徹底)**: `journalctl`で実際に
+     `"persisted user registry was in the pre-encryption plain format;
+     migrating to encrypted format on next write"`のログを確認
+     (=上記2.の移行フォールバックが本番で実際に発火したことの直接
+     証拠)。`GET https://easy-web.tokyo/healthz`・`/`とも200。
+     `POST /api/auth/request-otp`(固定アカウント
+     `norukia.jp@gmail.com`宛)が実際に200を返し、移行後もアカウントが
+     正しく認識されることを確認(=既存データが失われていないことの
+     直接証拠)。実ブラウザで`https://easy-web.tokyo/`の説明文が
+     指定文言通りに表示され、コンソールエラーが無いことも確認済み。
+  5. **正直な開示**: ディスク上のファイルは記事執筆時点でまだ旧
+     フォーマット(先頭バイト`{`)のまま残っている——`persist`は
+     `register`/`rename_email`/`update_contact`/TOTP変更等の実際の
+     書き込み操作時にのみ呼ばれる設計のため、次にこれらの操作が
+     行われた時点で自動的に暗号化フォーマットへ書き直される(今回は
+     強制的な書き込みトリガーは行わず、設計通りの自然な移行に委ねた)。
+  - 次にすべきこと: 特に緊急の課題は無い(次回、固定アカウントの
+    連絡先変更やTOTP再設定等が行われた際に、ディスク上のファイルが
+    実際に暗号化フォーマットへ移行したことを確認するとよい)。
+
 - **2026-07-31(続き) DATABASE暗号化のON/OFF設定・質問・GUIトグルを全撤去し、常時自動暗号化のみに方針転換(ユーザー指示)**:
   直下のエントリで実装したGUIトグル・管理API(`/admin/db-encryption`)・
   対話式CLI質問(Yes/No)を、ユーザー指示「コマンドやGUIでもDATABASEの
