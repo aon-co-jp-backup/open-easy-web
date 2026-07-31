@@ -223,12 +223,13 @@ pub const SHELL_HTML: &str = r#"
 <section>
   <h3>Database encryption (DATABASE暗号化、常時自動)</h3>
   <p class="muted">
-    アカウントのメールアドレス・電話番号・認証アプリ(TOTP)シークレット等
-    を保存するDATABASEファイルは、ディスク上で常にAES-256-GCM(ランダムな
-    nonceを毎回生成する高速な暗号化)で自動的に保護されます。設定項目は
-    無く、管理者が意識する必要はありません(裏で自動的に暗号化・復号
-    されます)——万一ファイルそのものが盗まれても、中身は暗号化された
-    ままです。
+    裏で暗号化しておりますが、管理者は意識せずに読み書きできます。裏で
+    暗号化されておりますので、万が一DATAが盗まれても解読が難しいので
+    安全性が高いです。<br>
+    Encrypted in the background, but administrators can read and write
+    without needing to be aware of it. Because it is encrypted behind
+    the scenes, even if the data is stolen, it is difficult to decrypt,
+    making it highly secure.
   </p>
 </section>
 
