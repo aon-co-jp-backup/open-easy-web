@@ -230,6 +230,73 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-07-31 DATABASE暗号化(AES-256-GCM、既定ON)をGUI/管理API/対話式CLIで実装(ユーザー指示)**:
+  ユーザー指示「open-easy-webで管理する機能でDATABASEを暗号化するON
+  とOFFをGUIでデフォルトはONにして選択可能に」「管理者が読み書き
+  するときは暗号が自動で解除される用に、裏で自動的に暗号化/復号され
+  管理者は意識しない仕様に」「コマンドベースでもセッティングしている
+  とAIが判断したらYes/Noで英語と日本語で質問」への対応。
+  1. **保護対象**: `server/src/users.rs`の`UserStore`が永続化する
+     JSONファイル(アカウントのメール・セカンドメール・電話番号・
+     TOTPシークレットを含む、このバイナリが管理する最も機微な
+     ローカルデータストア=「DATABASE」)。
+  2. **新規`server/src/db_encryption.rs`**: AES-256-GCM
+     (RustCryptoの`aes-gcm`crate、ハードウェアアクセラレーション
+     〈AES-NI〉利用可能な環境で高速)、暗号化のたびに`OsRng`で
+     ランダムnonceを生成(同一平文でも毎回異なる暗号文になることを
+     テストで実証済み)。ファイル先頭1バイトを「そのファイルを書いた
+     時点でONだったかOFFだったか」のマーカーとして使う設計とし、
+     設定をON→OFF→ONと切り替えても過去のデータを安全に読める。
+     鍵は`OsRng`生成の32バイトをファイルへ平文永続化(対称暗号の
+     性質上不可避、最終防衛線はホストOSのファイル権限——正直な開示)。
+  3. **透過的な設計(ユーザー指示通り)**: `UserStore::load`/`persist`の
+     境界だけで暗号化/復号を行い、`register`/`find_by_email`等の
+     呼び出し元(=管理者が触るAPI)は暗号化の有無を一切意識しない。
+     実際にディスク上のファイルへ平文メールアドレスが含まれないことを
+     テストで直接確認(`raw.windows(...).any(...)`でバイト列を検査)。
+  4. **設定変更の3経路**(`auto_update.rs`と同じ優先順位パターン):
+     (a) 既定ON、(b) `OPEN_EASYWEB_DB_ENCRYPTION=false`環境変数
+     (初回起動時のみの初期値)、(c) `GET/POST /admin/db-encryption`
+     (`x-admin-token`認証、GUIトグルから呼ぶ)——一度設定されると
+     `.open-easy-web-db-encryption.json`へ永続化され環境変数より優先。
+  5. **対話式CLI質問**(`maybe_prompt_interactive_setup`): 設定ファイルが
+     まだ無く、かつ標準入力が対話的端末(`std::io::IsTerminal`、追加
+     crate非依存)の場合のみ、"Encrypt the DATABASE at rest?
+     (DATABASEを暗号化しますか?) [Y/n]"と英日併記で尋ね、回答を
+     永続化する。systemdサービス等の非対話起動では何も尋ねず既定ONの
+     まま進む(サービス起動をブロックしない安全側の判断)。
+  6. **GUI**: `src/shell.rs`にStep 7として「Encrypt the database
+     (DATABASEを暗号化する)」チェックボックス(既定チェック済み=ON)、
+     新規`src/api_db_encryption.rs`(`api_auto_update.rs`と同じ
+     `fetch()`薄いラッパーパターン)、`setup_wizard_ui.rs`に
+     refresh/toggleの配線を追加。
+  7. **検証**: `cd server && cargo build`警告0件、`cargo test`
+     **74件全green**(新規7件: ランダムnonce実証・ON→OFF切り替え後の
+     読み取り継続性・設定/鍵の再起動後の永続化等)。ルート
+     (WASM)`cargo build --target wasm32-unknown-unknown`警告0件。
+     **実ブラウザで確認**(型チェックのみでの完了報告ではない、既存の
+     検証基準どおり): `wasm-bindgen`で生成した実バンドルを配信し、
+     Step 7のトグルが実際にDOM上で既定チェック済み(ON)であること、
+     コンソールエラー・白画面が無いことを確認済み。
+  8. **正直な開示・未着手**: (a) `/admin/db-encryption`の実HTTP経由の
+     統合テストは追加していない(`db_encryption.rs`側の単体テスト+
+     `users.rs`側のディスク実証テストで裏取り済み、既存の
+     `dist_sync`admin APIテストと同じ環境変数`OPEN_EASYWEB_DIST_SYNC_
+     ADMIN_TOKEN`をこのAPIも共用するため、並列テスト実行での競合を
+     避けて見送った)。(b) 対話式CLI質問の実際の対話的ターミナルでの
+     実地確認は今回未実施(ロジック自体はユニットテスト不可能な
+     `std::io::stdin()`依存のため、コードレビューでの確認に留まる)。
+     (c) 通信(HTTP)自体の暗号化(TLS)は、このサーバー自体には
+     実装しておらず、既存のnginx/Apache/open-web-serverによる
+     TLS終端(いずれもTLS 1.3、ランダム要素のあるAEAD暗号)に委ねる
+     設計のまま(このリポジトリ自体が独自にTLSスタックを持つ設計変更は
+     スコープ外——open-web-server側の4層防御通信〈`SecureChannel`〉が
+     既にこの役割を担っている)。
+  - 次にすべきこと: (a) 実VPSへのデプロイ・実地確認(既存の
+    `.open-easy-web-db-encryption.json`/`.key`ファイルパスの
+    運用ドキュメント化含む)、(b) `/admin/db-encryption`の実HTTP統合
+    テスト追加。
+
 - **2026-07-29(続き) First-time Setup Guideを本番から非表示にし、デモ環境限定へ変更(ユーザー指示)**:
   1. **`src/shell.rs`**: `setup-wizard-section`(Step 1〜の初回セットアップ
      ガイド)に`class="hidden"`を追加(既定非表示)。英語の
