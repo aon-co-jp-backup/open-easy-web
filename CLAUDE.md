@@ -2482,3 +2482,18 @@ open-web-serverがApache＋Nginxのハイブリッド仕様のWebサーバーと
   - 次にすべきこと: VPS本番へ本修正を反映(`git pull`→再ビルド→
     `systemctl restart`)、実HTTPS経由で`easyweb-power-profile`が
     バックエンドまで到達することを再確認。
+
+- **2026-07-31(続き5) VPS本番デプロイ完了・実バグ修正の実証**: 上記の
+  修正をVPSへ反映(`git pull`→`cargo build --release`〈server〉→
+  `cargo build --target wasm32-unknown-unknown --release`→
+  `wasm-bindgen`→`systemctl restart`)。実HTTPS経由で確認:
+  `curl https://easy-web.tokyo/admin/easyweb-power-profile`が実際に
+  `503`(バックエンドの`require_admin_token`——管理トークン未設定時の
+  安全側フェイルクローズ)を返すようになった(修正前は`open-web-server`
+  自身に横取りされ`401`のままだった)。`https://easy-web.tokyo/admin/
+  power-profile`(旧パス)は引き続き`open-web-server`自身のAPIとして
+  `401`を返す(これは正しい挙動——`open-web-server`自身の電源プロファイル
+  機能であり、`open-easy-web`とは別物)。トップページ`200`も再確認。
+  - 次にすべきこと: 特に緊急の課題は無し。今後`/admin/*`配下へ新規
+    エンドポイントを追加する際は、必ず`open-web-server`側の既存パス
+    一覧との衝突確認を行うこと(上記「教訓」参照)。
