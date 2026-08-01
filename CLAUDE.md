@@ -2360,3 +2360,14 @@ open-web-serverがApache＋Nginxのハイブリッド仕様のWebサーバーと
     (`easy-web.tokyo`)へ反映、(2) Android版が完成したプロジェクトから
     順にダウンロードリンクを実装、(3) 今後完成した他プロジェクトも
     同じパターンで追加していく。
+
+- **2026-07-31(続き) 本番(easy-web.tokyo)へのデプロイ完了**: VPS上の
+  `/root/open-easy-web-app`で`git pull`→`cargo build --target
+  wasm32-unknown-unknown --release`→`wasm-bindgen`→
+  `systemctl restart open-easy-web`を実施。実HTTPS経由で確認:
+  `curl https://easy-web.tokyo/pkg/open_easy_web_bg.wasm`に
+  `completed-projects-section`・`rs-link-fusion`の文字列が実際に
+  含まれること、Claude Browser paneで`https://easy-web.tokyo/`を開き
+  「Completed Projects」セクションが実際に表示されコンソールエラーが
+  無いことを確認した。
+  - 次にすべきこと: 特になし(このパスの対応は完了)。
