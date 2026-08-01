@@ -376,10 +376,13 @@ pub fn wire() -> Result<(), JsValue> {
     wire_change("auto-update-enabled-toggle", on_toggle_auto_update)?;
 
     wire_click("memory-refresh-btn", on_refresh_memory)?;
-    wire_click("memory-switch-low-memory-btn", on_switch_to_low_memory_profile)?;
+    wire_change("profile-power-save", |_| on_power_profile_checkbox_changed())?;
+    wire_change("profile-memory-saver", |_| on_power_profile_checkbox_changed())?;
+    wire_change("profile-always-on", |_| on_power_profile_checkbox_changed())?;
     wire_click("memory-switch-minimal-btn", on_switch_to_minimal_profile)?;
     wire_click("memory-restore-full-btn", on_restore_full_features)?;
     apply_minimal_ui_from_storage();
+    on_load_power_profile_from_server();
     Ok(())
 }
 
@@ -420,41 +423,84 @@ fn apply_minimal_ui_from_storage() {
     }
 }
 
-fn on_switch_to_minimal_profile() {
+/// 電源プロファイルのチェックボックス3つ(2026-08-01改定、ユーザー指示
+/// 「省メモリ、常時電源接続などのチェックボックスとボタンにして」を受け、
+/// 排他的な3ボタン方式〈直前まで〉から独立チェックボックス方式へ変更。
+/// `open-redmine`/`open-gitea`の同日実装、`open-raid-z/CLAUDE.md`の
+/// 改定済みエコシステム標準と揃える)。現在チェックされている3つの状態を
+/// まとめて`POST /admin/easyweb-power-profile`へ送るだけで、
+/// バックエンド側の`PowerProfileFlags`(独立フラグの組み合わせ)は
+/// 元々このAPI呼び出し1回で表現できる設計だったため、フロントエンド側の
+/// 変更のみで対応できた。
+fn checkbox_checked(id: &str) -> bool {
+    try_by_id(id).and_then(|el| el.dyn_into::<HtmlInputElement>().ok()).map(|el| el.checked()).unwrap_or(false)
+}
+
+fn set_checkbox_checked(id: &str, checked: bool) {
+    if let Some(el) = try_by_id(id).and_then(|el| el.dyn_into::<HtmlInputElement>().ok()) {
+        el.set_checked(checked);
+    }
+}
+
+fn on_power_profile_checkbox_changed() {
+    let mut profiles = Vec::new();
+    if checkbox_checked("profile-power-save") {
+        profiles.push("power_save");
+    }
+    if checkbox_checked("profile-memory-saver") {
+        profiles.push("memory_saver");
+    }
+    if checkbox_checked("profile-always-on") {
+        profiles.push("always_on");
+    }
     let admin_token = input_value("memory-admin-token");
     let base_url = same_origin_base_url();
-    set_minimal_ui_hidden(true);
     spawn_local(async move {
-        match crate::api_auto_update::set_power_profile(&base_url, &admin_token, &["memory_saver"]).await {
-            Ok(_) => set_text("memory-switch-status", "✅ Switched to reduced-feature + low-memory profile (省機能+省メモリ版に切り替えました)"),
+        match crate::api_auto_update::set_power_profile(&base_url, &admin_token, &profiles).await {
+            Ok(value) => {
+                let labels = value.get("labels").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(" + ")).unwrap_or_else(|| "通常 (normal)".to_string());
+                set_text("memory-switch-status", &format!("✅ {labels}"));
+            }
             Err(e) => set_text("memory-switch-status", &format!("❌ {e}")),
         }
     });
 }
 
+/// ページ読み込み時、サーバー側の実際の電源プロファイル状態を取得して
+/// チェックボックスへ反映する(`memory-admin-token`が空の場合はAPIが
+/// 401を返すだけなので、その場合はチェックボックスを既定〈未チェック〉
+/// のままにしておく——エラー表示はしない、任意入力欄のため)。
+fn on_load_power_profile_from_server() {
+    let admin_token = input_value("memory-admin-token");
+    if admin_token.trim().is_empty() {
+        return;
+    }
+    let base_url = same_origin_base_url();
+    spawn_local(async move {
+        if let Ok(value) = crate::api_auto_update::get_power_profile(&base_url, &admin_token).await {
+            let profiles: Vec<String> = value.get("profiles").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default();
+            set_checkbox_checked("profile-power-save", profiles.iter().any(|p| p == "power_save"));
+            set_checkbox_checked("profile-memory-saver", profiles.iter().any(|p| p == "memory_saver"));
+            set_checkbox_checked("profile-always-on", profiles.iter().any(|p| p == "always_on"));
+        }
+    });
+}
+
+fn on_switch_to_minimal_profile() {
+    set_minimal_ui_hidden(true);
+    set_text("memory-switch-status", "✅ Switched to reduced-feature UI (省機能表示に切り替えました)");
+}
+
 fn on_restore_full_features() {
     set_minimal_ui_hidden(false);
+    set_checkbox_checked("profile-power-save", false);
+    set_checkbox_checked("profile-memory-saver", false);
+    set_checkbox_checked("profile-always-on", false);
     let admin_token = input_value("memory-admin-token");
     let base_url = same_origin_base_url();
     spawn_local(async move {
         match crate::api_auto_update::set_power_profile(&base_url, &admin_token, &[]).await {
             Ok(_) => set_text("memory-switch-status", "✅ Restored full features / normal profile (全機能・通常プロファイルに戻しました)"),
-            Err(e) => set_text("memory-switch-status", &format!("❌ {e}")),
-        }
-    });
-}
-
-/// 「省メモリ版に変更」ボタン(2026-07-31追加、ユーザー指示「システム
-/// メモリ使用状況の情報から省メモリ版に変更も可能にして」)。既存の
-/// 省電力/常時電源接続フラグは変更せず、`memory_saver`のみを設定する
-/// (この場所からの操作は「メモリを減らしたい」という単一の意図に絞る、
-/// 過剰な選択肢を出さない工学的判断)。
-fn on_switch_to_low_memory_profile() {
-    let admin_token = input_value("memory-admin-token");
-    let base_url = same_origin_base_url();
-    spawn_local(async move {
-        match crate::api_auto_update::set_power_profile(&base_url, &admin_token, &["memory_saver"]).await {
-            Ok(_) => set_text("memory-switch-status", "✅ Switched to low-memory profile (省メモリ版に切り替えました)"),
             Err(e) => set_text("memory-switch-status", &format!("❌ {e}")),
         }
     });

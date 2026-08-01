@@ -82,3 +82,11 @@ pub async fn set_power_profile(base_url: &str, admin_token: &str, profiles: &[&s
     let body = SetPowerProfileBody { profiles: profiles.iter().map(|s| s.to_string()).collect() };
     call(base_url, "/admin/easyweb-power-profile", "POST", admin_token, Some(&body)).await
 }
+
+/// `GET /admin/easyweb-power-profile` — 現在有効な電源プロファイルの
+/// 組み合わせ(`profiles: ["power_save", ...]`)を取得する(2026-08-01
+/// 追加、チェックボックスUIをページ読み込み時にサーバー側の実際の状態
+/// へ同期するため)。
+pub async fn get_power_profile(base_url: &str, admin_token: &str) -> Result<Value, String> {
+    call::<()>(base_url, "/admin/easyweb-power-profile", "GET", admin_token, None).await
+}

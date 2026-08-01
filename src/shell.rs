@@ -245,18 +245,24 @@ pub const SHELL_HTML: &str = r#"
     <p id="memory-stats-text" class="muted">Click Refresh to load (「更新」を押して読み込んでください)</p>
   </div>
   <div class="buttons">
-    <button id="memory-switch-low-memory-btn">Switch to low-memory profile (省メモリ版に変更)</button>
-    <button id="memory-switch-minimal-btn">Switch to reduced-feature + low-memory (省機能+省メモリ版に変更)</button>
-    <button id="memory-restore-full-btn">Restore full features (全機能を復元)</button>
+    <label><input type="checkbox" id="profile-power-save"> Power-saving (省電力)</label>
+    <label><input type="checkbox" id="profile-memory-saver"> Memory-saver (省メモリ)</label>
+    <label><input type="checkbox" id="profile-always-on"> Always-on (常時電源接続)</label>
+  </div>
+  <div class="buttons">
+    <button id="memory-switch-minimal-btn">Switch to reduced-feature UI (省機能表示に切替)</button>
+    <button id="memory-restore-full-btn">Restore all features (全機能を復元)</button>
   </div>
   <p id="memory-switch-status" class="muted" aria-live="polite"></p>
   <p class="muted">
-    "Reduced-feature (省機能)" hides non-essential sections below (Easy
-    Free-Domain Setup, External Tools) to lower rendering/memory overhead,
-    in addition to the low-memory backend profile.<br>
-    「省機能」は上記の省メモリプロファイルに加え、必須ではないセクション
-    (簡単ドメイン設定・外部ツール)を非表示にして描画/メモリ負荷を
-    抑えます。
+    The checkboxes above can be combined freely and are sent straight to
+    the backend power-profile API. "Reduced-feature UI" is a separate,
+    independent switch that just hides non-essential sections below (Easy
+    Free-Domain Setup, External Tools) to lower rendering overhead.<br>
+    上のチェックボックスは自由に組み合わせてバックエンドの電源プロファイル
+    APIへそのまま送られます。「省機能表示に切替」は独立した別のスイッチで、
+    必須ではないセクション(簡単ドメイン設定・外部ツール)を非表示にして
+    描画負荷を抑えるだけです。
   </p>
 </section>
 
