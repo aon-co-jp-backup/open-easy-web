@@ -230,6 +230,40 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-08-01 電源プロファイルUIを排他的3ボタンから独立チェックボックス
+  方式へ変更(エコシステム標準方針の改定、ユーザー指示「省メモリ、
+  常時電源接続などのチェックボックスとボタンにして」)**: 直前まで
+  「省メモリ版に変更」「省機能+省メモリ版に変更」「全機能を復元」の
+  3ボタン(排他的選択、`memory_saver`のみを設定)だった`src/
+  setup_wizard_ui.rs`のUIを、同日`open-redmine`/`open-gitea`で先行実装
+  したパターンへ揃えた: 省電力/省メモリ/常時電源接続を独立チェックボックス
+  (`src/shell.rs`)にし、変更のたびに現在の3状態をまとめて既存の
+  `POST /admin/easyweb-power-profile`へ送信(バックエンドの
+  `PowerProfileFlags`は元々独立フラグの組み合わせを表現できる設計
+  だったため、フロントエンド側の変更のみで対応できた)。「省機能表示に
+  切替」「全機能を復元」は独立したボタンのまま維持するが、**「省機能」は
+  もう`memory_saver`を自動設定しない**(DOM非表示のみを行う独立スイッチへ
+  変更、チェックボックスとの役割の重複を無くすため)。新設
+  `GET /admin/easyweb-power-profile`クライアント
+  (`api_auto_update::get_power_profile`)で、管理トークン入力済みなら
+  ページ読み込み時にサーバー側の実際の状態をチェックボックスへ同期する。
+  検証: `cargo build --target wasm32-unknown-unknown`(ローカル
+  `--target-dir`経由)警告0件、`cargo test`(host)11件全green(回帰
+  無し)。**実際にサーバーを起動し、実ブラウザで検証**(型チェックのみ
+  での完了報告ではない): 「省メモリ」チェック→`memory-switch-status`が
+  「✅ 省メモリ」に→`curl`で`/admin/easyweb-power-profile`を直接叩き
+  サーバー側が実際に`profiles: ["memory_saver"]`を保持していることを
+  確認、追加で「常時電源接続」チェック→「✅ 省メモリ + 常時電源接続」に
+  更新、「省機能表示に切替」→`freedomain-section`/
+  `external-tools-section`の`getComputedStyle().display`が実際に`none`に、
+  「全機能を復元」→チェックボックス全解除・上記2セクションが`block`に
+  戻ることを確認済み。**正直な開示**: `open-raid-z/CLAUDE.md`にも
+  同日この改定を記録済みだが、Android版(`android/`のKotlin実装)は
+  今回対象外(WASM GUI側のみ変更、ネイティブUIは別途)。
+  - 次にすべきこと: VPS本番へのデプロイ、Android版UIへの同様の反映
+    (優先度は低——現状のAndroid UIは電源プロファイル選択自体を持たない
+    可能性があり要確認)。
+
 - **2026-07-31(続き2) DATABASE暗号化をVPS本番へデプロイ完了+説明文の指定文言への更新+移行バグの事前発見・修正**:
   1. **説明文の更新**: ユーザー指定の日英文言
      (「裏で暗号化しておりますが、管理者は意識せずに読み書きできます。
