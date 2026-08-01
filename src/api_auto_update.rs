@@ -58,3 +58,9 @@ struct SetEnabledBody {
 pub async fn set_enabled(base_url: &str, admin_token: &str, enabled: bool) -> Result<Value, String> {
     call(base_url, "/admin/auto-update", "POST", admin_token, Some(&SetEnabledBody { enabled })).await
 }
+
+/// `GET /admin/system/memory` — 現在のシステムメモリ使用状況
+/// (総メモリ・使用中・空き容量・使用率)を取得する(2026-07-31追加)。
+pub async fn get_memory_snapshot(base_url: &str, admin_token: &str) -> Result<Value, String> {
+    call::<()>(base_url, "/admin/system/memory", "GET", admin_token, None).await
+}

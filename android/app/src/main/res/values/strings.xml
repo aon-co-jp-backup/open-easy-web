@@ -18,4 +18,5 @@
 
     <string name="open_browser_button">🌐 ブラウザで開く</string>
     <string name="change_profile_button">電源プロファイルを変更</string>
+    <string name="memory_info_button">📊 Memory info (メモリ情報)</string>
 </resources>

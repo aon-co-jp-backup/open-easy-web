@@ -1,5 +1,6 @@
 package tokyo.runo.openeasyweb
 
+import android.app.ActivityManager
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -143,6 +144,11 @@ class MainActivity : AppCompatActivity() {
             finish()
         }
 
+        val memoryInfoButton = findViewById<Button>(R.id.memoryInfoButton)
+        memoryInfoButton.setOnClickListener {
+            showMemoryInfoDialog()
+        }
+
         registerPowerConnectionReceiver()
     }
 
@@ -164,6 +170,74 @@ class MainActivity : AppCompatActivity() {
             addAction(Intent.ACTION_POWER_CONNECTED)
         }
         registerReceiver(receiver, filter)
+    }
+
+    /**
+     * 実メモリ(物理RAM)+仮想メモリ(スワップ)の使用状況を表示する
+     * (2026-07-31追加、ユーザー指示「スマホとタブレットは実メモリ+仮想
+     * メモリを表示する機能も搭載」)。日英Web検索で裏取り済みのAndroid標準
+     * API: 実メモリは`ActivityManager.getMemoryInfo()`(`totalMem`/
+     * `availMem`、システム全体の値、Android全バージョンで利用可能な公式
+     * API)。仮想メモリ(スワップ)はAndroidに`ActivityManager`経由の直接API
+     * が無いため、Linuxカーネル標準の`/proc/meminfo`
+     * (`SwapTotal`/`SwapFree`、Androidも内部はLinuxカーネルのため同じ
+     * ファイルが存在する——rootや特別な権限は不要、一般アプリから読み取り
+     * 可能)を直接パースする。**正直な開示**: 一部の非常に制限された
+     * カスタムROM/SELinuxポリシーでは`/proc/meminfo`が読めない場合が
+     * あり得るため、読み取り失敗時は例外を投げずN/Aと表示する。
+     */
+    private fun showMemoryInfoDialog() {
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memInfo = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(memInfo)
+        val totalRealMb = memInfo.totalMem / (1024 * 1024)
+        val availRealMb = memInfo.availMem / (1024 * 1024)
+        val usedRealMb = totalRealMb - availRealMb
+        val usedRealPercent = if (totalRealMb > 0) usedRealMb * 100.0 / totalRealMb else 0.0
+
+        val (totalSwapMb, freeSwapMb) = readProcMeminfoSwap()
+        val swapLine = if (totalSwapMb == null) {
+            "Virtual memory / swap (仮想メモリ/スワップ): N/A (could not read /proc/meminfo / 読み取れませんでした)"
+        } else if (totalSwapMb == 0L) {
+            "Virtual memory / swap (仮想メモリ/スワップ): N/A (not configured / 未設定)"
+        } else {
+            val usedSwapMb = totalSwapMb - (freeSwapMb ?: 0L)
+            "Virtual memory / swap (仮想メモリ/スワップ): $usedSwapMb / $totalSwapMb MB"
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Memory info (メモリ情報)")
+            .setMessage(
+                "Physical memory (実メモリ) — Used (使用中): $usedRealMb MB / " +
+                    "Total (合計): $totalRealMb MB (${"%.1f".format(usedRealPercent)}%)\n" +
+                    "Available (空き): $availRealMb MB\n" +
+                    "Low memory (低メモリ状態): ${memInfo.lowMemory}\n\n$swapLine"
+            )
+            .setPositiveButton("OK (閉じる)", null)
+            .show()
+    }
+
+    /** `/proc/meminfo`から`SwapTotal`/`SwapFree`(いずれもkB単位、MBへ変換して
+     * 返す)を読み取る。読み取り失敗時は`Pair(null, null)`を返す(例外を
+     * 投げない、呼び出し側でN/A表示にする)。 */
+    private fun readProcMeminfoSwap(): Pair<Long?, Long?> {
+        return try {
+            var totalKb: Long? = null
+            var freeKb: Long? = null
+            File("/proc/meminfo").bufferedReader().useLines { lines ->
+                for (line in lines) {
+                    if (line.startsWith("SwapTotal:")) {
+                        totalKb = line.filter { it.isDigit() }.toLongOrNull()
+                    } else if (line.startsWith("SwapFree:")) {
+                        freeKb = line.filter { it.isDigit() }.toLongOrNull()
+                    }
+                    if (totalKb != null && freeKb != null) break
+                }
+            }
+            Pair(totalKb?.div(1024), freeKb?.div(1024))
+        } catch (e: Exception) {
+            Pair(null, null)
+        }
     }
 
     private fun onPowerDisconnected() {

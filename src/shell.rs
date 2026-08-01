@@ -228,6 +228,25 @@ pub const SHELL_HTML: &str = r#"
 </section>
 
 <section>
+  <h3>System memory (システムメモリ使用状況)</h3>
+  <p class="muted">
+    Current memory usage / total available memory on this machine.<br>
+    このマシンの現在のメモリ使用状況・全体の使用可能メモリです。
+  </p>
+  <label>Admin token (管理トークン)<input type="password" id="memory-admin-token" placeholder="OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN"></label>
+  <div class="buttons">
+    <button id="memory-refresh-btn">Refresh (更新)</button>
+  </div>
+  <div id="memory-chart-container" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+    <svg id="memory-pie-chart" width="140" height="140" viewBox="0 0 32 32" role="img" aria-label="Memory usage pie chart (メモリ使用率の円グラフ)">
+      <circle r="16" cx="16" cy="16" fill="var(--border, #d1d5db)"></circle>
+      <circle id="memory-pie-used-arc" r="16" cx="16" cy="16" fill="transparent" stroke="var(--accent, #2f6fed)" stroke-width="32" stroke-dasharray="0 100" transform="rotate(-90) translate(-32)"></circle>
+    </svg>
+    <p id="memory-stats-text" class="muted">Click Refresh to load (「更新」を押して読み込んでください)</p>
+  </div>
+</section>
+
+<section>
   <h3>Step 6: Nightly auto-update (⑥ 深夜バックグラウンド自動アップデート、既定OFF)</h3>
   <p class="muted">
     GitHub Releasesの最新バージョンを毎日ローカル深夜0時に確認し、新しい

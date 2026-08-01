@@ -14,7 +14,9 @@ mod db_encryption;
 mod dist_sync;
 mod mail;
 mod php_detector;
+mod power_profile;
 mod sms;
+mod system_memory;
 mod tls;
 mod totp;
 mod upload;
@@ -68,6 +70,10 @@ struct AppState {
     /// `accept_loop`へ「新規接続の受付を止めて」と伝えるフラグ
     /// (`auto_update`のゼロダウンタイム切り替えで使う)。
     stop_accepting: Arc<std::sync::atomic::AtomicBool>,
+    /// 電源プロファイル(省メモリ/省電力/常時電源接続、組み合わせ選択可能、
+    /// `open-web-server`側`power_profile.rs`と同じ設計を移植、
+    /// 2026-07-31追加)。管理API経由で再起動不要に切り替えられる。
+    power_profile: Arc<power_profile::PowerProfileRegistry>,
 }
 
 /// 唯一ログインを許可するアカウント(ユーザー指示、2026-07-15、
@@ -141,6 +147,7 @@ impl AppState {
                 .parse()
                 .unwrap_or_else(|_| ([0, 0, 0, 0], 8090).into()),
             stop_accepting: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            power_profile: Arc::new(power_profile::PowerProfileRegistry::new()),
         }
     }
 
@@ -271,6 +278,70 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
             return unauthorized;
         }
         return dist_sync::run_first_time_setup(&state.dist_sync).await;
+    }
+
+    // `/admin/system/memory` — 現在のシステムメモリ使用状況(総メモリ・
+    // 使用中・空き容量・使用率)を返す(2026-07-31追加、GUIの円グラフ
+    // 表示用)。`x-admin-token`ヘッダによる認証必須。
+    if path == "/admin/system/memory" {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        if method != Method::GET {
+            return error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string());
+        }
+        let snap = system_memory::snapshot();
+        return json_response(StatusCode::OK, &snap);
+    }
+
+    // `/admin/power-profile` — 電源プロファイル(省メモリ/省電力/常時電源
+    // 接続、組み合わせ選択可能)の取得・変更。`x-admin-token`ヘッダによる
+    // 認証必須(既存の`dist_sync`管理APIと同じ方式を再利用、`open-web-server`
+    // 側`power_profile.rs`と同じ設計、2026-07-31追加)。
+    if path == "/admin/power-profile" {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        return match method {
+            Method::GET => {
+                let flags = state.power_profile.get();
+                json_response(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "profiles": flags.active_pref_values(),
+                        "labels": flags.active_labels(),
+                    }),
+                )
+            }
+            Method::POST => {
+                let bytes = match req.into_body().collect().await {
+                    Ok(c) => c.to_bytes(),
+                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
+                };
+                #[derive(serde::Deserialize)]
+                struct Payload {
+                    profiles: Vec<String>,
+                }
+                let payload: Payload = match serde_json::from_slice(&bytes) {
+                    Ok(p) => p,
+                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
+                };
+                match power_profile::PowerProfileFlags::from_pref_values(&payload.profiles) {
+                    Ok(flags) => {
+                        state.power_profile.set(flags);
+                        json_response(
+                            StatusCode::OK,
+                            &serde_json::json!({
+                                "profiles": flags.active_pref_values(),
+                                "labels": flags.active_labels(),
+                            }),
+                        )
+                    }
+                    Err(bad) => error_response(StatusCode::BAD_REQUEST, format!("unknown power profile value: {bad}")),
+                }
+            }
+            _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string()),
+        };
     }
 
     // `/admin/auto-update` — 深夜バックグラウンド自動アップデートの
@@ -1252,6 +1323,7 @@ mod tests {
             auto_update: Arc::new(auto_update::AutoUpdateState::load(dir.path().join("auto-update.json"))),
             server_bind_addr: ([127, 0, 0, 1], 0).into(),
             stop_accepting: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            power_profile: Arc::new(power_profile::PowerProfileRegistry::new()),
         });
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -1634,6 +1706,7 @@ mod tests {
             auto_update: Arc::new(auto_update::AutoUpdateState::load(dir.path().join("auto-update.json"))),
             server_bind_addr: ([127, 0, 0, 1], 0).into(),
             stop_accepting: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            power_profile: Arc::new(power_profile::PowerProfileRegistry::new()),
         };
         assert!(state.site_dir("../etc").is_none());
         assert_eq!(state.site_dir("audiocafe.tokyo"), Some(PathBuf::from("/var/www/audiocafe.tokyo")));

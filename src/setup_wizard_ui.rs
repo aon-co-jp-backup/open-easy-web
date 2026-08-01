@@ -374,7 +374,63 @@ pub fn wire() -> Result<(), JsValue> {
 
     wire_click("auto-update-refresh-status-btn", on_refresh_auto_update_status)?;
     wire_change("auto-update-enabled-toggle", on_toggle_auto_update)?;
+
+    wire_click("memory-refresh-btn", on_refresh_memory)?;
     Ok(())
+}
+
+/// メモリ使用状況を取得し、円グラフ(SVG)+テキストを更新する
+/// (2026-07-31追加)。SVGの`stroke-dasharray`は`circle`の円周長
+/// (半径16の円 → 2πr ≈ 100.53、`viewBox`を32x32・半径16に合わせて
+/// あるため「0〜100の値をそのままパーセントとして使える」よう
+/// `stroke-dasharray="<used_percent> <100-used_percent>"`という単純な
+/// 近似で表現する(正確な円周長ではなく100を基準にした簡易表現だが、
+/// 見た目上の割合表示としては十分——SVG専用チャートライブラリへの
+/// 新規依存を避けるための工学的判断)。
+fn on_refresh_memory() {
+    let admin_token = input_value("memory-admin-token");
+    let base_url = same_origin_base_url();
+    spawn_local(async move {
+        match crate::api_auto_update::get_memory_snapshot(&base_url, &admin_token).await {
+            Ok(value) => {
+                let total = value.get("total_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+                let used = value.get("used_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+                let available = value.get("available_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+                let used_percent = value.get("used_percent").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let total_swap = value.get("total_swap_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+                let used_swap = value.get("used_swap_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+
+                if let Some(arc) = try_by_id("memory-pie-used-arc") {
+                    let _ = arc.set_attribute("stroke-dasharray", &format!("{:.2} {:.2}", used_percent, 100.0 - used_percent));
+                }
+                let to_gib = |bytes: u64| bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+                // 仮想メモリ(スワップ/ページファイル)が0の環境(スワップ
+                // 未設定)では「N/A」と正直に表示する(0.00 GiBだと「使われて
+                // いない」のか「そもそも無い」のか区別できないため)。
+                let swap_line = if total_swap == 0 {
+                    "Virtual memory / swap (仮想メモリ/スワップ): N/A (not configured / 未設定)".to_string()
+                } else {
+                    format!(
+                        "Virtual memory / swap (仮想メモリ/スワップ): {:.2} / {:.2} GiB",
+                        to_gib(used_swap),
+                        to_gib(total_swap)
+                    )
+                };
+                set_text(
+                    "memory-stats-text",
+                    &format!(
+                        "Physical memory (実メモリ) — Used (使用中): {:.2} GiB / Total (合計): {:.2} GiB ({:.1}%)\nAvailable (空き): {:.2} GiB\n{}",
+                        to_gib(used),
+                        to_gib(total),
+                        used_percent,
+                        to_gib(available),
+                        swap_line
+                    ),
+                );
+            }
+            Err(e) => set_text("memory-stats-text", &format!("❌ {e}")),
+        }
+    });
 }
 
 /// 動的生成される「削除」ボタンを、コンテナ1つのイベント委譲で処理する

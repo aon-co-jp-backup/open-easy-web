@@ -48,6 +48,11 @@ socket2 = { version = "0.5", features = ["all"] }
 # AEAD暗号(ランダムnonceを毎回生成)。既存のTOTP等と同じくRustCryptoの
 # 実績ある実装を採用し、自前実装はしない。
 aes-gcm = "0.10"
+# メモリ使用状況表示(2026-07-31追加): クロスプラットフォーム
+# (Windows/Linux/macOS)でシステムの総メモリ・使用中メモリを取得する
+# 実績あるクレート。自前でプラットフォーム別API(GlobalMemoryStatusEx/
+# /proc/meminfo)を書き分けない。
+sysinfo = "0.32"
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json", "multipart"] }

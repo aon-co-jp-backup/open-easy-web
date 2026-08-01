@@ -2371,3 +2371,50 @@ open-web-serverがApache＋Nginxのハイブリッド仕様のWebサーバーと
   「Completed Projects」セクションが実際に表示されコンソールエラーが
   無いことを確認した。
   - 次にすべきこと: 特になし(このパスの対応は完了)。
+
+- **2026-07-31(続き2) 電源プロファイル機能をopen-web-server側から移植+
+  システムメモリ使用状況の円グラフ表示(実メモリ+仮想メモリ)を追加
+  (ユーザー指示「電源プロファイル選択機能を実装」「全体管理機能に現在の
+  メモリ使用状況/全体の使用可能メモリをGUIで表示して円グラフで表示して」
+  「スマホとタブレットと新型PCは実メモリ+仮想メモリを表示する機能も
+  搭載」)**:
+  1. **電源プロファイル(`server/src/power_profile.rs`)**: `open-web-server`
+     側で既に完成・検証済みだった実装(省メモリ/省電力/常時電源接続の
+     組み合わせ選択可能な設計、省電力⇔常時電源接続は排他、省メモリは
+     独立軸でどちらとも併用可)をそのまま移植(自己完結モジュールのため
+     コピーのみで済んだ)。`GET/POST /admin/power-profile`
+     (`x-admin-token`認証)を追加。**正直な開示**: バックグラウンド
+     ポーリングループへの`effective_poll_interval`配線は今回未実施
+     (`open-web-server`はddns/free_domainループに配線済みだが、
+     `open-easy-web`側の対応するループへの配線は次回課題)。
+  2. **システムメモリ使用状況(`server/src/system_memory.rs`)**: `sysinfo`
+     クレート(クロスプラットフォーム、Windows/Linux/macOS/Android全対応)
+     で総メモリ・使用中メモリ・空き容量・使用率、および仮想メモリ
+     (スワップ/ページファイル、`total_swap_bytes`/`used_swap_bytes`)を
+     取得。`GET /admin/system/memory`(`x-admin-token`認証)。
+  3. **web/フロントエンド**: `src/shell.rs`にSVG円グラフ
+     (`stroke-dasharray`を使った単純な円弧描画、外部チャートライブラリ
+     への新規依存なし)+実メモリ/仮想メモリのテキスト表示セクションを
+     追加。`src/setup_wizard_ui.rs`に`on_refresh_memory()`を追加(既存の
+     auto-update状態取得と同じfetchパターン)。
+  4. **Android版(`android/`)**: `MemoryInfoButton`を追加し、実メモリは
+     `ActivityManager.getMemoryInfo()`(Android標準API、`totalMem`/
+     `availMem`)、仮想メモリ(スワップ)は`/proc/meminfo`の
+     `SwapTotal`/`SwapFree`を直接パース(Androidも内部Linuxカーネルの
+     ため一般アプリから読み取り可能、root不要——日英Web検索で裏取り
+     済み)。読み取り失敗時は例外を投げずN/A表示(正直な開示)。
+     スマホ・タブレット両レイアウト(`layout`/`layout-sw600dp`)に配線。
+  5. **検証**: サーバー側新規テスト18件(power_profile 16件+
+     system_memory 2件)、`cargo test`(server)88→94件相当で全green
+     (回帰なし)。`cargo build --target wasm32-unknown-unknown`警告0件。
+     `wasm-bindgen`で実際に`pkg/`を生成し、ローカル配信+Claude Browser
+     paneで実際に開き、円グラフSVG・実メモリ/仮想メモリのテキスト
+     表示・「更新」ボタンのエラーハンドリング(バックエンド未起動時に
+     白画面にならず適切なエラーメッセージを表示)を確認、コンソール
+     エラー無し。Androidは`gradle :app:assembleDebug`で**BUILD
+     SUCCESSFUL**を確認(既存jniLibs同梱のまま、新規warning無し)。
+     **正直な開示**: Android実機/エミュレータでの実タップ確認は今回
+     未実施(ビルド成功の確認まで)。
+  - 次にすべきこと: (1) `effective_poll_interval`をバックグラウンド
+    ループへ実配線、(2) Android実機/エミュレータでのメモリ情報ボタンの
+    実タップ確認、(3) VPS本番へのデプロイ。
