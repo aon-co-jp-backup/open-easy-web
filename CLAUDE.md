@@ -2418,3 +2418,42 @@ open-web-serverがApache＋Nginxのハイブリッド仕様のWebサーバーと
   - 次にすべきこと: (1) `effective_poll_interval`をバックグラウンド
     ループへ実配線、(2) Android実機/エミュレータでのメモリ情報ボタンの
     実タップ確認、(3) VPS本番へのデプロイ。
+
+- **2026-07-31(続き3) メモリセクションに「省メモリ版に変更」「省機能+
+  省メモリ版に変更」「全機能を復元」ボタン+Androidアンインストールボタン
+  を追加(ユーザー指示「省メモリ版に変更も可能にして」「アプリの
+  アンインストールも可能にして」「省機能+省メモリ版に切替ボタンも
+  付けて、省機能版は必要最低限の機能に絞る機能を付けて」)**:
+  1. **省メモリ版に変更**: `api_auto_update::set_power_profile()`を新設し
+     `POST /admin/power-profile`へ`["memory_saver"]`を送信。
+  2. **省機能+省メモリ版**: 上記に加え、`MINIMAL_UI_HIDDEN_SECTION_IDS`
+     (`freedomain-section`・`external-tools-section`——ログイン・
+     サイト操作・システムメモリ表示・電源プロファイルという必須機能は
+     対象外、正直な開示: この線引きは本実装での工学的判断)を
+     `localStorage`(`openeasyweb_minimal_ui_v1`)永続化付きでDOM非表示
+     化する。ページ再読み込み後も状態が復元される。
+  3. **アンインストール**: デスクトップ(Windows/Linux)はこのGUIから
+     シェルコマンドを実行しない既存の安全性方針を踏襲し、
+     `uninstall.sh`/`uninstall.ps1`を手動実行する案内テキストのみ表示。
+     **Android**: ネイティブアプリ(`MainActivity.kt`)に
+     `Intent.ACTION_DELETE`+`package:`Uriでシステム標準のアンインストール
+     確認ダイアログを開く`requestUninstall()`を追加(Web側からは
+     ネイティブAndroidの機能を呼び出せないため、Web GUIには「ネイティブ
+     アプリ側のボタンを使ってください」という案内のみ配置)。
+  4. **エコシステム横断の標準方針化**: ユーザー指示「全てのリポジトリ、
+     全てのプロジェクトのGUIに省機能、省メモリ版に切替えるボタンを
+     付けて」を受け、`open-raid-z/CLAUDE.md`に標準テンプレートとして
+     記録(GUIを持つリポジトリを優先する段階的着手方針、詳細は同ファイル
+     参照)。
+  5. **検証**: `cargo test`(WASM側)11件全green(回帰なし)。
+     `cargo build --target wasm32-unknown-unknown`警告0件。実バイナリ+
+     Claude Browser paneで実際に確認: 「省機能+省メモリ版に変更」ボタン
+     クリックで`freedomain-section`/`external-tools-section`が実際に
+     `hidden`クラス付与+`localStorage`へ`"1"`永続化、「全機能を復元」で
+     元に戻り`localStorage`が`"0"`になること、ページ再読み込み後も
+     `localStorage`の値(`"1"`)に基づき非表示状態が正しく復元される
+     ことを確認、コンソールエラー無し。Android`gradle :app:assembleDebug`
+     **BUILD SUCCESSFUL**。
+  - 次にすべきこと: (1) Android実機/エミュレータでのアンインストール
+    ボタンの実タップ確認、(2) 他のGUIを持つリポジトリ(`open-redmine`・
+    `rs-link-fusion`)への同パターン展開、(3) VPS本番へのデプロイ。

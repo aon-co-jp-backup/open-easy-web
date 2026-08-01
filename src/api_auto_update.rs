@@ -64,3 +64,16 @@ pub async fn set_enabled(base_url: &str, admin_token: &str, enabled: bool) -> Re
 pub async fn get_memory_snapshot(base_url: &str, admin_token: &str) -> Result<Value, String> {
     call::<()>(base_url, "/admin/system/memory", "GET", admin_token, None).await
 }
+
+#[derive(Serialize)]
+struct SetPowerProfileBody {
+    profiles: Vec<String>,
+}
+
+/// `POST /admin/power-profile` — 電源プロファイルを設定する
+/// (2026-07-31追加、メモリ使用状況セクションの「省メモリ版に変更」
+/// ボタンから呼ぶ想定)。
+pub async fn set_power_profile(base_url: &str, admin_token: &str, profiles: &[&str]) -> Result<Value, String> {
+    let body = SetPowerProfileBody { profiles: profiles.iter().map(|s| s.to_string()).collect() };
+    call(base_url, "/admin/power-profile", "POST", admin_token, Some(&body)).await
+}

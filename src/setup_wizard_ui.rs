@@ -376,7 +376,88 @@ pub fn wire() -> Result<(), JsValue> {
     wire_change("auto-update-enabled-toggle", on_toggle_auto_update)?;
 
     wire_click("memory-refresh-btn", on_refresh_memory)?;
+    wire_click("memory-switch-low-memory-btn", on_switch_to_low_memory_profile)?;
+    wire_click("memory-switch-minimal-btn", on_switch_to_minimal_profile)?;
+    wire_click("memory-restore-full-btn", on_restore_full_features)?;
+    apply_minimal_ui_from_storage();
     Ok(())
+}
+
+/// 「省機能」モードで非表示にするセクションのID一覧(2026-07-31追加、
+/// ユーザー指示「省機能版は、必要最低限の機能に絞る機能を付けて」)。
+/// 必須機能(ログイン・サイト操作・システムメモリ表示・電源プロファイル)
+/// は対象外——ここに挙げたのは無くても最低限のサイト運用に支障が出ない
+/// 補助機能のみ(正直な開示: 「必要最低限」の線引きはこの実装での判断で
+/// あり、ユーザーの実際の利用状況によっては異なる線引きが妥当な場合も
+/// ある)。
+const MINIMAL_UI_HIDDEN_SECTION_IDS: &[&str] = &["freedomain-section", "external-tools-section"];
+
+const MINIMAL_UI_STORAGE_KEY: &str = "openeasyweb_minimal_ui_v1";
+
+fn set_minimal_ui_hidden(hidden: bool) {
+    for id in MINIMAL_UI_HIDDEN_SECTION_IDS {
+        if let Some(el) = try_by_id(id) {
+            let class_list = el.class_list();
+            if hidden {
+                let _ = class_list.add_1("hidden");
+            } else {
+                let _ = class_list.remove_1("hidden");
+            }
+        }
+    }
+    if let Ok(Some(storage)) = crate::dom::window().local_storage() {
+        let _ = storage.set_item(MINIMAL_UI_STORAGE_KEY, if hidden { "1" } else { "0" });
+    }
+}
+
+/// 前回選択済みの省機能設定を、ページ読み込み時に復元する
+/// (`localStorage`、再読み込みのたびに毎回ボタンを押し直さなくて良い
+/// ようにするため)。
+fn apply_minimal_ui_from_storage() {
+    let is_minimal = crate::dom::window().local_storage().ok().flatten().and_then(|s| s.get_item(MINIMAL_UI_STORAGE_KEY).ok().flatten()).as_deref() == Some("1");
+    if is_minimal {
+        set_minimal_ui_hidden(true);
+    }
+}
+
+fn on_switch_to_minimal_profile() {
+    let admin_token = input_value("memory-admin-token");
+    let base_url = same_origin_base_url();
+    set_minimal_ui_hidden(true);
+    spawn_local(async move {
+        match crate::api_auto_update::set_power_profile(&base_url, &admin_token, &["memory_saver"]).await {
+            Ok(_) => set_text("memory-switch-status", "✅ Switched to reduced-feature + low-memory profile (省機能+省メモリ版に切り替えました)"),
+            Err(e) => set_text("memory-switch-status", &format!("❌ {e}")),
+        }
+    });
+}
+
+fn on_restore_full_features() {
+    set_minimal_ui_hidden(false);
+    let admin_token = input_value("memory-admin-token");
+    let base_url = same_origin_base_url();
+    spawn_local(async move {
+        match crate::api_auto_update::set_power_profile(&base_url, &admin_token, &[]).await {
+            Ok(_) => set_text("memory-switch-status", "✅ Restored full features / normal profile (全機能・通常プロファイルに戻しました)"),
+            Err(e) => set_text("memory-switch-status", &format!("❌ {e}")),
+        }
+    });
+}
+
+/// 「省メモリ版に変更」ボタン(2026-07-31追加、ユーザー指示「システム
+/// メモリ使用状況の情報から省メモリ版に変更も可能にして」)。既存の
+/// 省電力/常時電源接続フラグは変更せず、`memory_saver`のみを設定する
+/// (この場所からの操作は「メモリを減らしたい」という単一の意図に絞る、
+/// 過剰な選択肢を出さない工学的判断)。
+fn on_switch_to_low_memory_profile() {
+    let admin_token = input_value("memory-admin-token");
+    let base_url = same_origin_base_url();
+    spawn_local(async move {
+        match crate::api_auto_update::set_power_profile(&base_url, &admin_token, &["memory_saver"]).await {
+            Ok(_) => set_text("memory-switch-status", "✅ Switched to low-memory profile (省メモリ版に切り替えました)"),
+            Err(e) => set_text("memory-switch-status", &format!("❌ {e}")),
+        }
+    });
 }
 
 /// メモリ使用状況を取得し、円グラフ(SVG)+テキストを更新する

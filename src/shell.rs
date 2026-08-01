@@ -244,6 +244,44 @@ pub const SHELL_HTML: &str = r#"
     </svg>
     <p id="memory-stats-text" class="muted">Click Refresh to load (「更新」を押して読み込んでください)</p>
   </div>
+  <div class="buttons">
+    <button id="memory-switch-low-memory-btn">Switch to low-memory profile (省メモリ版に変更)</button>
+    <button id="memory-switch-minimal-btn">Switch to reduced-feature + low-memory (省機能+省メモリ版に変更)</button>
+    <button id="memory-restore-full-btn">Restore full features (全機能を復元)</button>
+  </div>
+  <p id="memory-switch-status" class="muted" aria-live="polite"></p>
+  <p class="muted">
+    "Reduced-feature (省機能)" hides non-essential sections below (Easy
+    Free-Domain Setup, External Tools) to lower rendering/memory overhead,
+    in addition to the low-memory backend profile.<br>
+    「省機能」は上記の省メモリプロファイルに加え、必須ではないセクション
+    (簡単ドメイン設定・外部ツール)を非表示にして描画/メモリ負荷を
+    抑えます。
+  </p>
+</section>
+
+<section>
+  <h3>Uninstall (アンインストール)</h3>
+  <p class="muted">
+    Desktop (Windows/Linux): this GUI does not execute shell commands
+    itself (safety policy — see CLAUDE.md). Run the uninstaller manually
+    from a terminal in the installation directory:<br>
+    デスクトップ版(Windows/Linux): このGUIから直接シェルコマンドを実行
+    することはありません(安全性方針、CLAUDE.md参照)。インストール先の
+    ディレクトリで以下を手動実行してください:
+  </p>
+  <pre class="code-block">Linux:   sudo ./uninstall.sh
+Windows: .\uninstall.ps1 (as Administrator / 管理者権限で)</pre>
+  <p class="muted">
+    Android: open the app on your device and use the "Uninstall" button
+    there (a plain web page cannot trigger a native Android uninstall —
+    this requires the native app's own UI, see the Android app's main
+    screen).<br>
+    Android版: 端末上でアプリを開き、そちらの「アンインストール」ボタンを
+    使ってください(通常のWebページからネイティブのAndroidアンインストール
+    は呼び出せないため、ネイティブアプリ自身のUIが必要です。Androidアプリの
+    メイン画面を参照)。
+  </p>
 </section>
 
 <section>

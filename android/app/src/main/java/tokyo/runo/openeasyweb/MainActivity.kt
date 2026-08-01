@@ -149,6 +149,11 @@ class MainActivity : AppCompatActivity() {
             showMemoryInfoDialog()
         }
 
+        val uninstallButton = findViewById<Button>(R.id.uninstallButton)
+        uninstallButton.setOnClickListener {
+            requestUninstall()
+        }
+
         registerPowerConnectionReceiver()
     }
 
@@ -238,6 +243,35 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Pair(null, null)
         }
+    }
+
+    /**
+     * アプリのアンインストールを要求する(2026-07-31追加、ユーザー指示
+     * 「アプリのアンインストールも可能にして」)。日英Web検索で裏取り
+     * 済みの標準Android API: `Intent.ACTION_DELETE`+`package:`Uriで
+     * システム標準のアンインストール確認ダイアログを開く(このアプリ
+     * コード自体がサイレントにアンインストールすることは不可能——
+     * Android OSの仕様上、必ずユーザーの明示的な確認ダイアログを経由する
+     * 設計になっており、これはセキュリティ上意図された制約であり本アプリ
+     * の実装上の制限ではない)。確認後の実削除自体はOSが行う。
+     */
+    private fun requestUninstall() {
+        AlertDialog.Builder(this)
+            .setTitle("Uninstall (アンインストール)")
+            .setMessage(
+                "Open the system uninstall confirmation dialog for this app?\n" +
+                    "このアプリのアンインストール確認ダイアログを開きますか?"
+            )
+            .setPositiveButton("Uninstall (アンインストール)") { _, _ ->
+                try {
+                    val intent = Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName"))
+                    startActivity(intent)
+                } catch (e: ActivityNotFoundException) {
+                    Toast.makeText(this, "Could not open uninstall dialog (アンインストール画面を開けませんでした)", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton("Cancel (キャンセル)", null)
+            .show()
     }
 
     private fun onPowerDisconnected() {
