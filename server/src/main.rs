@@ -294,11 +294,21 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         return json_response(StatusCode::OK, &snap);
     }
 
-    // `/admin/power-profile` — 電源プロファイル(省メモリ/省電力/常時電源
-    // 接続、組み合わせ選択可能)の取得・変更。`x-admin-token`ヘッダによる
-    // 認証必須(既存の`dist_sync`管理APIと同じ方式を再利用、`open-web-server`
-    // 側`power_profile.rs`と同じ設計、2026-07-31追加)。
-    if path == "/admin/power-profile" {
+    // `/admin/easyweb-power-profile` — 電源プロファイル(省メモリ/省電力/
+    // 常時電源接続、組み合わせ選択可能)の取得・変更。`x-admin-token`
+    // ヘッダによる認証必須(既存の`dist_sync`管理APIと同じ方式を再利用、
+    // `open-web-server`側`power_profile.rs`と同じ設計、2026-07-31追加)。
+    // **正直な開示・実バグ修正(2026-07-31発見)**: 当初`/admin/
+    // power-profile`という名前だったが、`open-web-server`自身
+    // (このアプリのリバースプロキシ/テナントルーター)が**同名の
+    // 独自管理API**を既に持っており、`easy-web.tokyo`経由のリクエストは
+    // `open-web-server`自身のハンドラに横取りされ、この
+    // `open-easy-web-server`バックエンドまで一切到達していなかった
+    // (実際に`curl https://easy-web.tokyo/admin/power-profile`で
+    // `open-web-server`側の`401`〈token不一致〉が返り、バックエンド直接
+    // 〈`127.0.0.1:8080`〉への同リクエストは`503`〈token未設定〉——挙動が
+    // 食い違うことで発覚)。パスをアプリ固有の名前へ変更して衝突を解消。
+    if path == "/admin/easyweb-power-profile" {
         if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
             return unauthorized;
         }

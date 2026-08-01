@@ -2457,3 +2457,28 @@ open-web-serverがApache＋Nginxのハイブリッド仕様のWebサーバーと
   - 次にすべきこと: (1) Android実機/エミュレータでのアンインストール
     ボタンの実タップ確認、(2) 他のGUIを持つリポジトリ(`open-redmine`・
     `rs-link-fusion`)への同パターン展開、(3) VPS本番へのデプロイ。
+
+- **2026-07-31(続き4) 実バグ発見・修正: `/admin/power-profile`が
+  `open-web-server`自身の同名APIに横取りされ本番で到達不能だった**:
+  VPS本番(`easy-web.tokyo`)へデプロイ後、`curl`で公開ドメイン経由と
+  バックエンド直接(`127.0.0.1:8080`)の応答が食い違うことを発見
+  (公開ドメイン経由は`401`、直接は`503`)。原因は`open-web-server`
+  (このアプリの手前で動くリバースプロキシ/テナントルーター)自身が
+  `/admin/power-profile`という同名の独自管理APIを既に持っており、
+  `dispatch()`内で自身のハンドラをテナント転送より先に評価するため、
+  `easy-web.tokyo/admin/power-profile`へのリクエストは`open-web-server`
+  自身に横取りされ、`open-easy-web-server`バックエンドまで一切到達して
+  いなかった。**修正**: パスを`/admin/easyweb-power-profile`
+  (アプリ固有の名前)へ変更して衝突を解消(`server/src/main.rs`・
+  `src/api_auto_update.rs`両方)。`system/memory`等の他エンドポイントは
+  `open-web-server`側に同名APIが無いため今回の衝突は起きていない
+  (確認済み)。
+  - 教訓: 「分身の術」テナント配下のアプリが`/admin/*`配下にエンドポイント
+    を追加する際は、`open-web-server`自身の既存管理APIパス一覧
+    (`tenants`・`keys`・`watchdog`・`redirects`・`power-profile`・
+    `web-vhost`・`ddns`・`disaster-email-backup`)と衝突しないか確認する
+    こと(他のリポジトリで同様のエンドポイントを追加する際も同じ確認が
+    必要)。
+  - 次にすべきこと: VPS本番へ本修正を反映(`git pull`→再ビルド→
+    `systemctl restart`)、実HTTPS経由で`easyweb-power-profile`が
+    バックエンドまで到達することを再確認。

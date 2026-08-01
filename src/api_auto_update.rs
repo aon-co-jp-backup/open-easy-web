@@ -70,10 +70,15 @@ struct SetPowerProfileBody {
     profiles: Vec<String>,
 }
 
-/// `POST /admin/power-profile` — 電源プロファイルを設定する
+/// `POST /admin/easyweb-power-profile` — 電源プロファイルを設定する
 /// (2026-07-31追加、メモリ使用状況セクションの「省メモリ版に変更」
-/// ボタンから呼ぶ想定)。
+/// ボタンから呼ぶ想定)。**正直な開示**: パス名に`easyweb-`を含むのは、
+/// `open-web-server`(このアプリのリバースプロキシ)自身が同名の
+/// `/admin/power-profile`管理APIを既に持っており、素の`/admin/
+/// power-profile`だとそちらに横取りされ、このアプリのバックエンドまで
+/// 到達しない実バグが本番環境で発覚したため(詳細は`server/src/
+/// main.rs`のコメント参照)。
 pub async fn set_power_profile(base_url: &str, admin_token: &str, profiles: &[&str]) -> Result<Value, String> {
     let body = SetPowerProfileBody { profiles: profiles.iter().map(|s| s.to_string()).collect() };
-    call(base_url, "/admin/power-profile", "POST", admin_token, Some(&body)).await
+    call(base_url, "/admin/easyweb-power-profile", "POST", admin_token, Some(&body)).await
 }
