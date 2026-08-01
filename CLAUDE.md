@@ -260,9 +260,15 @@ python -m http.server 8080   # index.html + pkg/ を配信
   戻ることを確認済み。**正直な開示**: `open-raid-z/CLAUDE.md`にも
   同日この改定を記録済みだが、Android版(`android/`のKotlin実装)は
   今回対象外(WASM GUI側のみ変更、ネイティブUIは別途)。
-  - 次にすべきこと: VPS本番へのデプロイ、Android版UIへの同様の反映
-    (優先度は低——現状のAndroid UIは電源プロファイル選択自体を持たない
-    可能性があり要確認)。
+  - 次にすべきこと: Android版UIへの同様の反映(優先度は低——現状の
+    Android UIは電源プロファイル選択自体を持たない可能性があり要確認)。
+
+- **2026-08-01(続き) 本番デプロイ完了**: `/root/open-easy-web-app`で
+  `git pull`→`cargo build --target wasm32-unknown-unknown --release`→
+  `wasm-bindgen`→`systemctl restart open-easy-web`。`curl https://
+  easy-web.tokyo/pkg/open_easy_web_bg.wasm`のバイナリに
+  `profile-power-save`(3件)・`easyweb-power-profile`(1件)が実際に
+  含まれることを確認。
 
 - **2026-07-31(続き2) DATABASE暗号化をVPS本番へデプロイ完了+説明文の指定文言への更新+移行バグの事前発見・修正**:
   1. **説明文の更新**: ユーザー指定の日英文言
