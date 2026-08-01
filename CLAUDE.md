@@ -230,6 +230,27 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-08-01(続き2) Android版UIへの電源プロファイル反映を調査、
+  意図的に見送り(前回エントリの「次にすべきこと」への対応)**:
+  `android/app/src/main/java/tokyo/runo/openeasyweb/PowerProfile.kt`/
+  `ProfileSelectActivity.kt`を確認したところ、Android版は既に独自の
+  電源プロファイル選択画面を持っていたが、これはWeb GUI側の
+  `PowerProfileFlags`(実行時に切替可能な独立フラグの組み合わせ)とは
+  **性質が異なる別概念**だった: Android版は起動時に選ぶ3択の排他的
+  選択(`POWER_SAVE`/`NORMAL`/`ALWAYS_ON`)で、`WakeLock`を取得するか
+  しないかというOSレベルのプロセス起動モードを決めるもの
+  (`memory_saver`の概念自体が無く、「省電力」と「常時電源接続」を
+  同時に有効化するという組み合わせもWakeLockの取得/非取得という点で
+  本質的に排他的で意味を成さない)。そのためチェックボックス方式への
+  変換は不適切と判断し、見送った。
+  一方、`MainActivity.kt`の`openBrowserButton`は外部ブラウザで
+  Web GUI(`serverBaseUrl() + "/"`)を開くだけの導線であり、**Android
+  ユーザーは既にこのボタン経由で今回実装したチェックボックスUIへ
+  到達できる**(埋め込みWebViewではなく外部ブラウザ遷移のため、
+  Android側のコード変更なしにWeb側の変更がそのまま反映される)。
+  - 次にすべきこと: 特に無し(Android版ネイティブ選択画面とWeb GUIの
+    電源プロファイルは今後も別概念として扱う方針)。
+
 - **2026-08-01 電源プロファイルUIを排他的3ボタンから独立チェックボックス
   方式へ変更(エコシステム標準方針の改定、ユーザー指示「省メモリ、
   常時電源接続などのチェックボックスとボタンにして」)**: 直前まで
