@@ -2330,3 +2330,33 @@ open-web-serverがApache＋Nginxのハイブリッド仕様のWebサーバーと
 ロジックを再利用すること(車輪の再発明を避ける)。
 - 次にすべきこと: このリポジトリの`install.sh`/`install.ps1`に上記3
   プロファイルの選択機能を追加する。
+
+- **2026-07-31 完成済みプロジェクト一覧セクションを追加(ユーザー指示
+  「完成しているものは、https://easy-web.tokyoでリンクを張って、デモは、
+  /demoから紹介してWindows LINUX Androidのダウンロードを選択可能に
+  して」)**:
+  1. **`src/shell.rs`**: トップページのヘッダー直下に
+     `#completed-projects-section`を新設。open-redmine(本番/デモ/
+     ダウンロードリンク)・RS-Link-Fusion(本番/デモ/ダウンロードリンク、
+     Android版は「準備中」と正直に表示)の2件を掲載。
+  2. **`index.html`**: `.project-card`CSSを追加(既存`.site-card`と
+     同系統のスタイル)。
+  3. **検証**: 新規テスト1件
+     (`shell_html_lists_completed_projects_with_production_and_demo_
+     links`)、`cargo test shell::`6件全green。`cargo build --target
+     wasm32-unknown-unknown`警告0件。`wasm-bindgen`で実際に`pkg/`を
+     生成し、ローカルで`python -m http.server`配信+Claude Browser pane
+     で実際に開いて確認:「Completed Projects (完成済みプロジェクト)」
+     セクションが正しく描画され、open-redmine・RS-Link-Fusionの本番/
+     デモリンクが実際にDOM上に存在し、コンソールエラー・白画面が無いこと
+     を確認した。
+  4. **正直な開示**: (1) Android版ダウンロードは、いずれのプロジェクトも
+     Androidアプリシェル自体が未着手のため「準備中」表記のみで実リンク
+     は無い(`open-raid-z/CLAUDE.md`のエコシステム横断Android優先方針
+     参照)。(2) このセクションは静的なリンク集であり、「完成済み」の
+     判定・一覧の自動更新は行わない(手動でHTMLへ追記する設計、
+     既存の「外部ツール」セクションと同じ静的リンクパターンを踏襲)。
+  - 次にすべきこと: (1) VPS上の`open-easy-web-wasm`をrebuildして本番
+    (`easy-web.tokyo`)へ反映、(2) Android版が完成したプロジェクトから
+    順にダウンロードリンクを実装、(3) 今後完成した他プロジェクトも
+    同じパターンで追加していく。

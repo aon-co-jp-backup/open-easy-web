@@ -17,6 +17,32 @@ pub const SHELL_HTML: &str = r#"
   </p>
 </header>
 
+<section id="completed-projects-section">
+  <h2>Completed Projects (完成済みプロジェクト)</h2>
+  <p class="muted">
+    Links to production and demo environments for finished apps in this
+    ecosystem. Where an installer exists, choose your platform below.<br>
+    このエコシステムで完成したアプリの本番/デモ環境へのリンクです。
+    インストーラーがあるものは、下記からプラットフォームを選べます。
+  </p>
+
+  <div class="project-card">
+    <h3>open-redmine</h3>
+    <p class="muted">Ticket management &amp; Wiki (Redmine-compatible) / チケット管理・Wiki(Redmine互換)</p>
+    <a href="https://easy-web.tokyo/open-redmine/">Production (本番)</a> ・
+    <a href="https://easy-web.tokyo/open-redmine/demo">Demo (デモ)</a> ・
+    <a href="https://github.com/aon-co-jp/open-redmine/releases">Windows / Linux download</a>
+  </div>
+
+  <div class="project-card">
+    <h3>RS-Link-Fusion</h3>
+    <p class="muted">Multi-link bonding &amp; failover (LAN+WiFi) / 複数回線ボンディング・自動フェイルオーバー</p>
+    <a href="https://easy-web.tokyo/rs-link-fusion/">Production (本番)</a> ・
+    <a href="https://easy-web.tokyo/rs-link-fusion/demo">Demo (デモ)</a> ・
+    <a href="https://easy-web.tokyo/rs-link-fusion/">Windows / Linux download (Android: coming soon / 準備中)</a>
+  </div>
+</section>
+
 <section id="setup-wizard-section" class="hidden">
   <h2>First-time Setup Guide (初回セットアップガイド)</h2>
   <p class="muted">
@@ -803,5 +829,20 @@ mod tests {
         assert!(SHELL_HTML.contains("ninja clone"));
         assert!(SHELL_HTML.contains("aruaru-db"));
         assert!(SHELL_HTML.contains("open-raid-z"));
+    }
+
+    /// 2026-07-31追記: 完成済みプロジェクト一覧セクション(open-redmine・
+    /// RS-Link-Fusion、本番/デモリンク+ダウンロード導線)がトップページに
+    /// 存在することの回帰確認(ユーザー指示「完成しているものは、
+    /// https://easy-web.tokyoでリンクを張って、デモは、/demoから紹介して
+    /// Windows LINUX Androidのダウンロードを選択可能にして」)。
+    #[test]
+    fn shell_html_lists_completed_projects_with_production_and_demo_links() {
+        assert!(SHELL_HTML.contains(r#"id="completed-projects-section""#));
+        assert!(SHELL_HTML.contains("https://easy-web.tokyo/open-redmine/"));
+        assert!(SHELL_HTML.contains("https://easy-web.tokyo/open-redmine/demo"));
+        assert!(SHELL_HTML.contains("https://easy-web.tokyo/rs-link-fusion/"));
+        assert!(SHELL_HTML.contains("https://easy-web.tokyo/rs-link-fusion/demo"));
+        assert!(SHELL_HTML.contains("RS-Link-Fusion"));
     }
 }
