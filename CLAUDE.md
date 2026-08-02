@@ -230,6 +230,45 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+- **2026-08-01(続き3) 実バグ修正: システムメモリ「更新」ボタンで
+  分散同期(dist-sync)専用のエラーメッセージが出ていた+本番の管理
+  トークン未設定を解消(ユーザー報告「Refresh（更新）ボタンを押すと
+  ❌ HTTP 503: dist-sync admin API is disabled...というERRORメッセージが
+  出ます」)**:
+  1. **原因**: `server/src/dist_sync.rs`の`require_admin_token()`は
+     システムメモリ・電源プロファイル・自動アップデート等**全ての
+     `/admin/*`管理API共通のゲート**だが、`OPEN_EASYWEB_DIST_SYNC_
+     ADMIN_TOKEN`未設定時のエラー文言が「dist-sync admin API is
+     disabled」と分散同期専用の表現に固定されていた。ユーザーは
+     システムメモリの「更新」ボタン(分散同期とは無関係な機能)を
+     押しただけなのに、無関係な分散同期のエラーが表示され混乱を招いて
+     いた。
+  2. **文言修正**: 全管理API共通の汎用的な文言(「admin API is disabled
+     on this server」)に変更。
+  3. **本番の根本原因も解消**: VPS上で`OPEN_EASYWEB_DIST_SYNC_ADMIN_
+     TOKEN`自体が一度も設定されていなかったため、文言を直しても
+     引き続き全ての管理API(メモリ表示・電源プロファイル・自動
+     アップデート含む)が使えないままだった。`openssl rand -hex 24`で
+     実際のトークンを生成し、systemd drop-in
+     (`/etc/systemd/system/open-easy-web.service.d/admin-token.conf`)
+     で設定・反映(生成値は`/root/.open-easy-web-admin-token`にも保存、
+     `chmod 600`)。
+  4. **検証(実測)**: `cargo test`(server)90件全green(回帰無し)。
+     本番デプロイ後、`curl`で無トークン→`401`(修正前の紛らわしい
+     `503`から変化)、正しいトークン→実際のメモリ使用状況JSON
+     (使用中0.45GiB/合計1.66GiB等)が返ることを確認。**実ブラウザで
+     `https://easy-web.tokyo/`を開き、管理トークン欄に実際のトークンを
+     入力して「更新」ボタンを実クリック**——ユーザーが報告したエラーは
+     再現せず、実際のメモリ使用状況(実メモリ・仮想メモリ/スワップ)が
+     正しく表示されることを確認。同じトークンで電源プロファイル
+     チェックボックス(「省メモリ」)も実際にサーバー側の状態を変更
+     できることを確認し、確認後は「全機能を復元」で元の通常状態へ
+     戻した(本番の実際の状態を検証目的で変更したままにしないため)。
+  - 次にすべきこと: 特に緊急の課題は無し。今後、この管理トークンを
+    使う機能(メモリ表示・電源プロファイル)を使う際は
+    `/root/.open-easy-web-admin-token`の値を「管理トークン」欄に
+    入力すること。
+
 - **2026-08-01(続き2) Android版UIへの電源プロファイル反映を調査、
   意図的に見送り(前回エントリの「次にすべきこと」への対応)**:
   `android/app/src/main/java/tokyo/runo/openeasyweb/PowerProfile.kt`/
