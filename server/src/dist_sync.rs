@@ -373,12 +373,21 @@ fn error_response(status: StatusCode, message: impl Into<String>) -> Response<Bo
 /// 場合も同じ慣習に揃える)。`OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN`が
 /// 未設定の場合、この管理APIは無効化する(意図せず無認証で公開しない
 /// ための安全側デフォルト)。
+///
+/// **2026-08-01追記(実バグ修正)**: この関数は分散同期(dist-sync)専用
+/// ではなく、システムメモリ・電源プロファイル・自動アップデート等
+/// 全ての`/admin/*`管理APIで共有されている単一のゲートだが、無効時の
+/// エラー文言が「dist-sync admin API is disabled」と分散同期専用の
+/// 表現に固定されていたため、メモリ使用状況の「更新」ボタンのような
+/// 無関係な機能を押しただけのユーザーにも紛らわしい分散同期関連の
+/// エラーが表示されてしまっていた(ユーザー報告で発覚)。全管理API
+/// 共通の汎用的な文言に変更。
 pub fn require_admin_token(req: &Request<Incoming>) -> Result<(), Response<BoxBody>> {
     let Ok(expected) = std::env::var("OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN") else {
         return Err(error_response(
             StatusCode::SERVICE_UNAVAILABLE,
-            "dist-sync admin API is disabled (OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN not set) / \
-             分散同期の管理APIは無効です(OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN未設定)",
+            "admin API is disabled on this server (OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN not set) / \
+             このサーバーでは管理API機能が無効です(OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN未設定)",
         ));
     };
     let provided = req.headers().get("x-admin-token").and_then(|v| v.to_str().ok());
