@@ -351,6 +351,29 @@ connection-info`)を呼び出すが、`api_auth.rs`(自サーバーAPI、
   起因)。`[System.IO.File]::ReadAllText()`で読んだ文字列を
   `ParseInput()`へ渡す形で検証すると正しく判定できる。
 
+## 15. Android版の外付けHDD対応 + リリースワークフローのsibling依存漏れ(2026-08-04)
+
+`open-web-server/android`版の外付けHDD主ストレージ機能
+(`ExternalStorageConfig.kt`)をそのまま移植。移植先固有の環境変数は
+`OPEN_EASYWEB_SITES_ROOT`/`OPEN_EASYWEB_USERS_STATE`/
+`OPEN_EASYWEB_DB_ENCRYPTION_KEY_FILE`/`OPEN_EASYWEB_AI_STATE`
+(`server/src/main.rs::AppState::from_env()`が実際に読む値、`env_path()`
+呼び出し箇所を直接確認して裏取りすること——推測で環境変数名を書かない)。
+
+**実装中に発見した実バグ2件**:
+1. Android版が必須環境変数`OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`
+   (`fixed_account_email()`が未設定だと`panic`する設計)を一切設定して
+   おらず、外付けHDD機能とは無関係に**サーバーが一度も起動できない
+   状態**だった。`FixedAccountConfig.kt`(設定ダイアログ)を追加し、
+   未設定なら起動を明確に拒否するようにして解消。
+2. `.github/workflows/release.yml`が`server/Cargo.toml`の
+   `open_raid_z_core`への無条件path依存(2026-07-25追加、`../../
+   open-raid-z/...`)をcheckoutしておらず、**次にタグをpushすると
+   ビルドが失敗する**状態だった。全ジョブに`open-raid-z`のsibling
+   checckoutを追加して解消。移植先でも、他リポジトリへのpath依存を
+   後から追加した際は必ずCIワークフロー側のcheckout漏れが無いかを
+   確認すること(この種の依存追加は往々にしてCI側の追従が漏れる)。
+
 ## 10. 「ルートで`cargo test`しても実は何も検証していない」構造の罠
 (2026-07-23発見)
 

@@ -189,6 +189,16 @@ scripts/serve.sh 0.0.0.0 8080        # 全インターフェースで待受
 scripts/serve.sh 192.168.1.50 8080   # 特定のIPアドレスのみで待受
 ```
 
+## Android版: root化端末での外付けHDD対応 + ダウンロード導線(2026-08-04追加)
+
+`android/`に「外付けHDDをストレージに使う(root)」機能を追加(root化
+済み端末専用、`su`到達性を確認できない場合は起動を拒否——内部
+ストレージへの黙示的フォールバックはしない)。トップページ
+(`https://easy-web.tokyo/`)の「Completed Projects」に、open-easy-web
+自身の本番/デモ(`/demo`)/ダウンロード(Windows・Linux・Android APK、
+[GitHub Releases](https://github.com/aon-co-jp/open-easy-web/releases/latest))
+リンクを追加。詳細は[PORTING.md §15](PORTING.md#15-android版の外付けhdd対応--リリースワークフローのsibling依存漏れ2026-08-04)参照。
+
 ## 廃止済みサービスの残骸監査(dry-run、2026-07-14追加)
 
 ドメイン/サブコンテンツを削除した後、そのサービス専用のsystemd
