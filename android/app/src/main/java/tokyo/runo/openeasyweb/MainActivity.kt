@@ -154,8 +154,118 @@ class MainActivity : AppCompatActivity() {
             requestUninstall()
         }
 
+        val externalStorageButton = findViewById<Button>(R.id.externalStorageButton)
+        externalStorageButton.setOnClickListener {
+            showExternalStorageDialog()
+        }
+
+        val fixedAccountButton = findViewById<Button>(R.id.fixedAccountButton)
+        fixedAccountButton.setOnClickListener {
+            showFixedAccountDialog()
+        }
+
         registerPowerConnectionReceiver()
     }
+
+    /**
+     * 固定アカウントのメールアドレス設定ダイアログ(2026-08-04新設)。
+     * `OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`が未設定だとサーバーがpanicして
+     * 起動できないため、この値を保存してもらうまでは
+     * `startServerProcess()`側で明確に起動を拒否する(`FixedAccountConfig`
+     * のdoc参照)。
+     */
+    private fun showFixedAccountDialog() {
+        val container = android.widget.LinearLayout(this)
+        container.orientation = android.widget.LinearLayout.VERTICAL
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        container.setPadding(pad, pad, pad, pad)
+
+        val messageView = TextView(this)
+        messageView.text = getString(R.string.fixed_account_dialog_message)
+        container.addView(messageView)
+
+        val emailInput = android.widget.EditText(this)
+        emailInput.hint = getString(R.string.fixed_account_email_hint)
+        emailInput.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+            android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        emailInput.setText(FixedAccountConfig.getEmail(this) ?: "")
+        container.addView(emailInput)
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.fixed_account_dialog_title)
+            .setView(container)
+            .setPositiveButton(R.string.external_storage_save_button) { _, _ ->
+                val email = emailInput.text.toString().trim()
+                if (email.isEmpty() || !email.contains("@")) {
+                    Toast.makeText(this, "有効なメールアドレスを入力してください", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                FixedAccountConfig.setEmail(this, email)
+                Toast.makeText(this, "保存しました(次回サーバー起動から反映)", Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton("キャンセル", null)
+            .show()
+    }
+
+    /**
+     * 外付けHDD(root化端末専用)設定ダイアログ(2026-08-04新設、
+     * `open-web-server/android`版と同一設計)。
+     */
+    private fun showExternalStorageDialog() {
+        val container = android.widget.LinearLayout(this)
+        container.orientation = android.widget.LinearLayout.VERTICAL
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        container.setPadding(pad, pad, pad, pad)
+
+        val messageView = TextView(this)
+        messageView.text = getString(R.string.external_storage_dialog_message)
+        container.addView(messageView)
+
+        val pathInput = android.widget.EditText(this)
+        pathInput.hint = getString(R.string.external_storage_path_hint)
+        pathInput.setText(ExternalStorageConfig.getMountPath(this) ?: "")
+        container.addView(pathInput)
+
+        val enableCheckbox = android.widget.CheckBox(this)
+        enableCheckbox.text = getString(R.string.external_storage_enable_checkbox)
+        enableCheckbox.isChecked = ExternalStorageConfig.isEnabled(this)
+        container.addView(enableCheckbox)
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.external_storage_dialog_title)
+            .setView(container)
+            .setPositiveButton(R.string.external_storage_save_button) { _, _ ->
+                val path = pathInput.text.toString().trim()
+                if (enableCheckbox.isChecked && path.isEmpty()) {
+                    Toast.makeText(this, "マウントパスを入力してください", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                ExternalStorageConfig.save(this, enableCheckbox.isChecked, path)
+                Toast.makeText(this, "保存しました(次回サーバー起動から反映)", Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton("キャンセル", null)
+            .show()
+    }
+
+    /**
+     * `su`(root権限昇格)へ実際に到達できるか同期的に確認する。
+     */
+    private fun isRootAvailable(): Boolean {
+        return try {
+            val process = ProcessBuilder("su", "-c", "id").start()
+            val finished = process.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+            finished && process.exitValue() == 0
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * `su -c`へ渡すシェルコマンド文字列組み立て用のシングルクォート
+     * エスケープ(コマンドインジェクション対策)。
+     */
+    private fun shellQuote(value: String): String =
+        "'" + value.replace("'", "'\\''") + "'"
 
     /**
      * 電源の抜き差しを監視する(open-web-server版と同じ設計)。
@@ -381,13 +491,80 @@ class MainActivity : AppCompatActivity() {
                 return false
             }
 
-            val pb = ProcessBuilder(binaryPath.absolutePath)
-            pb.directory(filesDir)
-            pb.environment()["OPEN_EASYWEB_SERVER_BIND"] = "127.0.0.1:$bindPort"
-            // WASM UIバンドルは同梱していないため既定の"."のままで良い
-            // (「/」は404になるが `/healthz`・`/api/...` は機能する、doc参照)。
-            pb.redirectErrorStream(true)
-            val process = pb.start()
+            // `open-easy-web-server`は`OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`
+            // 未設定だと起動直後にpanicする設計(server/src/main.rs
+            // `fixed_account_email()`)。外部ストレージ機能の実装中に
+            // この必須環境変数がAndroid版から一切設定されていないことが
+            // 判明したため、ここで明確に検査し起動を拒否する
+            // (`FixedAccountConfig`のdoc参照——黙ってpanicさせるより、
+            // 起動前に理由を表示するほうが親切なため)。
+            val fixedAccountEmail = FixedAccountConfig.getEmail(this)
+            if (fixedAccountEmail.isNullOrBlank()) {
+                log.appendLine(
+                    "ERROR: fixed account email is not configured — " +
+                        "open-easy-web-server requires OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL " +
+                        "and will panic on startup without it. Use the " +
+                        "'固定アカウント設定' button first."
+                )
+                return false
+            }
+
+            // 外付けHDD(root化端末専用)を主ストレージにする設定
+            // (2026-08-04新設、`open-web-server/android`版と同一設計)。
+            // 有効化されている場合はroot到達性を実際に確認し、確認できな
+            // ければ黙って内部ストレージへフォールバックせず起動を中止する。
+            val useExternalStorage = ExternalStorageConfig.isEnabled(this)
+            if (useExternalStorage) {
+                val mountPath = ExternalStorageConfig.getMountPath(this)
+                if (mountPath.isNullOrBlank()) {
+                    log.appendLine("ERROR: external storage is enabled but no mount path is configured")
+                    return false
+                }
+                log.appendLine("external storage requested: $mountPath (checking root access...)")
+                if (!isRootAvailable()) {
+                    log.appendLine(
+                        "ERROR: root access ('su') is not available on this device — " +
+                            "external HDD storage requires a rooted device (Android Scoped Storage " +
+                            "blocks direct file access to USB storage otherwise). " +
+                            "Falling back to internal storage was intentionally NOT done."
+                    )
+                    return false
+                }
+                log.appendLine("root access confirmed, launching via 'su' with data dir on external storage")
+            }
+
+            val process: Process
+            if (useExternalStorage) {
+                val mountPath = ExternalStorageConfig.getMountPath(this)!!
+                val dataDir = ExternalStorageConfig.dataDirPath(mountPath)
+                // `su -c`は非rootの起動元プロセス環境を継承しない前提の
+                // ため、全て`export`込みの1コマンド文字列として組み立てる
+                // (open-web-server/android版と同一パターン)。
+                val script = buildString {
+                    append("mkdir -p ${shellQuote(dataDir)}; ")
+                    append("cd ${shellQuote(dataDir)} && ")
+                    append("export OPEN_EASYWEB_SERVER_BIND=${shellQuote("127.0.0.1:$bindPort")}; ")
+                    append("export OPEN_EASYWEB_SITES_ROOT=${shellQuote("$dataDir/sites")}; ")
+                    append("export OPEN_EASYWEB_USERS_STATE=${shellQuote("$dataDir/.open-easy-web-users.json")}; ")
+                    append("export OPEN_EASYWEB_DB_ENCRYPTION_KEY_FILE=${shellQuote("$dataDir/.open-easy-web-db-encryption.key")}; ")
+                    append("export OPEN_EASYWEB_AI_STATE=${shellQuote("$dataDir/.open-easy-web-ai-state.json")}; ")
+                    append("export OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL=${shellQuote(fixedAccountEmail)}; ")
+                    append("exec ${shellQuote(binaryPath.absolutePath)}")
+                }
+                log.appendLine("data dir on external storage: $dataDir")
+                val pb = ProcessBuilder("su", "-c", script)
+                pb.redirectErrorStream(true)
+                process = pb.start()
+            } else {
+                val pb = ProcessBuilder(binaryPath.absolutePath)
+                pb.directory(filesDir)
+                pb.environment()["OPEN_EASYWEB_SERVER_BIND"] = "127.0.0.1:$bindPort"
+                pb.environment()["OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL"] = fixedAccountEmail
+                // WASM UIバンドルは同梱していないため既定の"."のままで良い
+                // (「/」は404になるが `/healthz`・`/api/...` は機能する、doc参照)。
+                pb.redirectErrorStream(true)
+                process = pb.start()
+            }
             serverProcess = process
 
             Thread {

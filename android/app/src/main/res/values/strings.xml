@@ -20,4 +20,16 @@
     <string name="change_profile_button">電源プロファイルを変更</string>
     <string name="memory_info_button">📊 Memory info (メモリ情報)</string>
     <string name="uninstall_button">🗑️ Uninstall (アンインストール)</string>
+
+    <string name="external_storage_button">💽 外付けHDDをストレージに使う(root)</string>
+    <string name="external_storage_dialog_title">外付けHDDを主ストレージに使う(root化端末専用)</string>
+    <string name="external_storage_dialog_message">root化していない端末では、ネイティブサーバーが外部USBストレージへ直接読み書きできません(Android Scoped Storageの制限)。root化済みの端末で、マウント済みのパス(例: /mnt/media_rw/XXXX-XXXX)を入力してください。次回のサーバー起動から有効になります。</string>
+    <string name="external_storage_path_hint">マウントパス(例: /mnt/media_rw/XXXX-XXXX)</string>
+    <string name="external_storage_enable_checkbox">有効化する</string>
+    <string name="external_storage_save_button">保存</string>
+
+    <string name="fixed_account_button">👤 固定アカウント設定(必須)</string>
+    <string name="fixed_account_dialog_title">固定アカウントのメールアドレス</string>
+    <string name="fixed_account_dialog_message">open-easy-web-serverは、このメールアドレスを固定アカウントとして起動時に登録します(OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL、未設定だと起動できません)。ログイン用のワンタイムパスワードがこのアドレス宛に届きます。</string>
+    <string name="fixed_account_email_hint">メールアドレス</string>
 </resources>

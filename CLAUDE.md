@@ -230,6 +230,62 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-08-04 Android版: root化端末で外付けHDDを主ストレージにする機能を追加(`open-web-server/android`版からの移植)
+
+ユーザー指示「open-easy-web側にも同じ機能を展開しつつ、実機検証も同時に
+したい」への対応(元の要望は「使わなくなったスマホに外付けHDDをつないで
+open-easy-webとopen-web-serverでシステムを運用できないか」
+→「root化してでもHDDを主ストレージにしたい」)。`open-web-server/
+android`側で先に実装した同機能をそのまま移植した。
+
+**実装**: 新規`ExternalStorageConfig.kt`(平文`SharedPreferences`、
+有効フラグ+マウントパス)。`MainActivity`に「💽 外付けHDDをストレージに
+使う(root)」ボタン+設定ダイアログを追加(`activity_main.xml`/
+`layout-sw600dp`両方、`strings.xml`)。`startServerProcess()`を拡張し、
+有効化時は`su -c id`でroot到達性を実際に確認してから、
+`ProcessBuilder("su", "-c", <shellスクリプト>)`でネイティブバイナリを
+root起動——`OPEN_EASYWEB_SITES_ROOT`/`OPEN_EASYWEB_USERS_STATE`/
+`OPEN_EASYWEB_DB_ENCRYPTION_KEY_FILE`/`OPEN_EASYWEB_AI_STATE`
+(`server/src/main.rs`の`AppState::from_env()`が実際に読む環境変数、
+`env_path()`呼び出し箇所を直接確認して裏取り済み)を全て
+`open-easy-web-data`サブディレクトリへ向ける。root到達不可時は
+**内部ストレージへフォールバックせず起動を拒否**(誤認事故防止、
+open-web-server版と同一方針)。マウントパス・シェル文字列への埋め込み値
+はシングルクォートエスケープ済み(コマンドインジェクション対策)。
+
+**検証**: `gradle :app:assembleDebug`(`--offline`)**BUILD SUCCESSFUL**
+(既存jniLibs同梱のまま、新規コンパイルエラー無し)。
+
+**追加で発見・修正した実バグ(必須環境変数の未設定)**: 上記の実装中に、
+`server/src/main.rs::fixed_account_email()`が
+`OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`環境変数未設定だと`panic`する設計
+(86-89行目)であるにもかかわらず、**Android版`startServerProcess()`は
+この必須環境変数を一切設定していなかった**ことを発見した——つまり
+今回の外部ストレージ機能とは無関係に、現状のAndroid版は
+`open-easy-web-server`起動直後に確実にpanicし、一度もサーバーが
+起動できない状態だった。実機検証を行う前提として必須の解消だったため、
+このパスで併せて対応した: 新規`FixedAccountConfig.kt`(平文
+`SharedPreferences`、メールアドレス1件を保持)、「👤 固定アカウント
+設定(必須)」ボタン+設定ダイアログを追加、`startServerProcess()`は
+この値が未設定なら**起動を明確に拒否**(黙ってpanicさせない)、
+設定済みなら`OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`として通常起動・
+外部ストレージ起動どちらの経路にも設定するよう配線した。
+
+**検証**: `gradle :app:assembleDebug`(`--offline`)再度**BUILD
+SUCCESSFUL**。
+
+**正直な開示・未検証事項**: root化されたAndroid実機/エミュレータが
+この開発環境に無いため、(1) `su`昇格・実際のHDDへの書き込み、
+(2) 固定アカウント設定→サーバー起動→実際にOTPメールが届きログイン
+できること、はいずれも未検証(ビルド成功の確認まで)。
+
+- 次にすべきこと: (1) root化済み実機での一連の動作(固定アカウント
+  設定→外部ストレージ設定→サーバー起動→`su`昇格確認→実際のファイル
+  書き込み)の実地検証、(2) exFAT/NTFS等マウント時のファイルシステム
+  権限確認、(3) 固定アカウント宛のOTPメールが実際に届くこと
+  (`OPEN_EASYWEB_SMTP_*`環境変数もAndroid版からは未設定のままである
+  点も併せて確認——今回のスコープでは対応していない)。
+
 - **2026-08-01(続き4) Android版の埋め込みネイティブバイナリが1週間以上
   古いままだった実バグを発見・修正(ユーザー指示「rs-link-fusion・
   open-easy-webへのAndroid対応展開」)**: `android/`自体は
