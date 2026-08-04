@@ -1,16 +1,22 @@
 name: Release binaries
 
 # タグ(例: v0.1.0)をpushすると、Linux(x86_64-unknown-linux-gnu)・
-# Windows(x86_64)向けにビルドし、GitHub Releasesへ添付する。
+# Windows(x86_64)・Android(APK)向けにビルドし、GitHub Releasesへ
+# 添付する。
 #
 # このリポジトリは2つの独立したCargoワークスペースを持つ(ルートは
 # WASMフロントエンドの単一クレート、`server/`配下がバックエンドAPI
 # サーバーの独立ワークスペース)。配布対象は実行可能バイナリを持つ
 # `server/`側(`open-easy-web-server`)のみ——ルートのWASMクレートは
 # ライブラリ(cdylib)でありこのインストーラーの対象外(WASMビルド手順は
-# README/CLAUDE.md参照)。sibling path依存は無し(`server/Cargo.toml`に
-# path依存が無いことを確認済み、ルート側の`open-runo-view`はgit依存
-# でありpath依存ではないためsibling checkoutは不要)。
+# README/CLAUDE.md参照)。
+#
+# **2026-08-04訂正(実バグ修正)**: 以前このコメントは「sibling path依存は
+# 無し」としていたが誤りだった——`server/Cargo.toml`は2026-07-25に追加
+# された`open_raid_z_core`への無条件path依存(`../../open-raid-z/
+# open_runo_zfs_source/open_raid_z_core`)を持っており、`aruaru-dist`と
+# 同じパターンでこのリポジトリ単体のcheckoutだけではビルドできない。
+# 全ジョブで`aon-co-jp/open-raid-z`を`../open-raid-z`へcheckoutする。
 
 on:
   push:
@@ -27,6 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout open-raid-z (sibling path dependency)
+        run: git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z
       - name: Build
         working-directory: server
         run: cargo build --release --bin open-easy-web-server
@@ -46,6 +54,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout open-raid-z (sibling path dependency)
+        run: git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z
       - name: Build
         working-directory: server
         run: cargo build --release --bin open-easy-web-server
@@ -61,15 +71,72 @@ jobs:
           name: open-easy-web-server-windows-x86_64
           path: open-easy-web-server-windows-x86_64.zip
 
+  build-android:
+    name: Android (APK, デバッグビルド, ARM64/x86_64)
+    runs-on: ubuntu-latest
+    # 正直な開示(2026-08-04追加、open-web-server側と同じ方針): このジョブが
+    # 実際にCI上のubuntu-latestランナーで動作するかは、初回タグpush時の
+    # CI実行でしか確認できていない可能性が高い。失敗してもLinux/Windows
+    # ジョブの成功・リリース自体はブロックしない(`continue-on-error: true`)。
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout open-raid-z (sibling path dependency)
+        run: git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install Android NDK
+        run: sdkmanager --install "ndk;27.1.12297006"
+      - name: Install Rust Android targets + cargo-ndk
+        run: |
+          rustup target add aarch64-linux-android x86_64-linux-android
+          cargo install cargo-ndk
+      - name: Build Rust binary for Android (arm64-v8a)
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.1.12297006
+        working-directory: server
+        run: |
+          cargo ndk -t aarch64-linux-android build --release --bin open-easy-web-server
+          mkdir -p ../android/app/src/main/jniLibs/arm64-v8a
+          cp target/aarch64-linux-android/release/open-easy-web-server ../android/app/src/main/jniLibs/arm64-v8a/libopeneasywebserver.so
+      - name: Build Rust binary for Android (x86_64)
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.1.12297006
+        working-directory: server
+        run: |
+          cargo ndk -t x86_64-linux-android build --release --bin open-easy-web-server
+          mkdir -p ../android/app/src/main/jniLibs/x86_64
+          cp target/x86_64-linux-android/release/open-easy-web-server ../android/app/src/main/jniLibs/x86_64/libopeneasywebserver.so
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --no-daemon
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk open-easy-web-android-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-easy-web-android-debug
+          path: open-easy-web-android-debug.apk
+
   release:
     name: GitHub Releaseへ添付
-    needs: [build-linux, build-windows]
+    needs: [build-linux, build-windows, build-android]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ always() && startsWith(github.ref, 'refs/tags/v') && needs.build-linux.result == 'success' && needs.build-windows.result == 'success' }}
     steps:
       - uses: actions/download-artifact@v4
+      - name: List downloaded artifacts (Android job may have failed, see build-android logs)
+        run: find . -maxdepth 2
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             open-easy-web-server-linux-x86_64/open-easy-web-server-linux-x86_64.tar.gz
             open-easy-web-server-windows-x86_64/open-easy-web-server-windows-x86_64.zip
+            open-easy-web-android-debug/open-easy-web-android-debug.apk
+          fail_on_unmatched_files: false

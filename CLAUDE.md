@@ -230,6 +230,69 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-08-04(続き) `/demo`からopen-easy-web自身のLinux/Windows/Androidダウンロード導線を追加+リリースワークフローの実バグ修正
+
+ユーザー指示「`https://easy-web.tokyo/demo`からopen-easy-webのLINUX版も
+Androidスマホ版のダウンロード付きもダウンロード出来るようになっていない、
+`https://easy-web.tokyo/`から`/demo`へのリンクもすぐに張って」への対応。
+
+**調査結果**: `/`から`/demo`へのリンク自体は`src/shell.rs`のヘッダーに
+既に存在していた(2026-07-29実装)——ただし本番VPSへの反映有無は要確認。
+一方、`#completed-projects-section`(Completed Projects)には
+open-redmine・RS-Link-Fusionの2件はあったが、**open-easy-web自身の
+エントリが無かった**(自分自身をダウンロード可能な完成プロジェクトとして
+一覧に含めていなかった)。
+
+**実装**: (1) `src/shell.rs`のCompleted Projectsセクション先頭に
+open-easy-web自身のカードを追加(本番`/`・デモ`/demo`・
+`https://github.com/aon-co-jp/open-easy-web/releases/latest`への
+ダウンロードリンク)。(2) 新規テスト
+`shell_html_lists_open_easy_web_itself_with_download_link`。
+
+**発見・修正した実バグ(リリースワークフロー)**: `.github/workflows/
+release.yml`のコメントは「sibling path依存は無し」としていたが、
+実際には`server/Cargo.toml`が2026-07-25に追加された`open_raid_z_core`
+への無条件path依存(`../../open-raid-z/open_runo_zfs_source/
+open_raid_z_core`)を持っており、**このワークフローのbuild-linux/
+build-windowsジョブは`open-raid-z`をcheckoutしていないため、次回タグ
+push時に依存解決自体が失敗しビルドできない状態だった**(v0.1.0
+[2026-07-23公開]はこの依存追加より前のコミットに対して作られたリリース
+だったため、これまで気づかれていなかった)。両ジョブに
+`git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git
+../open-raid-z`を追加して解消。
+
+**Android版の同梱を新規追加**: `open-web-server`側の`build-android`
+ジョブ(`cargo ndk`でarm64-v8a/x86_64をクロスビルド→`libopeneasywebserver.so`
+として`jniLibs`へ配置→`gradlew :app:assembleDebug`)と同じパターンを
+移植。**このリポジトリの`android/`には`gradlew`(Gradle Wrapper)が
+一度も生成されていなかった**ため、キャッシュ済み`gradle-8.11.1`で
+`gradle wrapper --gradle-version 8.11.1`を実行し新規生成・コミット対象に
+追加(CI環境で`gradle`コマンド自体を別途セットアップせずに済むように
+するため必須)。`continue-on-error: true`でAndroidビルド失敗時も
+Linux/Windowsのリリース自体はブロックしない設計(open-web-server側と
+同じ安全策)。
+
+**検証**: `cargo test`(ルートWASMクレート、shell::)**7件全green**
+(新規1件含む)。`cargo build --target wasm32-unknown-unknown`警告0件。
+`gradle :app:assembleDebug --offline`は前回パスの外部ストレージ機能
+実装時に確認済み(BUILD SUCCESSFUL)——今回のgradlew生成自体の動作は
+ローカルでは`gradle wrapper`タスクの成功のみ確認、CI環境での
+`./gradlew`経由の実行は未検証(正直な開示)。
+
+**正直な開示・未実施**: (1) `open-raid-z`側リポジトリが実際に
+`aon-co-jp/open-raid-z`として公開clone可能か(存在確認)はこのパスでは
+未実施——CI実行時に初めて実証される。(2) 新しいタグ(例:`v0.2.0`)を
+実際にpushしてCIを走らせる/新しいGitHub Releaseを作る/VPS本番へ
+WASMフロントエンドを再デプロイする、はいずれもこのセッションの
+コード変更後の作業として別途必要(このHANDOFFの時点では未実施)。
+
+- 次にすべきこと: (1) 新規タグ(`v0.2.0`等)をpushしてCI実行結果を確認
+  (特にbuild-android・open-raid-zのcheckoutが実際に成功するか)、
+  (2) VPS本番(`easy-web.tokyo`)へ`git pull`→WASM再ビルド→
+  `wasm-bindgen`→`systemctl restart`で反映、(3) 反映後、実ブラウザで
+  `https://easy-web.tokyo/`→`/demo`リンク・Completed Projectsの
+  open-easy-webダウンロードリンクが正しく機能することを確認。
+
 ### 2026-08-04 Android版: root化端末で外付けHDDを主ストレージにする機能を追加(`open-web-server/android`版からの移植)
 
 ユーザー指示「open-easy-web側にも同じ機能を展開しつつ、実機検証も同時に

@@ -27,6 +27,14 @@ pub const SHELL_HTML: &str = r#"
   </p>
 
   <div class="project-card">
+    <h3>open-easy-web</h3>
+    <p class="muted">"Second KUSANAGI": deploy &amp; domain/HTTPS automation for any backend stack / 「第二のKUSANAGI」— アプリのデプロイ・ドメイン/HTTPS自動化</p>
+    <a href="/">Production (本番)</a> ・
+    <a href="/demo">Demo (デモ)</a> ・
+    <a href="https://github.com/aon-co-jp/open-easy-web/releases/latest">Windows / Linux / Android (APK) download</a>
+  </div>
+
+  <div class="project-card">
     <h3>open-redmine</h3>
     <p class="muted">Ticket management &amp; Wiki (Redmine-compatible) / チケット管理・Wiki(Redmine互換)</p>
     <a href="https://easy-web.tokyo/open-redmine/">Production (本番)</a> ・
@@ -907,5 +915,17 @@ mod tests {
         assert!(SHELL_HTML.contains("https://easy-web.tokyo/rs-link-fusion/"));
         assert!(SHELL_HTML.contains("https://easy-web.tokyo/rs-link-fusion/demo"));
         assert!(SHELL_HTML.contains("RS-Link-Fusion"));
+    }
+
+    /// open-easy-web自身もCompleted Projectsに、本番・デモ・
+    /// Windows/Linux/AndroidダウンロードのGitHub Releasesリンク付きで
+    /// 掲載されていることの回帰確認(2026-08-04追加、ユーザー指示
+    /// 「https://easy-web.tokyo/demo からopen-easy-webのLINUX版も
+    /// Androidスマホ版のダウンロード付きもダウンロード出来るように」)。
+    #[test]
+    fn shell_html_lists_open_easy_web_itself_with_download_link() {
+        assert!(SHELL_HTML.contains("<h3>open-easy-web</h3>"));
+        assert!(SHELL_HTML.contains(r#"href="/demo""#));
+        assert!(SHELL_HTML.contains("https://github.com/aon-co-jp/open-easy-web/releases/latest"));
     }
 }
