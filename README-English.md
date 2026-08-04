@@ -49,6 +49,14 @@ middleware, etc. — see those repos' CLAUDE.md for details).
   HTTP reachability check via `fetch(url, {mode: 'no-cors'})`), port
   validation (1-65535), delete confirmation dialog, JSON export/import
   of the registered site list.
+- **System memory & disk usage pie charts (added 2026-07-31 /
+  2026-08-04)**: real memory, virtual memory (swap), and actual HDD/SSD
+  usage on the machine running this server, fetched via the `sysinfo`
+  crate and shown as pie charts + GiB figures in the GUI
+  (`/admin/system/memory`, `/admin/system/disk`, `x-admin-token`
+  authenticated). The same screen also toggles power profiles
+  (power-saving / memory-saver / always-on, freely combinable
+  checkboxes).
 - **Launch by IP address**: `scripts/serve.sh <BIND_IP> <PORT>`.
 - **vhost generation + automatic HTTPS**: `scripts/gen-vhost.sh
   [--stack=STACK] <DOMAIN> <BIND_IP> [UPSTREAM] [WEBROOT]` generates

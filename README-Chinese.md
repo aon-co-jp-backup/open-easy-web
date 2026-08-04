@@ -32,6 +32,11 @@ upstream keepalive 连接池)不再以 Nginx/Apache 配置生成的形式提供�
   端口/路径/后端类型),保存于 `localStorage`。每张卡片提供"连接测试"
   按钮(`fetch(url, {mode:'no-cors'})` 的简单可达性检测)、端口号校验
   (1-65535)、删除前确认对话框、站点列表 JSON 导出/导入。
+- **系统内存/磁盘使用率饼图(2026-07-31 / 2026-08-04新增)**: 通过
+  `sysinfo`获取运行本服务器的机器的实际物理内存、虚拟内存(交换空间)以及
+  实际HDD/SSD使用情况,并以饼图和GiB数值形式在界面中显示
+  (`/admin/system/memory`、`/admin/system/disk`,需`x-admin-token`
+  认证)。
 - **通过 IP 地址启动**: `scripts/serve.sh <BIND_IP> <PORT>`。
 - **vhost 生成 + 自动 HTTPS**: `scripts/gen-vhost.sh [--stack=STACK]
   <DOMAIN> <BIND_IP> [UPSTREAM] [WEBROOT]` 为 `static`、`proxy`

@@ -230,6 +230,39 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-08-04(続き2) 実ディスク(HDD/SSD)使用状況の円グラフ表示を追加(ユーザー指示「実システムメモリと仮想メモリと実際に使用されているメモリ使用量の表示と実際のHDD(SSD)と実際の使用量を円グラフで表示する機能を、優先的に実装して」)
+
+**現状確認**: 実メモリ・仮想メモリ(スワップ)の使用状況+円グラフ表示は
+`server/src/system_memory.rs`/`src/shell.rs`の「System memory」セクションに
+2026-07-31時点で既に実装済みだった(`sysinfo`クレート、`/admin/system/memory`)。
+今回はその隣に不足していたディスク(HDD/SSD)使用状況の円グラフを新規追加した。
+
+**実装**: `system_memory.rs`と同じ設計パターンで揃えた。
+1. 新規`server/src/system_disk.rs`: `sysinfo::Disks::new_with_refreshed_list()`で
+   実際にマウントされている全ディスクの`name`/`mount_point`/容量・使用量・
+   使用率(個別)+全ディスク合算値(`DiskSnapshot`)を取得。
+2. `server/src/main.rs`: `GET /admin/system/disk`(既存の`/admin/system/memory`と
+   同じ`x-admin-token`認証)を新設。
+3. `src/api_auto_update.rs`: `get_disk_snapshot()`フェッチラッパー追加。
+4. `src/shell.rs`: 「Disk usage (ディスク使用状況)」セクションを新設
+   (メモリと同じSVG円グラフ`stroke-dasharray`表現+個別ディスク内訳テキスト)。
+5. `src/setup_wizard_ui.rs`: `on_refresh_disk()`で「更新」ボタンを配線
+   (円グラフ更新+合計テキスト+`disk-per-disk-text`へディスクごとの内訳を出力)。
+
+**検証**: サーバー側`cargo build`・`cargo test system_disk::`(新規2件、
+実マシンでの非ゼロ容量検出・使用率0〜100%範囲チェック)ともgreen(既存の
+`power_profile.rs`関連未使用コード警告のみ残存、本変更とは無関係)。
+WASM側`cargo build --target wasm32-unknown-unknown`も警告0件で成功。
+
+**正直な開示・未着手**: 実ブラウザでの表示確認(管理トークン入力→円グラフ・
+テキストが実際に描画されること)は今回未実施——ビルド成功・単体テスト
+green止まり(既存の「白画面バグを見逃さない検証徹底」ルールに対して未達)。
+
+- 次にすべきこと: (1) 実ブラウザ(またはVPS本番)で「Disk usage」セクションの
+  「更新」ボタンを実クリックし、円グラフとGiB表示が正しくレンダリングされる
+  ことを確認する、(2) 本番VPSへのデプロイ・反映、(3) 前回エントリの
+  Android実機/エミュレータでの起動確認は引き続き未実施のまま。
+
 ### 2026-08-04(続き) `/demo`からopen-easy-web自身のLinux/Windows/Androidダウンロード導線を追加+リリースワークフローの実バグ修正
 
 ユーザー指示「`https://easy-web.tokyo/demo`からopen-easy-webのLINUX版も

@@ -381,6 +381,7 @@ pub fn wire() -> Result<(), JsValue> {
     wire_change("profile-always-on", |_| on_power_profile_checkbox_changed())?;
     wire_click("memory-switch-minimal-btn", on_switch_to_minimal_profile)?;
     wire_click("memory-restore-full-btn", on_restore_full_features)?;
+    wire_click("disk-refresh-btn", on_refresh_disk)?;
     apply_minimal_ui_from_storage();
     on_load_power_profile_from_server();
     Ok(())
@@ -556,6 +557,63 @@ fn on_refresh_memory() {
                 );
             }
             Err(e) => set_text("memory-stats-text", &format!("❌ {e}")),
+        }
+    });
+}
+
+/// ディスク(HDD/SSD)使用状況を取得し、円グラフ(SVG)+テキストを更新
+/// する(2026-08-04追加、`on_refresh_memory`と同じ設計・同じ簡易
+/// `stroke-dasharray`表現を使う)。
+fn on_refresh_disk() {
+    let admin_token = input_value("disk-admin-token");
+    let base_url = same_origin_base_url();
+    spawn_local(async move {
+        match crate::api_auto_update::get_disk_snapshot(&base_url, &admin_token).await {
+            Ok(value) => {
+                let total = value.get("total_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+                let used = value.get("used_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+                let used_percent = value.get("used_percent").and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+                if let Some(arc) = try_by_id("disk-pie-used-arc") {
+                    let _ = arc.set_attribute("stroke-dasharray", &format!("{:.2} {:.2}", used_percent, 100.0 - used_percent));
+                }
+                let to_gib = |bytes: u64| bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+                set_text(
+                    "disk-stats-text",
+                    &format!(
+                        "Disk (ディスク) — Used (使用中): {:.2} GiB / Total (合計): {:.2} GiB ({:.1}%)",
+                        to_gib(used),
+                        to_gib(total),
+                        used_percent
+                    ),
+                );
+
+                let per_disk = value
+                    .get("disks")
+                    .and_then(|v| v.as_array())
+                    .map(|disks| {
+                        disks
+                            .iter()
+                            .map(|d| {
+                                let name = d.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                                let mount = d.get("mount_point").and_then(|v| v.as_str()).unwrap_or("?");
+                                let d_total = d.get("total_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+                                let d_used = d.get("used_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+                                let d_percent = d.get("used_percent").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                                format!(
+                                    "{name} ({mount}): {:.2} / {:.2} GiB ({:.1}%)",
+                                    to_gib(d_used),
+                                    to_gib(d_total),
+                                    d_percent
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })
+                    .unwrap_or_default();
+                set_text("disk-per-disk-text", &per_disk);
+            }
+            Err(e) => set_text("disk-stats-text", &format!("❌ {e}")),
         }
     });
 }

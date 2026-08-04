@@ -35,6 +35,13 @@ hyper) dans `open-runo`/`poem-cosmo-tauri`**.
   plusieurs cibles de déploiement, sauvegardées dans `localStorage`.
   Bouton « test de connexion » par carte, validation de port
   (1-65535), confirmation avant suppression, export/import JSON.
+- **Graphiques circulaires d'utilisation mémoire/disque (ajouté le
+  2026-07-31 / 2026-08-04)**: mémoire physique réelle, mémoire virtuelle
+  (swap) et utilisation réelle du disque dur/SSD de la machine qui exécute
+  ce serveur, récupérées via `sysinfo` et affichées sous forme de
+  graphiques circulaires + valeurs en GiB dans l'interface
+  (`/admin/system/memory`, `/admin/system/disk`, authentification
+  `x-admin-token`).
 - **Démarrage par IP**: `scripts/serve.sh <BIND_IP> <PORT>`.
 - **Génération de vhost + HTTPS automatique**: `scripts/gen-vhost.sh
   [--stack=STACK] <DOMAIN> <BIND_IP> [UPSTREAM] [WEBROOT]` pour 5

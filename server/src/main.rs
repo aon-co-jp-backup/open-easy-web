@@ -16,6 +16,7 @@ mod mail;
 mod php_detector;
 mod power_profile;
 mod sms;
+mod system_disk;
 mod system_memory;
 mod tls;
 mod totp;
@@ -291,6 +292,21 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
             return error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string());
         }
         let snap = system_memory::snapshot();
+        return json_response(StatusCode::OK, &snap);
+    }
+
+    // `/admin/system/disk` — 現在の実ディスク(HDD/SSD)使用状況(総容量・
+    // 使用中・使用率、マウントされている各ディスクの内訳)を返す
+    // (2026-08-04追加、GUIの円グラフ表示用、`/admin/system/memory`と同じ
+    // 設計)。`x-admin-token`ヘッダによる認証必須。
+    if path == "/admin/system/disk" {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        if method != Method::GET {
+            return error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string());
+        }
+        let snap = system_disk::snapshot();
         return json_response(StatusCode::OK, &snap);
     }
 

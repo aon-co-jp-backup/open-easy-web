@@ -37,6 +37,12 @@ en `open-runo`/`poem-cosmo-tauri`**.
   destinos de despliegue, guardados en `localStorage`. Botón de
   "prueba de conexión" por tarjeta, validación de puerto (1-65535),
   confirmación antes de eliminar, exportación/importación JSON.
+- **Gráficos circulares de uso de memoria y disco (añadido el 2026-07-31 /
+  2026-08-04)**: memoria física real, memoria virtual (swap) y uso real de
+  HDD/SSD de la máquina que ejecuta este servidor, obtenidos vía
+  `sysinfo` y mostrados como gráficos circulares + valores en GiB en la
+  interfaz (`/admin/system/memory`, `/admin/system/disk`, autenticación
+  `x-admin-token`).
 - **Arranque por IP**: `scripts/serve.sh <BIND_IP> <PORT>`.
 - **Generación de vhost + HTTPS automático**:
   `scripts/gen-vhost.sh [--stack=STACK] <DOMAIN> <BIND_IP> [UPSTREAM]

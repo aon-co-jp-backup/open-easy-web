@@ -68,11 +68,17 @@ open-easy-web/
 │   ├── Cargo.toml / Cargo.lock  # 2026-07-25: open_raid_z_core をpath依存
 │   │                            # (default-features=false, offsite_backup)
 │   └── src/{main,auth,users,totp,mail,sms,tls,vhost,php_detector,upload,
-│             appserver_registration,dist_sync}.rs
+│             appserver_registration,dist_sync,system_memory,system_disk,
+│             power_profile,db_encryption,auto_update}.rs
 │             # dist_sync.rs(2026-07-25新設): 分散同期先(VPS、SFTP経由)+
 │             # ディザスタ用退避先(Email/Googleドライブ)の登録・一覧・削除
 │             # 管理API。open-raid-zのjournal/disaster_recovery/
 │             # offsite_backup/accelをそのまま再利用(再実装しない)。
+│             # system_memory.rs(2026-07-31新設)/system_disk.rs
+│             # (2026-08-04新設): `sysinfo`クレートで実メモリ・仮想メモリ
+│             # (スワップ)・実HDD/SSD使用状況を取得、GUIの円グラフ表示用に
+│             # `/admin/system/memory`・`/admin/system/disk`として公開
+│             # (同じ`x-admin-token`認証)。
 ├── index.html / pkg/(ビルド生成物、.gitignore対象)
 ├── scripts/
 │   ├── serve.sh              # IPアドレス起動

@@ -36,6 +36,13 @@ sondern als **native Rust-Implementierungen (hyper-Middleware) in
   bearbeiten/löschen, gespeichert in `localStorage`. Pro Karte ein
   „Verbindungstest"-Button, Port-Validierung (1-65535), Bestätigung vor
   dem Löschen, JSON-Export/-Import.
+- **Tortendiagramme für Speicher-/Festplattennutzung (hinzugefügt
+  2026-07-31 / 2026-08-04)**: tatsächlicher physischer Speicher,
+  virtueller Speicher (Swap) und tatsächliche HDD/SSD-Auslastung der
+  Maschine, auf der dieser Server läuft, abgerufen über `sysinfo` und
+  als Tortendiagramm + GiB-Werte in der GUI angezeigt
+  (`/admin/system/memory`, `/admin/system/disk`,
+  `x-admin-token`-Authentifizierung).
 - **Start per IP-Adresse**: `scripts/serve.sh <BIND_IP> <PORT>`.
 - **vhost-Erzeugung + automatisches HTTPS**: `scripts/gen-vhost.sh
   [--stack=STACK] <DOMAIN> <BIND_IP> [UPSTREAM] [WEBROOT]` für 5

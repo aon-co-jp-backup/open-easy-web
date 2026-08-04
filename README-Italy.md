@@ -36,6 +36,12 @@ consolidate come **implementazioni Rust native (middleware hyper) in
   destinazioni di deploy, salvate in `localStorage`. Pulsante "test di
   connessione" per scheda, validazione porta (1-65535), conferma prima
   dell'eliminazione, export/import JSON.
+- **Grafici a torta per l'uso di memoria e disco (aggiunto il 2026-07-31 /
+  2026-08-04)**: memoria fisica reale, memoria virtuale (swap) e utilizzo
+  reale di HDD/SSD della macchina su cui gira questo server, ottenuti
+  tramite `sysinfo` e mostrati come grafici a torta + valori in GiB
+  nell'interfaccia (`/admin/system/memory`, `/admin/system/disk`,
+  autenticazione `x-admin-token`).
 - **Avvio tramite IP**: `scripts/serve.sh <BIND_IP> <PORT>`.
 - **Generazione vhost + HTTPS automatico**: `scripts/gen-vhost.sh
   [--stack=STACK] <DOMAIN> <BIND_IP> [UPSTREAM] [WEBROOT]` per 5

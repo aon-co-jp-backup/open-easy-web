@@ -35,6 +35,11 @@ keepalive 풀링)은 Nginx/Apache 설정 생성 방식이 아니라 **`open-runo
   버튼(`fetch(url, {mode:'no-cors'})` 기반 단순 도달성 확인), 포트
   번호 유효성 검사(1~65535), 삭제 전 확인 대화상자, 등록된 사이트
   목록의 JSON 내보내기/가져오기.
+- **시스템 메모리/디스크 사용량 원형 차트(2026-07-31 / 2026-08-04 추가)**:
+  이 서버가 실행되는 머신의 실제 물리 메모리·가상 메모리(스왑)·실제
+  HDD/SSD 사용량을 `sysinfo`로 가져와 GUI에서 원형 차트와 GiB 수치로
+  확인할 수 있습니다(`/admin/system/memory`, `/admin/system/disk`,
+  `x-admin-token` 인증).
 - **IP 주소로 실행**: `scripts/serve.sh <BIND_IP> <PORT>`.
 - **vhost 생성 + HTTPS 자동 설정**: `scripts/gen-vhost.sh
   [--stack=STACK] <DOMAIN> <BIND_IP> [UPSTREAM] [WEBROOT]`로 `static`·

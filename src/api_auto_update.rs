@@ -65,6 +65,12 @@ pub async fn get_memory_snapshot(base_url: &str, admin_token: &str) -> Result<Va
     call::<()>(base_url, "/admin/system/memory", "GET", admin_token, None).await
 }
 
+/// `GET /admin/system/disk` — 現在の実ディスク(HDD/SSD)使用状況
+/// (総容量・使用中・使用率、個別ディスクの内訳)を取得する(2026-08-04追加)。
+pub async fn get_disk_snapshot(base_url: &str, admin_token: &str) -> Result<Value, String> {
+    call::<()>(base_url, "/admin/system/disk", "GET", admin_token, None).await
+}
+
 #[derive(Serialize)]
 struct SetPowerProfileBody {
     profiles: Vec<String>,

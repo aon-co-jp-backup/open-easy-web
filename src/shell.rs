@@ -275,6 +275,26 @@ pub const SHELL_HTML: &str = r#"
 </section>
 
 <section>
+  <h3>Disk usage (ディスク使用状況)</h3>
+  <p class="muted">
+    Actual HDD/SSD usage on this machine.<br>
+    このマシンの実際のHDD/SSDの使用状況です。
+  </p>
+  <label>Admin token (管理トークン)<input type="password" id="disk-admin-token" placeholder="OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN"></label>
+  <div class="buttons">
+    <button id="disk-refresh-btn">Refresh (更新)</button>
+  </div>
+  <div id="disk-chart-container" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+    <svg id="disk-pie-chart" width="140" height="140" viewBox="0 0 32 32" role="img" aria-label="Disk usage pie chart (ディスク使用率の円グラフ)">
+      <circle r="16" cx="16" cy="16" fill="var(--border, #d1d5db)"></circle>
+      <circle id="disk-pie-used-arc" r="16" cx="16" cy="16" fill="transparent" stroke="var(--accent, #2f6fed)" stroke-width="32" stroke-dasharray="0 100" transform="rotate(-90) translate(-32)"></circle>
+    </svg>
+    <p id="disk-stats-text" class="muted">Click Refresh to load (「更新」を押して読み込んでください)</p>
+  </div>
+  <p id="disk-per-disk-text" class="muted" style="white-space:pre-line;"></p>
+</section>
+
+<section>
   <h3>Uninstall (アンインストール)</h3>
   <p class="muted">
     Desktop (Windows/Linux): this GUI does not execute shell commands
