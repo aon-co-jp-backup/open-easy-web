@@ -35,6 +35,14 @@ pub const SHELL_HTML: &str = r#"
   </div>
 
   <div class="project-card">
+    <h3>open-web-server</h3>
+    <p class="muted">Rust製の実マウント可能なWebサーバー/リバースプロキシ本体 — TLS終端・テナントルーティング・DDNS等を1バイナリで提供 / Rust-native web server &amp; reverse proxy — TLS termination, tenant routing, DDNS, all in a single binary</p>
+    <a href="https://easy-web.tokyo/open-web-server/">Production (本番)</a> ・
+    <a href="https://easy-web.tokyo/open-web-server/demo">Demo (デモ)</a> ・
+    <a href="https://github.com/aon-co-jp/open-web-server/releases/latest">Windows / Linux / Android (APK) download</a>
+  </div>
+
+  <div class="project-card">
     <h3>open-redmine</h3>
     <p class="muted">Ticket management &amp; Wiki (Redmine-compatible) / チケット管理・Wiki(Redmine互換)</p>
     <a href="https://easy-web.tokyo/open-redmine/">Production (本番)</a> ・
@@ -947,5 +955,25 @@ mod tests {
         assert!(SHELL_HTML.contains("<h3>open-easy-web</h3>"));
         assert!(SHELL_HTML.contains(r#"href="/demo""#));
         assert!(SHELL_HTML.contains("https://github.com/aon-co-jp/open-easy-web/releases/latest"));
+    }
+
+    /// open-web-serverもCompleted Projectsに、open-easy-webの次に
+    /// 掲載されていることの回帰確認(2026-08-05追加、ユーザー指示
+    /// 「open-easy-webの次にopen-web-serverをopen-easy-webの様に紹介して」
+    /// →「本番環境もeasy-web.tokyo/open-web-serverに移してdemoで紹介や
+    /// ダウンロード可能にして」)。旧`runo.tokyo/open-web-server/`
+    /// (2026-07-26に事故防止目的で削除済み)は使わず、easy-web.tokyo上に
+    /// 新規web_vhost(`open-web-server.internal-site`)+
+    /// `path_prefix="/open-web-server"`/`"/open-web-server/demo"`の
+    /// テナント登録で紹介ページを本番稼働させた(実HTTPS経由で200・
+    /// 実ブラウザでの表示・コンソールエラー無しを確認済み)。
+    #[test]
+    fn shell_html_lists_open_web_server_right_after_open_easy_web() {
+        let easy_web_pos = SHELL_HTML.find("<h3>open-easy-web</h3>").expect("open-easy-web card present");
+        let web_server_pos = SHELL_HTML.find("<h3>open-web-server</h3>").expect("open-web-server card present");
+        assert!(web_server_pos > easy_web_pos, "open-web-server card must come after open-easy-web card");
+        assert!(SHELL_HTML.contains("https://easy-web.tokyo/open-web-server/\">Production"));
+        assert!(SHELL_HTML.contains("https://easy-web.tokyo/open-web-server/demo"));
+        assert!(SHELL_HTML.contains("https://github.com/aon-co-jp/open-web-server/releases/latest"));
     }
 }
