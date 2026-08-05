@@ -208,8 +208,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 外付けHDD(root化端末専用)設定ダイアログ(2026-08-04新設、
-     * `open-web-server/android`版と同一設計)。
+     * 外付けHDD/SDカード/USBストレージ(root化端末専用)設定ダイアログ
+     * (2026-08-04新設、`open-web-server/android`版と同一設計。
+     * 2026-08-05拡張——ユーザー指示「マイクロSDや外付けUSB HDD/SSD/
+     * nVME SSDなどを簡単接続後に簡単に選択可能にする」への対応で
+     * `StorageManager.getStorageVolumes()`+root経由のブロックデバイス
+     * 一覧による自動検知・選択式UIを追加。既存の「root到達不可なら
+     * 起動拒否」という安全設計〈`startServerProcess()`内〉は無変更)。
+     * 検知候補が0件の場合は従来通り手入力のみにフォールバックする。
      */
     private fun showExternalStorageDialog() {
         val container = android.widget.LinearLayout(this)
@@ -221,9 +227,62 @@ class MainActivity : AppCompatActivity() {
         messageView.text = getString(R.string.external_storage_dialog_message)
         container.addView(messageView)
 
+        // 検知処理自体の失敗(root不可・コマンド失敗等)はここで空リストへ
+        // フォールバックされる(ExternalStorageConfig側で例外を握りつぶす
+        // 設計、検知失敗でアプリ起動を止めない——doc参照)。
+        val candidates = ExternalStorageConfig.detectAllCandidates(this, isRootAvailable())
+
         val pathInput = android.widget.EditText(this)
         pathInput.hint = getString(R.string.external_storage_path_hint)
-        pathInput.setText(ExternalStorageConfig.getMountPath(this) ?: "")
+        val currentPath = ExternalStorageConfig.getMountPath(this) ?: ""
+        pathInput.setText(currentPath)
+
+        var radioGroup: android.widget.RadioGroup? = null
+        val manualEntryRadioId = android.view.View.generateViewId()
+
+        if (candidates.isNotEmpty()) {
+            val detectedLabel = TextView(this)
+            detectedLabel.text = "検出された外部ストレージ候補(選択してください):"
+            container.addView(detectedLabel)
+
+            val group = android.widget.RadioGroup(this)
+            group.orientation = android.widget.RadioGroup.VERTICAL
+            radioGroup = group
+
+            candidates.forEach { candidate ->
+                val radio = android.widget.RadioButton(this)
+                radio.id = android.view.View.generateViewId()
+                radio.text = candidate.label
+                radio.tag = candidate.path
+                group.addView(radio)
+                if (candidate.path == currentPath) {
+                    group.check(radio.id)
+                }
+            }
+
+            val manualRadio = android.widget.RadioButton(this)
+            manualRadio.id = manualEntryRadioId
+            manualRadio.text = "手入力"
+            group.addView(manualRadio)
+            if (group.checkedRadioButtonId == -1) {
+                // 保存済みパスが検知候補のいずれとも一致しない場合は
+                // 「手入力」を既定選択にし、既存の保存値をそのまま見せる。
+                group.check(manualEntryRadioId)
+            }
+
+            container.addView(group)
+
+            fun updatePathInputVisibility() {
+                pathInput.visibility = if (group.checkedRadioButtonId == manualEntryRadioId) {
+                    android.view.View.VISIBLE
+                } else {
+                    android.view.View.GONE
+                }
+            }
+            group.setOnCheckedChangeListener { _, _ -> updatePathInputVisibility() }
+            updatePathInputVisibility()
+        }
+
         container.addView(pathInput)
 
         val enableCheckbox = android.widget.CheckBox(this)
@@ -235,7 +294,13 @@ class MainActivity : AppCompatActivity() {
             .setTitle(R.string.external_storage_dialog_title)
             .setView(container)
             .setPositiveButton(R.string.external_storage_save_button) { _, _ ->
-                val path = pathInput.text.toString().trim()
+                val selectedRadioId = radioGroup?.checkedRadioButtonId ?: -1
+                val path = if (radioGroup != null && selectedRadioId != -1 && selectedRadioId != manualEntryRadioId) {
+                    val checkedView = radioGroup.findViewById<android.widget.RadioButton>(selectedRadioId)
+                    checkedView?.tag as? String ?: ""
+                } else {
+                    pathInput.text.toString().trim()
+                }
                 if (enableCheckbox.isChecked && path.isEmpty()) {
                     Toast.makeText(this, "マウントパスを入力してください", Toast.LENGTH_LONG).show()
                     return@setPositiveButton

@@ -230,6 +230,111 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-08-05(続き2) Android版: マイクロSD/USB HDD・SSD・nVMe SSDの自動検知・選択式UIを追加(既存のroot化・主ストレージ切替方式を拡張)
+
+ユーザー指示「マイクロSDや外付けUSB HDD/SSD/nVME SSDなどを簡単接続後に
+簡単に選択可能にする」への対応。既存の`ExternalStorageConfig.kt`
+(2026-08-04実装、マウントパス手入力式)を確認したところ、想定どおり
+手入力のみの設計だったため、これを拡張した(root不要のSAF方式への
+変更は行っていない、既存のroot化・主ストレージ切替方式のまま)。
+
+**実装内容**:
+1. **`ExternalStorageConfig.kt`に検知ロジックを追加**: (a)
+   `detectViaStorageManager(context)` — Android標準API
+   `StorageManager.getStorageVolumes()`でリムーバブルボリューム
+   (`isRemovable() == true`)を列挙し、`StorageVolume.directory`
+   (API 30+)または`getPath()`(API 30未満、リフレクション経由)から
+   マウントパス相当の情報を取得。(b)
+   `detectViaRootBlockDevices(isRootAvailable)` — root権限がある場合
+   のみ`su -c 'ls /dev/block/'`を実行し、`mmcblk*`/`sd[a-z]*`/`nvme*`の
+   命名パターンに一致するブロックデバイスを候補として収集
+   (`/proc/partitions`は今回`ls /dev/block/`側の実装で代替、パターン
+   マッチは同等)。(c) `detectAllCandidates()`が両方を合算し
+   `distinctBy { path }`で重複除去。(d) デバイス種別判別は
+   `classifyPath()`でパス名パターン(`mmcblk`→SDカード、`sd[a-z]`→
+   USBストレージ、`nvme`→NVMe SSD)からベストエフォートで推測、
+   判別できない場合は「外部ストレージ候補」に一括り(過剰な作り込みを
+   避けた)。(e) いずれの検知関数も例外を握りつぶして空リストへ
+   フォールバックする——既存の「root到達不可なら起動拒否」という
+   `startServerProcess()`側の安全設計とは別物であり、検知機能自体の
+   失敗でアプリ起動を止めない設計にした。
+2. **`MainActivity.showExternalStorageDialog()`を改修**: 検知候補が
+   1件以上ある場合は`RadioGroup`(各候補+「手入力」)で選択式にし、
+   「手入力」選択時のみ従来のマウントパス入力欄を表示する。検知候補が
+   0件の場合は従来通り手入力のみにフォールバックする(`RadioGroup`
+   自体を生成しない)。保存済みマウントパスが検知候補のいずれかと
+   一致する場合はそのラジオボタンを初期選択、一致しない場合は
+   「手入力」を初期選択し既存の保存値をそのまま見せる。
+3. **既存の「root到達不可時は起動を拒否する」安全設計
+   (`startServerProcess()`内の`isRootAvailable()`チェック)は無変更**
+   ——今回の変更は設定ダイアログの候補提示方法のみで、起動時の検証
+   ロジックには一切手を入れていない。
+
+**検証**: `gradlew.bat :app:assembleDebug --offline`
+**BUILD SUCCESSFUL**(既存jniLibs同梱のまま、新規コンパイルエラー
+無し)。既存の自動テスト(`android/`配下にはユニットテストの仕組み
+自体が無い、既存実装と同じ制約)は該当なし。
+
+**正直な開示・未検証事項**: root化されたAndroid実機/エミュレータが
+この開発環境に無いため、(1) `su -c 'ls /dev/block/'`経由の実際の
+ブロックデバイス検知が実機で正しく動くかは未検証(コードレビュー・
+ビルド成功の確認までに留まる)。(2) `StorageManager.getStorageVolumes()`
+部分についても、この開発環境にはGUI操作可能なroot化されていない
+Android実機/エミュレータが用意できなかったため、実タップでの動作確認
+(実際にSDカード/USBストレージを挿してラジオボタンとして表示される
+ことの確認)は今回未実施——ビルド成功・コードレビューの確認までに
+留まる(誇張しない、既存の検証基準に照らして未達のまま正直に記録)。
+(3) デバイス種別判別(SDカード/USB/NVMe)は文字列パターンマッチによる
+推測であり、実機での命名規則の揺れ(メーカー・カーネルバージョンに
+よる差異)までは検証していない。
+
+- 次にすべきこと: (1) root化済み実機での`su`経由ブロックデバイス
+  検知・`StorageManager`検知の両方の実地検証、(2) 非root実機での
+  `StorageManager`部分のみの動作確認(SDカード/USB挿入→ラジオボタン
+  表示)、(3) 検知した候補パスを実際に選択してマウントパスとして
+  保存→サーバー起動、までの一気通貫の実機検証。
+
+
+### 2026-08-05(続き) MANUAL系ファイルを国名ベースの命名規則へ全面リネーム+イラン(ペルシャ語)を新規追加(ユーザー指示)
+
+ユーザー指示により、セルフホストFAQ(`MANUAL*.md`)のファイル命名規則を
+「言語名ベース」(`MANUAL-English.md`等)から「国名ベース」
+(`manual-ENGLISH.md`等、小文字`manual-`+国名大文字)へ全面的に変更した。
+言語と国名が一致しない場合(例: イラン=ペルシャ語)は、ファイル名の
+括弧内に言語名を明記する形式(`manual-IRAN(PERUSHA).md`)を採用する。
+
+1. **既存7ファイルを`git mv`でリネーム**: `MANUAL.md`→`manual-JAPAN.md`、
+   `MANUAL-English.md`→`manual-ENGLISH.md`、`MANUAL-Chinese.md`→
+   `manual-CHINA.md`、`MANUAL-Korea.md`→`manual-KOREA.md`、
+   `MANUAL-Spain.md`→`manual-SPAIN.md`、`MANUAL-France.md`→
+   `manual-FRANCE.md`、`MANUAL-Germany.md`→`manual-GERMANY.md`。
+2. **残り11言語+イランを新規作成**(前回HANDOFFで「次回」としていた
+   残り11言語をこのパスで一括対応、合計19ファイル): イタリア語
+   (`manual-ITALY.md`)・ロシア語(`manual-RUSSIA.md`)・アラビア語
+   (`manual-ARABIA.md`)・ポルトガル語(`manual-PORTUGAL.md`)・
+   オランダ語(`manual-NETHERLANDS.md`)・トルコ語(`manual-TURKEY.md`)・
+   ポーランド語(`manual-POLAND.md`)・ベトナム語(`manual-VIETNAM.md`)・
+   タイ語(`manual-THAILAND.md`)・インドネシア語(`manual-INDONESIA.md`)・
+   ヒンディー語(`manual-INDIA.md`)、および新規追加のイラン
+   (ペルシャ語、`manual-IRAN(PERUSHA).md`)。内容は`manual-JAPAN.md`の
+   Q1(自分のe-mail・電話番号登録)・Q2(ガラケーでの2FA確認)を
+   忠実に翻訳したもの。
+3. **全19ファイルの「他の言語」リンクブロックを新ファイル名(19言語分)
+   へ揃えて更新**(既存7ファイルも含め全てのファイルで一致させた)。
+4. **リンク元の更新**: `README.md`(33行目)・`PORTING.md`(10行目)の
+   `MANUAL.md`への参照を`manual-JAPAN.md`へ更新。
+5. **正直な開示・未検証事項**: (1) 新規11言語+イラン分の翻訳は機械的な
+   直訳ベースであり、各言語のネイティブスピーカーによるレビューは
+   未実施(既存7言語も含め、翻訳品質の専門家によるレビューは今回の
+   スコープ外)。(2) VPS本番(`easy-web.tokyo`)への反映は今回未実施
+   (ローカルのファイル操作のみ、コミット・pushもユーザー確認後に
+   判断)。
+- 次にすべきこと: (1) VPS本番へのデプロイ・実リンク動作確認、
+  (2) 翻訳内容のネイティブスピーカーレビュー(特に新規11言語+
+  イラン分)、(3) 今後`README-<言語>.md`(こちらは既存の言語名ベースの
+  命名のまま)との命名規則の不一致が気になる場合は統一を検討する
+  (今回のスコープはMANUAL系ファイルのみ、README系は対象外)。
+
 ### 2026-08-05(追記) セルフホストFAQ(MANUAL.md)を新規作成
 
 ユーザー質問「ダウンロードしたアプリを自分のVPS/PC/スマホ/タブレットで

@@ -1,14 +1,15 @@
 # open-easy-web セルフホストFAQ(アカウント設定・2FA)
 
-📖 他の言語: [日本語](MANUAL.md) / [English](MANUAL-English.md) /
-[中文](MANUAL-Chinese.md) / [한국어](MANUAL-Korea.md) /
-[Español](MANUAL-Spain.md) / [Français](MANUAL-France.md) /
-[Deutsch](MANUAL-Germany.md) / [Italiano](MANUAL-Italy.md) /
-[Русский](MANUAL-Russia.md) / [العربية](MANUAL-Arabic.md) /
-[Português](MANUAL-Portugal.md) / [Nederlands](MANUAL-Netherlands.md) /
-[Türkçe](MANUAL-Turkey.md) / [Polski](MANUAL-Poland.md) /
-[Tiếng Việt](MANUAL-Vietnam.md) / [ไทย](MANUAL-Thailand.md) /
-[Bahasa Indonesia](MANUAL-Indonesia.md) / [हिन्दी](MANUAL-India.md)
+📖 他の言語: [日本語](manual-JAPAN.md) / [English](manual-ENGLISH.md) /
+[中文](manual-CHINA.md) / [한국어](manual-KOREA.md) /
+[Español](manual-SPAIN.md) / [Français](manual-FRANCE.md) /
+[Deutsch](manual-GERMANY.md) / [Italiano](manual-ITALY.md) /
+[Русский](manual-RUSSIA.md) / [العربية](manual-ARABIA.md) /
+[Português](manual-PORTUGAL.md) / [Nederlands](manual-NETHERLANDS.md) /
+[Türkçe](manual-TURKEY.md) / [Polski](manual-POLAND.md) /
+[Tiếng Việt](manual-VIETNAM.md) / [ไทย](manual-THAILAND.md) /
+[Bahasa Indonesia](manual-INDONESIA.md) / [हिन्दी](manual-INDIA.md) /
+[فارسی](manual-IRAN(PERUSHA).md)
 
 ---
 
