@@ -39,27 +39,79 @@ fn bilingual_message(value: &serde_json::Value, fallback: &str) -> String {
     }
 }
 
-/// ログイン状態に応じて、未ログイン用パネル・ログイン済みパネル・
-/// サイト操作パネルの表示/非表示を切り替える。
-pub fn sync_auth_visibility() {
+fn set_hidden(id: &str, hidden: bool) {
+    if let Some(el) = try_by_id(id) {
+        if hidden {
+            el.class_list().add_1("hidden").ok();
+        } else {
+            el.class_list().remove_1("hidden").ok();
+        }
+    }
+}
+
+/// (a) 現在のURLパス(`/`・`/demo`・`/ddns`・`/ddns/demo`)と
+/// (b) ログイン状態(メールOTP+任意TOTP)の両方を組み合わせて、ページ内
+/// 各セクションの表示/非表示を一括判定する(2026-08-05拡張、ユーザー
+/// 指示「全て本番環境はe-mailと2FAでログインして使用する前提」への対応)。
+///
+/// **セキュリティ上の変更点**: 従来は`site-ops-section`/
+/// `site-mgmt-section`の2つだけがログイン必須だった(2026-07-16、
+/// 「サイト管理画面はログインするまで表示しない」)。それ以外の管理系
+/// セクション(システムメモリ・ディスク使用状況・アンインストール案内・
+/// 深夜自動アップデート・DuckDNSドメイン設定・外部ツール)は、共有の
+/// 「管理トークン」欄への入力だけで操作でき、e-mail+2FAログインの画面
+/// (`auth-section`)を一切経由せずに済んでしまっていた——これは
+/// ユーザー方針(全本番環境はログイン前提)に反する実装漏れだったため、
+/// 今回まとめて同じログイン必須の扱いに揃えた。**`auth-section`自体は
+/// ログインするための画面なので、ログイン状態に関わらず常に表示する**
+/// (ここを隠すとログインする手段が無くなってしまうため)。
+pub fn apply_page_and_auth_visibility() {
     let logged_in = api_auth::saved_token().is_some();
+    let pathname = crate::dom::window().location().pathname().unwrap_or_default();
+    let is_ddns_path = pathname.contains("/ddns");
+    let is_demo_path = pathname.contains("/demo") && !is_ddns_path;
+
     if let Some(el) = try_by_id("auth-logged-out") {
         el.set_class_name(if logged_in { "hidden" } else { "" });
     }
     if let Some(el) = try_by_id("auth-logged-in") {
         el.set_class_name(if logged_in { "" } else { "hidden" });
     }
-    if let Some(el) = try_by_id("site-ops-section") {
-        el.set_class_name(if logged_in { "" } else { "hidden" });
-    }
-    // セキュリティ上、サイト管理画面(登録済みサイト一覧・追加編集フォーム)は
-    // ログインするまで表示しない(ユーザー指示、2026-07-16)。
-    if let Some(el) = try_by_id("site-mgmt-section") {
-        el.set_class_name(if logged_in { "" } else { "hidden" });
-    }
     if let Some(email) = api_auth::saved_account_email() {
         set_text("account-email-label", &email);
     }
+
+    // `completed-projects-section`(公開情報の紹介リンク集)は非機密のため
+    // ログイン不要——`/ddns`の単機能ページでのみ非表示にする。
+    set_hidden("completed-projects-section", is_ddns_path);
+
+    // 初回セットアップガイド: `/demo`かつログイン済みの時のみ表示
+    // (パス条件は既存のまま、ログイン条件を追加)。
+    set_hidden("setup-wizard-section", !(is_demo_path && logged_in));
+
+    // 無料ドメイン設定(DuckDNS): `/ddns`かつログイン済みの時のみ表示。
+    set_hidden("freedomain-section", !(is_ddns_path && logged_in));
+    set_hidden("ddns-demo-usage-guide", !(pathname.contains("/ddns/demo") && logged_in));
+
+    // 管理トークンのみで動く残りの管理系セクション(システムメモリ・
+    // ディスク使用状況・アンインストール案内・深夜自動アップデート・
+    // DATABASE暗号化表示・外部ツール一覧): メインページでログイン済みの
+    // 時のみ表示(`/ddns`単機能ページでは常に非表示)。
+    for id in [
+        "system-memory-section",
+        "disk-usage-section",
+        "uninstall-section",
+        "auto-update-section",
+        "db-encryption-section",
+        "external-tools-section",
+    ] {
+        set_hidden(id, is_ddns_path || !logged_in);
+    }
+
+    // サイト操作・サイト管理(従来からログイン必須、2026-07-16)。
+    // `/ddns`単機能ページでは常に非表示。
+    set_hidden("site-ops-section", is_ddns_path || !logged_in);
+    set_hidden("site-mgmt-section", is_ddns_path || !logged_in);
 }
 
 fn on_request_otp() {
@@ -91,7 +143,7 @@ fn on_verify_otp() {
         match api_auth::verify_otp(&contact, &code, totp_code.as_deref()).await {
             Ok(api_auth::VerifyOtpOutcome::LoggedIn(_token)) => {
                 set_text("login-result", "✅ ログインしました。 / Logged in.");
-                sync_auth_visibility();
+                apply_page_and_auth_visibility();
             }
             Ok(api_auth::VerifyOtpOutcome::TotpRequired) => {
                 set_text(
@@ -128,7 +180,7 @@ fn on_totp_login() {
         match api_auth::totp_login(&account_email, &totp_code).await {
             Ok(_token) => {
                 set_text("totp-login-result", "✅ ログインしました。 / Logged in.");
-                sync_auth_visibility();
+                apply_page_and_auth_visibility();
             }
             Err(e) => set_text("totp-login-result", &format!("❌ {e}")),
         }
@@ -184,7 +236,7 @@ fn on_totp_disable() {
 fn on_logout() {
     wasm_bindgen_futures::spawn_local(async move {
         let _ = api_auth::logout().await;
-        sync_auth_visibility();
+        apply_page_and_auth_visibility();
         set_text("login-result", "ログアウトしました。 / Logged out.");
     });
 }
@@ -313,6 +365,6 @@ pub fn wire() -> Result<(), JsValue> {
     wire_click("site-ops-correct-yes", || on_correct(true))?;
     wire_click("site-ops-correct-no", || on_correct(false))?;
 
-    sync_auth_visibility();
+    apply_page_and_auth_visibility();
     Ok(())
 }

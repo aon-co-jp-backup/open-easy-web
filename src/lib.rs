@@ -89,54 +89,15 @@ pub fn start() -> Result<(), JsValue> {
         .set_onchange(Some(site_import_change_closure.as_ref().unchecked_ref()));
     site_import_change_closure.forget();
 
-    // 2026-07-29追記(ユーザー指示): First-time Setup Guide(初回セットアップ
-    // ガイド)は本番(`easy-web.tokyo/`)では表示せず、デモ環境
-    // (`easy-web.tokyo/demo`)でのみ表示する。本番/デモは同一のWASM
-    // バイナリ・同一のSHELL_HTMLを共有しているため、実行時に
-    // `location().pathname()`を見て表示/非表示を切り替える(RS-Syncの
-    // `/demo`判定と同じ手法)。
-    if dom::window().location().pathname().map(|p| p.contains("/demo")).unwrap_or(false) {
-        if let Ok(section) = by_id("setup-wizard-section").dyn_into::<web_sys::Element>() {
-            section.class_list().remove_1("hidden").ok();
-        }
-    }
-
-    // 2026-08-05追記(ユーザー指示): 無料ドメイン設定(DuckDNS)を
-    // トップページ埋め込みから`/ddns`専用パスへ統合。トップページ側は
-    // `freedomain-section`を既定非表示にし(`shell.rs`側で
-    // `class="hidden"`済み)、`/ddns`(または`/ddns/demo`)パスの時だけ
-    // 表示する。他のセクション(サイト管理・認証・外部ツール等)は
-    // `/ddns`ページでは非表示にし、ドメイン設定に特化した単機能ページに
-    // する。`/ddns/demo`ではさらに使い方ガイド(`ddns-demo-usage-guide`)
-    // も表示する——`/demo`判定と同じ「本番/デモは同一WASMバイナリ、
-    // 実行時にURLで出し分け」手法。
-    let pathname = dom::window().location().pathname().unwrap_or_default();
-    if pathname.contains("/ddns") {
-        if let Ok(section) = by_id("freedomain-section").dyn_into::<web_sys::Element>() {
-            section.class_list().remove_1("hidden").ok();
-        }
-        for id in [
-            "completed-projects-section",
-            "setup-wizard-section",
-            "system-memory-section",
-            "disk-usage-section",
-            "uninstall-section",
-            "auto-update-section",
-            "db-encryption-section",
-            "auth-section",
-            "external-tools-section",
-            "site-ops-section",
-        ] {
-            if let Ok(section) = by_id(id).dyn_into::<web_sys::Element>() {
-                section.class_list().add_1("hidden").ok();
-            }
-        }
-        if pathname.contains("/ddns/demo") {
-            if let Ok(guide) = by_id("ddns-demo-usage-guide").dyn_into::<web_sys::Element>() {
-                guide.class_list().remove_1("hidden").ok();
-            }
-        }
-    }
+    // ページ内の各セクションの表示/非表示は、(a) 現在のURLパス
+    // (`/`・`/demo`・`/ddns`・`/ddns/demo`)と (b) ログイン状態、の両方を
+    // 組み合わせて`auth_ui::apply_page_and_auth_visibility()`が一括判定する
+    // (2026-08-05、ユーザー指示「全て本番環境はe-mailと2FAでログインして
+    // 使用する前提」を受けて、従来ここにあったパス単独判定ロジックを
+    // ログイン状態とのAND条件へ拡張・auth_ui.rsへ集約した——ログイン/
+    // ログアウト時にも同じ関数を呼び直す必要があるため、単一箇所に
+    // まとめないと状態がずれる)。
+    auth_ui::apply_page_and_auth_visibility();
 
     profiles::render_site_manager();
     profiles::sync_active_site_label();
