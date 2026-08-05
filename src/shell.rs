@@ -15,6 +15,12 @@ pub const SHELL_HTML: &str = r#"
     This is the admin/production environment. If you just want to try it out, use the demo instead:<br>
     <a href="/demo">https://easy-web.tokyo/demo</a>
   </p>
+  <p class="muted">
+    固定IPを持たない環境向けの無料ドメイン設定(DuckDNS)は専用ページへ移動しました:
+    <a href="/ddns">https://easy-web.tokyo/ddns</a><br>
+    Free domain setup (DuckDNS) for environments without a static IP has moved to its own page:<br>
+    <a href="/ddns">https://easy-web.tokyo/ddns</a>
+  </p>
 </header>
 
 <section id="completed-projects-section">
@@ -243,7 +249,7 @@ pub const SHELL_HTML: &str = r#"
   <p id="dist-sync-fallback-result" class="muted" aria-live="polite"></p>
 </section>
 
-<section>
+<section id="system-memory-section">
   <h3>System memory (システムメモリ使用状況)</h3>
   <p class="muted">
     Current memory usage / total available memory on this machine.<br>
@@ -282,7 +288,7 @@ pub const SHELL_HTML: &str = r#"
   </p>
 </section>
 
-<section>
+<section id="disk-usage-section">
   <h3>Disk usage (ディスク使用状況)</h3>
   <p class="muted">
     Actual HDD/SSD usage on this machine.<br>
@@ -302,7 +308,7 @@ pub const SHELL_HTML: &str = r#"
   <p id="disk-per-disk-text" class="muted" style="white-space:pre-line;"></p>
 </section>
 
-<section>
+<section id="uninstall-section">
   <h3>Uninstall (アンインストール)</h3>
   <p class="muted">
     Desktop (Windows/Linux): this GUI does not execute shell commands
@@ -326,7 +332,7 @@ Windows: .\uninstall.ps1 (as Administrator / 管理者権限で)</pre>
   </p>
 </section>
 
-<section>
+<section id="auto-update-section">
   <h3>Step 6: Nightly auto-update (⑥ 深夜バックグラウンド自動アップデート、既定OFF)</h3>
   <p class="muted">
     GitHub Releasesの最新バージョンを毎日ローカル深夜0時に確認し、新しい
@@ -345,7 +351,7 @@ Windows: .\uninstall.ps1 (as Administrator / 管理者権限で)</pre>
   <p id="auto-update-status" class="muted" aria-live="polite"></p>
 </section>
 
-<section>
+<section id="db-encryption-section">
   <h3>Database encryption (DATABASE暗号化、常時自動)</h3>
   <p class="muted">
     裏で暗号化しておりますが、管理者は意識せずに読み書きできます。裏で
@@ -638,8 +644,18 @@ Windows: .\uninstall.ps1 (as Administrator / 管理者権限で)</pre>
   </div>
 </section>
 
-<section id="freedomain-section">
+<section id="freedomain-section" class="hidden">
   <h2>Easy Free-Domain Setup, DuckDNS (簡単ドメイン設定)</h2>
+  <div id="ddns-demo-usage-guide" class="hidden">
+    <h3>How to use (使い方)</h3>
+    <ol>
+      <li>duckdns.org でアカウント作成しトークンを取得 / Create an account at duckdns.org and get a token</li>
+      <li>下の「open-web-serverのURL」「管理トークン」を入力 / Enter the open-web-server URL and admin token below</li>
+      <li>希望のサブドメイン名とDuckDNSトークンを入力し「追加&amp;疎通確認」 / Enter your desired subdomain name and DuckDNS token, then click "Add &amp; verify"</li>
+      <li>5分間隔でグローバルIPの変化を自動検知し、登録済みドメインを自動更新します / Every 5 minutes, the server auto-detects IP changes and renews registered domains</li>
+    </ol>
+    <p class="muted">これはデモ環境の案内表示であり、実際の登録操作は本番と同じフォームで行います。 / This is a demo-environment usage guide; the form below is the same one used in production.</p>
+  </div>
   <p class="muted">
     固定IPではないDDNS環境向けに、無料サブドメイン(DuckDNS)の取得〜自動更新を
     open-web-server側で一気通貫にセットアップします。 / For non-static-IP DDNS

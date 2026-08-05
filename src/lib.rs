@@ -101,6 +101,43 @@ pub fn start() -> Result<(), JsValue> {
         }
     }
 
+    // 2026-08-05追記(ユーザー指示): 無料ドメイン設定(DuckDNS)を
+    // トップページ埋め込みから`/ddns`専用パスへ統合。トップページ側は
+    // `freedomain-section`を既定非表示にし(`shell.rs`側で
+    // `class="hidden"`済み)、`/ddns`(または`/ddns/demo`)パスの時だけ
+    // 表示する。他のセクション(サイト管理・認証・外部ツール等)は
+    // `/ddns`ページでは非表示にし、ドメイン設定に特化した単機能ページに
+    // する。`/ddns/demo`ではさらに使い方ガイド(`ddns-demo-usage-guide`)
+    // も表示する——`/demo`判定と同じ「本番/デモは同一WASMバイナリ、
+    // 実行時にURLで出し分け」手法。
+    let pathname = dom::window().location().pathname().unwrap_or_default();
+    if pathname.contains("/ddns") {
+        if let Ok(section) = by_id("freedomain-section").dyn_into::<web_sys::Element>() {
+            section.class_list().remove_1("hidden").ok();
+        }
+        for id in [
+            "completed-projects-section",
+            "setup-wizard-section",
+            "system-memory-section",
+            "disk-usage-section",
+            "uninstall-section",
+            "auto-update-section",
+            "db-encryption-section",
+            "auth-section",
+            "external-tools-section",
+            "site-ops-section",
+        ] {
+            if let Ok(section) = by_id(id).dyn_into::<web_sys::Element>() {
+                section.class_list().add_1("hidden").ok();
+            }
+        }
+        if pathname.contains("/ddns/demo") {
+            if let Ok(guide) = by_id("ddns-demo-usage-guide").dyn_into::<web_sys::Element>() {
+                guide.class_list().remove_1("hidden").ok();
+            }
+        }
+    }
+
     profiles::render_site_manager();
     profiles::sync_active_site_label();
     auth_ui::wire()?;
