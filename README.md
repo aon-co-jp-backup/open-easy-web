@@ -29,6 +29,9 @@ Cache-Controlミドルウェア等、詳細は両リポジトリのCLAUDE.md参�
 [Français](README-France.md) / [Deutsch](README-Germany.md) / [Italiano](README-Italy.md) /
 [Русский](README-Russia.md) / [العربية](README-Arabic.md)
 
+📘 **セルフホスト時のアカウント設定・2FA(フィーチャーフォンでの確認方法含む)は
+[MANUAL.md](MANUAL.md) を参照してください。**(多言語版あり)
+
 ---
 
 ## いまできること
