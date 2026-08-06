@@ -5,77 +5,90 @@
     android:orientation="vertical"
     android:padding="16dp">
 
-    <TextView
-        android:id="@+id/statusText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/app_name"
-        android:textSize="16sp" />
-
-    <Button
-        android:id="@+id/startButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="Start server" />
-
-    <Button
-        android:id="@+id/openBrowserButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="@string/open_browser_button" />
-
-    <Button
-        android:id="@+id/changeProfileButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="@string/change_profile_button" />
-
-    <Button
-        android:id="@+id/memoryInfoButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="@string/memory_info_button" />
-
-    <Button
-        android:id="@+id/uninstallButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="@string/uninstall_button" />
-
-    <!-- 外付けHDD(root化端末専用)設定ボタン(2026-08-04新設)。 -->
-    <Button
-        android:id="@+id/externalStorageButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="@string/external_storage_button" />
-
-    <!-- 固定アカウント設定ボタン(2026-08-04新設、必須環境変数)。 -->
-    <Button
-        android:id="@+id/fixedAccountButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="@string/fixed_account_button" />
-
+    <!--
+      2026-08-06: 横向き・低解像度画面(実機で発生: 高さ720pxの横向き
+      表示で下2ボタン[外付けHDD/固定アカウント設定]が画面外に切れて
+      タップ不能になる実バグを確認)でも全ボタンにアクセスできるよう、
+      ボタン列全体をScrollViewで包む(従来はログ表示部分だけが
+      スクロール可能で、ボタン列自体はスクロール不可だった)。
+    -->
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="16dp">
+        android:layout_weight="1">
 
-        <TextView
-            android:id="@+id/logText"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:textIsSelectable="true"
-            android:textSize="11sp" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/startButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Start server" />
+
+            <Button
+                android:id="@+id/openBrowserButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/open_browser_button" />
+
+            <Button
+                android:id="@+id/changeProfileButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/change_profile_button" />
+
+            <Button
+                android:id="@+id/memoryInfoButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/memory_info_button" />
+
+            <Button
+                android:id="@+id/uninstallButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/uninstall_button" />
+
+            <!-- 外付けHDD(root化端末専用)設定ボタン(2026-08-04新設)。 -->
+            <Button
+                android:id="@+id/externalStorageButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/external_storage_button" />
+
+            <!-- 固定アカウント設定ボタン(2026-08-04新設、必須環境変数)。 -->
+            <Button
+                android:id="@+id/fixedAccountButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/fixed_account_button" />
+
+            <TextView
+                android:id="@+id/logText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"
+                android:textSize="11sp" />
+        </LinearLayout>
     </ScrollView>
 
 </LinearLayout>
