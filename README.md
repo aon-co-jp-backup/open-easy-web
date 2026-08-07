@@ -180,6 +180,29 @@ curl -fsSL https://github.com/aon-co-jp/open-easy-web/releases/latest/download/o
 sudo ./install.sh
 ```
 
+### macOS向けインストール(2026-08-06追加)
+
+`install-macos.sh`(launchd用plistを`~/Library/LaunchAgents/`へ配置)を
+用意した。**正直な開示**: この開発環境はWindows機のため、実際のmacOS
+環境でのビルド・`launchctl`実行・動作確認は一切行っていない
+(シェル構文検証・plistのXML構文検証のみ)。Apple Silicon
+(`aarch64-apple-darwin`)/Intel(`x86_64-apple-darwin`)向けのビルド自体は
+Appleのプロプライエタリなツールチェーン(Xcode Command Line Tools)が
+必要でWindows上ではクロスコンパイルできないため、GitHub Actions
+(`macos-latest`ランナー)側でビルドする方針とした
+(`.github/workflows/release.yml`の`build-macos`ジョブ、次回タグpush時に
+実際に動作するか要確認)。
+
+```
+curl -fsSL https://github.com/aon-co-jp/open-easy-web/releases/latest/download/open-easy-web-server-macos-x86_64.tar.gz | tar xz
+./install-macos.sh
+# plist内のOPEN_EASYWEB_FIXED_ACCOUNT_EMAIL等を編集後:
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/jp.co.aon.open-easy-web.plist
+```
+
+対になる`uninstall-macos.sh`も用意した(停止・plist削除、ユーザーデータは
+削除しない)。
+
 ### インストール/アンインストール時のデータ移行(2026-07-29追加)
 
 `install.sh`/`install.ps1`は、実行時に「既存の関連DATAを取り込むか」を

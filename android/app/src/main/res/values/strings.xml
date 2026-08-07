@@ -20,6 +20,11 @@
     <string name="change_profile_button">電源プロファイルを変更</string>
     <string name="memory_info_button">📊 Memory info (メモリ情報)</string>
     <string name="uninstall_button">🗑️ Uninstall (アンインストール)</string>
+    <string name="disk_info_button">💾 Disk info (ディスク情報)</string>
+    <string name="pie_chart_label_real_memory">Physical memory (実メモリ)</string>
+    <string name="pie_chart_label_virtual_memory">Virtual memory / swap (仮想メモリ)</string>
+    <string name="pie_chart_label_total_memory">Total (合計)</string>
+    <string name="pie_chart_label_disk">Disk usage (ディスク使用状況)</string>
 
     <string name="external_storage_button">💽 外付けHDDをストレージに使う(root)</string>
     <string name="external_storage_dialog_title">外付けHDDを主ストレージに使う(root化端末専用)</string>

@@ -230,6 +230,108 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-08-06(続き) macOS対応を新規追加(ユーザー指示「将来的にはMacも対応で」、open-web-serverと同時着手)
+
+Windows(`install.ps1`)・Linux(`install.sh`、systemdサービス登録)に続き、
+macOS向けの`install-macos.sh`/`uninstall-macos.sh`を新規作成した。
+
+1. **`install-macos.sh`/`uninstall-macos.sh`(新規)**: macOSのサービス
+   管理はsystemdではなく`launchd`を使うため、`~/Library/LaunchAgents/`
+   (ユーザーレベル)へplist(`jp.co.aon.open-easy-web.plist`)を配置し
+   `launchctl bootstrap`で読み込む方式を採用(日英Web検索で2026年時点
+   〈macOS Ventura〜Sequoia世代〉の`launchd`plist書式・`launchctl
+   bootstrap`/`load`の使い分けを確認した上で実装——Appleは`load`/
+   `unload`を将来的に非推奨とする方向性を示しているため、新規導入では
+   `bootstrap`/`bootout`を案内し、後方互換のため`load`/`unload`への
+   フォールバックも`uninstall-macos.sh`に残した)。
+2. **既存Linux systemdユニット相当の環境変数を引き渡し可能**: plist内の
+   `EnvironmentVariables`辞書に`OPEN_EASYWEB_SERVER_BIND`(既定値設定済み)
+   ・`OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`等(コメントアウト、ユーザーが
+   有効化)を用意し、`install.sh`のsystemdユニットと同じ変数名・同じ
+   必須/任意の区別を踏襲した。
+3. **README.md(ルート、日本語)にmacOS向けインストール手順を追記**。
+4. **`.github/workflows/release.yml`に`build-macos`ジョブを追加**
+   (`macos-latest`ランナー、`x86_64-apple-darwin`+`aarch64-apple-darwin`
+   の両アーキ向けにビルド、既存の`build-android`と同じ
+   `continue-on-error: true`で他OSのリリースをブロックしない設計)。
+5. **正直な制約の明記(誇張しない)**: この開発環境はWindows機であり、
+   (a) 実際のmacOS環境でのビルド・`launchctl bootstrap`実行・動作確認は
+   一切行っていない、(b) `cargo build --target x86_64-apple-darwin`/
+   `aarch64-apple-darwin`はAppleのプロプライエタリなツールチェーン
+   (Xcode Command Line Tools)を要し、Windows環境では通常クロス
+   コンパイル不可能——実際に`rustup target add aarch64-apple-darwin`まで
+   試すこと自体は意味が薄いと判断し試していない、(c) 検証は
+   `bash -n install-macos.sh`相当のシェル構文検証と、plist部分を
+   Python `xml.dom.minidom`で解析するXML構文検証のみに留まる、
+   (d) `build-macos`ジョブが実際にCI上で成功するかは次回タグpush時の
+   実行結果でしか確認できない。
+6. **コミットは作成していない**(ユーザーが内容確認後に判断する方針の
+   ため)。
+- 次にすべきこと: (1) 次回タグpush時に`build-macos`ジョブの実行結果を
+  確認、(2) 実macOS環境(または`macos-latest`相当のCI経由)での
+  `install-macos.sh`実行・`launchctl bootstrap`後の実際の起動確認、
+  (3) 80/443番等の特権ポートを使いたい場合の`/Library/LaunchDaemons/`
+  システムレベル対応(今回は未対応)。
+
+### 2026-08-06 Android版: 汎用`PieChartView`カスタムViewを新規実装し、MemoryInfoButtonへ3円グラフ(実メモリ・仮想メモリ・合計)表示を追加+新規`DiskInfoButton`を実装、実機でタップ確認済み
+
+**実装内容**:
+1. **新規`android/app/src/main/java/tokyo/runo/openeasyweb/PieChartView.kt`**:
+   `android.graphics.Canvas`/`Paint`のみで円弧(ドーナツ状)を描画する
+   汎用カスタムView。外部グラフライブラリへの依存を追加していない。
+   `setUsage(usedRatio: Float)`(0.0〜1.0、範囲外は自動クランプ)で
+   使用中/空きの2色円弧を描き直す。`usedColor`/`freeColor`/
+   `strokeWidthDp`をプロパティとして公開し色・太さを変更可能。
+2. **`MemoryInfoButton`のダイアログを拡張(コーディネーターからの
+   追加要件を反映)**: 新規レイアウト
+   `res/layout/dialog_memory_info.xml`(既存のテキスト表示はそのまま
+   残し、`PieChartView`を3つ横並びで追加)。(a) 実メモリ
+   (既存の`ActivityManager.getMemoryInfo()`ロジックはそのまま)、
+   (b) 仮想メモリ/スワップ(既存の`/proc/meminfo`パースロジックは
+   そのまま)、(c) **新規**: 実メモリ使用量+仮想メモリ使用量、
+   実メモリ総容量+仮想メモリ総容量をそれぞれ単純加算した「合計」の
+   円グラフ(OS的に意味のある統合指標ではなく単純加算である旨をコード
+   コメントに明記)。`MainActivity.showMemoryInfoDialog()`を
+   `AlertDialog.Builder.setMessage()`から`.setView()`(カスタムレイアウト
+   inflate)へ変更。
+3. **新規`DiskInfoButton`**: `android.os.StatFs`(標準API、root不要)で
+   `filesDir`が置かれているパーティションの総容量・使用量・空き容量を
+   取得。既存の`MemoryInfoButton`と同じ命名規則・ダイアログ表示パターン
+   (テキスト+`PieChartView`1つ、新規`res/layout/dialog_disk_info.xml`)を
+   模倣して`MainActivity.showDiskInfoDialog()`を実装。
+4. **レイアウト配線**: `strings.xml`に`disk_info_button`・
+   `pie_chart_label_*`(4件)を追加。`activity_main.xml`・
+   `layout-sw600dp/activity_main.xml`の両方に`diskInfoButton`
+   (既存`uninstallButton`と同じスタイル)を追加。
+
+**検証**: `gradlew.bat :app:assembleDebug --offline`
+**BUILD SUCCESSFUL**(37秒、既存jniLibs同梱のまま新規コンパイル
+エラー無し)。
+
+**実機確認(型チェック・ビルド成功だけで完了と判断しない既存方針の
+徹底)**: `adb devices`で実機Androidスマホ(moto g53y 5G、
+device penang)を確認、`adb install -r`でAPKを実際にインストールし、
+`ProfileSelectActivity`→「通常モード」選択→`MainActivity`起動まで
+`adb shell input tap`で実操作。**MEMORY INFOボタンを実タップし、
+実メモリ(使用中2169MB/合計3472MB、62.5%)・仮想メモリ(使用中1376MB/
+合計2256MB)・合計(使用中3545MB/合計5728MB、61.9%)の3つの円グラフが
+それぞれ異なる使用率で正しく描画されることを`adb shell screencap`の
+実スクリーンショットで確認**。続けて**DISK INFOボタンを実タップし、
+実際のストレージ使用状況(使用中27769MB/合計114239MB、24.3%、
+空き86470MB)の円グラフが正しく描画されることを同様に確認**。いずれも
+白画面・クラッシュ・コンソールエラー相当の異常無し。
+
+**正直な開示**: (1) タブレット実機での確認は行っていない
+(`layout-sw600dp`側のレイアウト自体はコードレビューのみ、実機は
+スマホ1台のみ)。(2) 「合計」円グラフはユーザー/コーディネーターの
+追加要件どおり単純加算値であり、Android/Linuxのメモリ管理上の
+実際の統合的な指標ではない(コード上もその旨を明記)。
+
+- 次にすべきこと: (1) タブレット実機(`layout-sw600dp`)での実タップ
+  確認、(2) 他のボタン(外付けHDD・固定アカウント設定等)と同様に、
+  今後円グラフ表示を他の管理系ダイアログ(電源プロファイル等)へ
+  展開する余地があるか検討。
+
 ### 2026-08-05(続き2) Android版: マイクロSD/USB HDD・SSD・nVMe SSDの自動検知・選択式UIを追加(既存のroot化・主ストレージ切替方式を拡張)
 
 ユーザー指示「マイクロSDや外付けUSB HDD/SSD/nVME SSDなどを簡単接続後に

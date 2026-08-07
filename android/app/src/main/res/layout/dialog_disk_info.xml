@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DiskInfoButtonのダイアログレイアウト(2026-08-06新規実装)。
+  MemoryInfoButtonと同様に、テキスト表示+PieChartView(円グラフ)の構成。
+  StatFsで取得した実際のストレージ使用率を1つの円グラフで表示する。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/diskInfoText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textIsSelectable="true"
+        android:textSize="13sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <tokyo.runo.openeasyweb.PieChartView
+            android:id="@+id/diskPieChart"
+            android:layout_width="120dp"
+            android:layout_height="120dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/pie_chart_label_disk"
+            android:textSize="11sp" />
+    </LinearLayout>
+</LinearLayout>

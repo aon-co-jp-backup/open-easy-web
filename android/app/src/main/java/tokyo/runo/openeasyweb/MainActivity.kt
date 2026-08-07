@@ -154,6 +154,11 @@ class MainActivity : AppCompatActivity() {
             requestUninstall()
         }
 
+        val diskInfoButton = findViewById<Button>(R.id.diskInfoButton)
+        diskInfoButton.setOnClickListener {
+            showDiskInfoDialog()
+        }
+
         val externalStorageButton = findViewById<Button>(R.id.externalStorageButton)
         externalStorageButton.setOnClickListener {
             showExternalStorageDialog()
@@ -366,6 +371,15 @@ class MainActivity : AppCompatActivity() {
      * カスタムROM/SELinuxポリシーでは`/proc/meminfo`が読めない場合が
      * あり得るため、読み取り失敗時は例外を投げずN/Aと表示する。
      */
+    /**
+     * ダイアログ表示部(2026-08-06拡張): 従来のテキスト表示はそのまま残し、
+     * `PieChartView`(汎用円グラフカスタムView、`android.graphics.Canvas`+
+     * `Paint`のみの実装)で実メモリ・仮想メモリ・その合計(単純加算)の
+     * 3つの円グラフを追加表示する。合計は「実メモリ使用量+仮想メモリ
+     * 使用量」「実メモリ総容量+仮想メモリ総容量」を単純加算しただけの
+     * 値であり、OS的に意味のある統合指標ではない点に注意(コーディネーター
+     * からの追加要件、2026-08-06)。
+     */
     private fun showMemoryInfoDialog() {
         val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val memInfo = ActivityManager.MemoryInfo()
@@ -375,24 +389,78 @@ class MainActivity : AppCompatActivity() {
         val usedRealMb = totalRealMb - availRealMb
         val usedRealPercent = if (totalRealMb > 0) usedRealMb * 100.0 / totalRealMb else 0.0
 
-        val (totalSwapMb, freeSwapMb) = readProcMeminfoSwap()
-        val swapLine = if (totalSwapMb == null) {
+        val (totalSwapMbNullable, freeSwapMbNullable) = readProcMeminfoSwap()
+        val totalSwapMb = totalSwapMbNullable ?: 0L
+        val usedSwapMb = if (totalSwapMbNullable == null) 0L else totalSwapMb - (freeSwapMbNullable ?: 0L)
+        val swapLine = if (totalSwapMbNullable == null) {
             "Virtual memory / swap (仮想メモリ/スワップ): N/A (could not read /proc/meminfo / 読み取れませんでした)"
         } else if (totalSwapMb == 0L) {
             "Virtual memory / swap (仮想メモリ/スワップ): N/A (not configured / 未設定)"
         } else {
-            val usedSwapMb = totalSwapMb - (freeSwapMb ?: 0L)
             "Virtual memory / swap (仮想メモリ/スワップ): $usedSwapMb / $totalSwapMb MB"
         }
 
+        // 合計(実メモリ+仮想メモリの単純加算、OS的な統合指標ではない)。
+        val totalCombinedMb = totalRealMb + totalSwapMb
+        val usedCombinedMb = usedRealMb + usedSwapMb
+        val usedCombinedRatio = if (totalCombinedMb > 0) usedCombinedMb.toFloat() / totalCombinedMb else 0f
+        val totalLine = if (totalCombinedMb > 0) {
+            "Total (実メモリ+仮想メモリの合計): $usedCombinedMb / $totalCombinedMb MB " +
+                "(${"%.1f".format(usedCombinedRatio * 100.0)}%)"
+        } else {
+            "Total (実メモリ+仮想メモリの合計): N/A"
+        }
+
+        val view = layoutInflater.inflate(R.layout.dialog_memory_info, null)
+        val textView = view.findViewById<TextView>(R.id.memoryInfoText)
+        textView.text =
+            "Physical memory (実メモリ) — Used (使用中): $usedRealMb MB / " +
+                "Total (合計): $totalRealMb MB (${"%.1f".format(usedRealPercent)}%)\n" +
+                "Available (空き): $availRealMb MB\n" +
+                "Low memory (低メモリ状態): ${memInfo.lowMemory}\n\n$swapLine\n\n$totalLine"
+
+        val realRatio = if (totalRealMb > 0) usedRealMb.toFloat() / totalRealMb else 0f
+        val swapRatio = if (totalSwapMb > 0) usedSwapMb.toFloat() / totalSwapMb else 0f
+        view.findViewById<PieChartView>(R.id.memoryRealPieChart).setUsage(realRatio)
+        view.findViewById<PieChartView>(R.id.memoryVirtualPieChart).setUsage(swapRatio)
+        view.findViewById<PieChartView>(R.id.memoryTotalPieChart).setUsage(usedCombinedRatio)
+
         AlertDialog.Builder(this)
             .setTitle("Memory info (メモリ情報)")
-            .setMessage(
-                "Physical memory (実メモリ) — Used (使用中): $usedRealMb MB / " +
-                    "Total (合計): $totalRealMb MB (${"%.1f".format(usedRealPercent)}%)\n" +
-                    "Available (空き): $availRealMb MB\n" +
-                    "Low memory (低メモリ状態): ${memInfo.lowMemory}\n\n$swapLine"
-            )
+            .setView(view)
+            .setPositiveButton("OK (閉じる)", null)
+            .show()
+    }
+
+    /**
+     * `android.os.StatFs`(標準API、root不要)で実際のストレージ(内部ストレージ、
+     * `filesDir`が置かれているパーティション)の総容量・使用量・空き容量を
+     * 取得し、`MemoryInfoButton`と同じパターン(テキスト+円グラフ)で表示する
+     * (2026-08-06新規実装、ユーザー指示「新規DiskInfoButtonを追加」)。
+     */
+    private fun showDiskInfoDialog() {
+        val statFs = android.os.StatFs(filesDir.absolutePath)
+        val blockSize = statFs.blockSizeLong
+        val totalBytes = statFs.blockCountLong * blockSize
+        val availBytes = statFs.availableBlocksLong * blockSize
+        val usedBytes = totalBytes - availBytes
+
+        val totalMb = totalBytes / (1024 * 1024)
+        val usedMb = usedBytes / (1024 * 1024)
+        val availMb = availBytes / (1024 * 1024)
+        val usedPercent = if (totalBytes > 0) usedBytes * 100.0 / totalBytes else 0.0
+        val usedRatio = if (totalBytes > 0) usedBytes.toFloat() / totalBytes else 0f
+
+        val view = layoutInflater.inflate(R.layout.dialog_disk_info, null)
+        view.findViewById<TextView>(R.id.diskInfoText).text =
+            "Disk usage (ディスク使用状況) — Used (使用中): $usedMb MB / " +
+                "Total (合計): $totalMb MB (${"%.1f".format(usedPercent)}%)\n" +
+                "Available (空き): $availMb MB"
+        view.findViewById<PieChartView>(R.id.diskPieChart).setUsage(usedRatio)
+
+        AlertDialog.Builder(this)
+            .setTitle("Disk info (ディスク情報)")
+            .setView(view)
             .setPositiveButton("OK (閉じる)", null)
             .show()
     }

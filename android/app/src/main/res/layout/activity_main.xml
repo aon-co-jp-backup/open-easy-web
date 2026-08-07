@@ -64,6 +64,14 @@
                 android:layout_marginTop="8dp"
                 android:text="@string/uninstall_button" />
 
+            <!-- ディスク情報ボタン(2026-08-06新設)。 -->
+            <Button
+                android:id="@+id/diskInfoButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/disk_info_button" />
+
             <!-- 外付けHDD(root化端末専用)設定ボタン(2026-08-04新設)。 -->
             <Button
                 android:id="@+id/externalStorageButton"

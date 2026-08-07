@@ -71,6 +71,45 @@ jobs:
           name: open-easy-web-server-windows-x86_64
           path: open-easy-web-server-windows-x86_64.zip
 
+  build-macos:
+    name: macOS (x86_64 + aarch64-apple-darwin)
+    runs-on: macos-latest
+    # 正直な開示(2026-08-06追加): このジョブがmacos-latestランナー上で
+    # 実際に成功するかは、開発環境がWindows機のため一度も実行確認できて
+    # いない。失敗してもLinux/Windowsのリリース自体はブロックしない
+    # (`continue-on-error: true`)。次回タグpush時のCI実行ログで初めて
+    # 実際の動作を確認できる。
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout open-raid-z (sibling path dependency)
+        run: git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z
+      - name: Add Apple Silicon target
+        run: rustup target add aarch64-apple-darwin
+      - name: Build (x86_64-apple-darwin, ネイティブランナーアーキ)
+        working-directory: server
+        run: cargo build --release --bin open-easy-web-server
+      - name: Build (aarch64-apple-darwin)
+        working-directory: server
+        run: cargo build --release --target aarch64-apple-darwin --bin open-easy-web-server
+      - name: Package (universal-ish: 2バイナリを別アーキ用として同梱)
+        run: |
+          mkdir -p dist-x86_64 dist-aarch64
+          cp server/target/release/open-easy-web-server dist-x86_64/open-easy-web-server
+          cp install-macos.sh dist-x86_64/install-macos.sh
+          cp uninstall-macos.sh dist-x86_64/uninstall-macos.sh
+          tar -czf open-easy-web-server-macos-x86_64.tar.gz -C dist-x86_64 open-easy-web-server install-macos.sh uninstall-macos.sh
+          cp server/target/aarch64-apple-darwin/release/open-easy-web-server dist-aarch64/open-easy-web-server
+          cp install-macos.sh dist-aarch64/install-macos.sh
+          cp uninstall-macos.sh dist-aarch64/uninstall-macos.sh
+          tar -czf open-easy-web-server-macos-aarch64.tar.gz -C dist-aarch64 open-easy-web-server install-macos.sh uninstall-macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-easy-web-server-macos
+          path: |
+            open-easy-web-server-macos-x86_64.tar.gz
+            open-easy-web-server-macos-aarch64.tar.gz
+
   build-android:
     name: Android (APK, デバッグビルド, ARM64/x86_64)
     runs-on: ubuntu-latest
@@ -126,12 +165,12 @@ jobs:
 
   release:
     name: GitHub Releaseへ添付
-    needs: [build-linux, build-windows, build-android]
+    needs: [build-linux, build-windows, build-android, build-macos]
     runs-on: ubuntu-latest
     if: ${{ always() && startsWith(github.ref, 'refs/tags/v') && needs.build-linux.result == 'success' && needs.build-windows.result == 'success' }}
     steps:
       - uses: actions/download-artifact@v4
-      - name: List downloaded artifacts (Android job may have failed, see build-android logs)
+      - name: List downloaded artifacts (Android/macOS jobs may have failed, see their logs)
         run: find . -maxdepth 2
       - uses: softprops/action-gh-release@v2
         with:
@@ -139,4 +178,6 @@ jobs:
             open-easy-web-server-linux-x86_64/open-easy-web-server-linux-x86_64.tar.gz
             open-easy-web-server-windows-x86_64/open-easy-web-server-windows-x86_64.zip
             open-easy-web-android-debug/open-easy-web-android-debug.apk
+            open-easy-web-server-macos/open-easy-web-server-macos-x86_64.tar.gz
+            open-easy-web-server-macos/open-easy-web-server-macos-aarch64.tar.gz
           fail_on_unmatched_files: false
