@@ -40,6 +40,16 @@ middleware, etc. — see those repos' CLAUDE.md for details).
 
 ---
 
+## Recent updates (2026-08-07)
+
+- Fixed a real Android layout bug on tablets (`sw600dp`): the inner
+  `LinearLayout` in `layout-sw600dp/activity_main.xml` had `maxWidth="720dp"`
+  combined with `layout_width="match_parent"`, which Android ignores
+  (`maxWidth` only takes effect when `layout_width="wrap_content"`). Found
+  via a cross-repo audit after the same bug was fixed and verified on a
+  real device in the sibling repo `RS-Sync`. Changed to `wrap_content`.
+  Honest gap: not re-verified on an actual tablet/emulator in this repo.
+
 ## What works today
 
 - **Site management screen**: register/edit/delete multiple deploy

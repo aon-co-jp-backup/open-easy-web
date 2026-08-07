@@ -15,6 +15,19 @@
 > 2026-07-20、デプロイ先既定パス変更・ネットワークドライブ移設時の
 > 注意事項を追記)。
 
+## -2. 最近の更新(2026-08-07) / Recent update
+
+Androidタブレット向けレイアウト(`layout-sw600dp/activity_main.xml`)の
+`maxWidth`が`layout_width="match_parent"`と組み合わさって機能していない
+実バグを修正(`wrap_content`へ変更)。移設先でも同じパターン
+(`maxWidth`+`match_parent`)が他の`layout-sw600dp`ファイルに残っていないか
+確認すること。
+
+*English*: Fixed a real bug where `maxWidth` on the tablet layout
+(`layout-sw600dp/activity_main.xml`) had no effect because it was combined
+with `layout_width="match_parent"` (changed to `wrap_content`). When
+porting, check other `layout-sw600dp` files for the same pattern.
+
 ## -1. VPS上のデプロイ先ソースツリーがgit repoと乖離する罠(2026-07-28発見・解消、フロント/バックエンド両方で発生)
 
 **フロントエンドだけでなくバックエンド(`open-easy-web-server`)も同様に

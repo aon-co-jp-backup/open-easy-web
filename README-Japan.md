@@ -38,6 +38,16 @@ Cache-Controlミドルウェア等、詳細は両リポジトリのCLAUDE.md参�
 
 ---
 
+## 最近の更新(2026-08-07)
+
+- Androidタブレット向けレイアウト(`sw600dp`)の実バグを修正:
+  `layout-sw600dp/activity_main.xml`の内側`LinearLayout`が
+  `layout_width="match_parent"`のまま`maxWidth="720dp"`を指定しており、
+  Android仕様上この組み合わせは機能しない(`maxWidth`は
+  `layout_width="wrap_content"`時のみ有効)。姉妹リポジトリ`RS-Sync`で
+  同一パターンが実機検証済みで修正された際の横展開確認で発見・修正した。
+  正直な開示: 本リポジトリ側では実機/エミュレータでの再確認は未実施。
+
 ## いまできること
 
 - **サイト管理画面**: open-easy-web自身・WordPress・Laravel・FastAPIなど
