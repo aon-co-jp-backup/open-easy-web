@@ -230,6 +230,19 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-08-07(続き) rs-sync HANDOFFで発見したmaxWidth横展開バグを修正
+
+rs-syncの2026-08-07 HANDOFFで発見された「`layout-sw600dp/activity_main.xml`の
+内側`LinearLayout`が`layout_width="match_parent"`のまま`maxWidth="720dp"`を
+指定しており実際には機能しない(Android仕様上`maxWidth`は
+`layout_width="wrap_content"`時のみ有効)」という同一パターンのバグが、
+本リポジトリの`android/app/src/main/res/layout-sw600dp/activity_main.xml`
+にも実在することを確認し、`layout_width`を`wrap_content`へ修正した(rs-sync
+側の実機検証済み修正パターンをそのまま適用)。**正直な開示**: 本リポジトリ
+側では実機/エミュレータでの見た目再確認は未実施(コード修正のみ、rs-sync側
+で同一パターンが実機検証済みであることに基づく横展開)。
+- 次にすべきこと: 実機/エミュレータでの見た目再確認。
+
 ### 2026-08-07 Android版: 外部バインドアドレス修正(WireGuard/固定IP経由アクセス対応)+シャットダウン/再起動ボタン追加
 
 ユーザーがLOLIPOP!固定IPアクセス(WireGuard型VPN、月額539円)+DuckDNS無料
