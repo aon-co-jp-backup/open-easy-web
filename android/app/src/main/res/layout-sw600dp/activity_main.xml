@@ -28,6 +28,20 @@
             android:text="Start server" />
 
         <Button
+            android:id="@+id/shutdownButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/shutdown_button" />
+
+        <Button
+            android:id="@+id/restartButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/restart_button" />
+
+        <Button
             android:id="@+id/openBrowserButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

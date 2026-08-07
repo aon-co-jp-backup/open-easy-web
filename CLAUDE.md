@@ -230,6 +230,57 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-08-07 Android版: 外部バインドアドレス修正(WireGuard/固定IP経由アクセス対応)+シャットダウン/再起動ボタン追加
+
+ユーザーがLOLIPOP!固定IPアクセス(WireGuard型VPN、月額539円)+DuckDNS無料
+ドメインで自宅スマホをWebサーバーとして外部公開しようとした際、実機で
+「WireGuardトンネルは接続中だが、外部からサーバーに全く到達できない」
+という実障害を発見・調査した。
+
+**根本原因**: `MainActivity.kt`のサーバー起動処理が、root化端末での外部
+ストレージ利用時・通常起動時の両方で`OPEN_EASYWEB_SERVER_BIND`を常に
+`127.0.0.1:$bindPort`にハードコードしていた——WiFi LAN内からは
+`127.0.0.1`でも問題にならないが、WireGuardの`tun0`インターフェース経由
+の外部トラフィックはループバックにしか listen していないプロセスには
+一切届かない。open-web-server側(姉妹アプリ)には既にWiFi IPへ narrowing
+する`BindAddressPolicy`があったが、こちらのopen-easy-webにはそもそも
+この種のポリシー自体が存在せず、単純に`127.0.0.1`固定だったことが判明。
+
+**修正**: 2箇所(root化端末向け`su`起動スクリプト内・通常
+`ProcessBuilder`起動時)の`OPEN_EASYWEB_SERVER_BIND`を`127.0.0.1`から
+`0.0.0.0`へ変更し、WiFi・WireGuardトンネルを含む全インターフェースから
+listenするようにした。
+
+**追加機能(ユーザー指示)**: 「STOP」ボタンではなく「⏻ シャットダウン」
+「🔁 再起動」の2ボタンを新設。`startAndPollServer()`/`stopServerProcess()`
+という共有ロジックへリファクタリングし、Start/シャットダウン/再起動の
+3ボタンから同じ処理を呼べるようにした(`healthPollJob`の停止・
+`serverProcess.destroy()`・WakeLock解放を一箇所に集約)。
+
+**検証**: `gradlew :app:assembleDebug`で両修正ともBUILD SUCCESSFUL、
+実機(`ZY22J7RFND`)へ`adb install -r`しシャットダウン/再起動ボタンの
+動作を確認。`adb shell netstat`で実際に`0.0.0.0:18090`(open-easy-web)・
+`0.0.0.0:18099`(open-web-server)でlistenしていること、`tun0`
+(172.16.0.2)インターフェースが有効であることを確認済み。
+
+**正直な開示・未解決**: 上記修正後もなお、外部(開発環境)から
+`163.44.137.126:18090`/`:18099`への接続は`000`(到達不可)のまま——
+アプリ側のbind設定は正しく`0.0.0.0`になっており、WireGuardトンネルも
+スマホ側で「接続中・ハンドシェイク新しい」ことをユーザーが確認済み
+のため、**残る原因はLOLIPOP側VPNサーバーのポート転送設定、または
+NAT越しの疎通維持(`PersistentKeepalive`未設定の可能性)にあると
+推測される**——アプリ側・本セッションでは検証・特定できていない。
+次回セッションで.confファイルの`PersistentKeepalive`設定有無を確認し、
+無ければ追加する(`PersistentKeepalive = 25`が一般的な値)ことから
+再開すること。
+
+- 次にすべきこと: (1) WireGuard .confの`PersistentKeepalive`設定有無の
+  確認・追加、(2) それでも解消しない場合はLOLIPOP!固定IPアクセスの
+  サポート窓口へ「VPN経由での特定ポート(18090/18099)への外部からの
+  着信が届かない」ことを問い合わせる、(3) open-redmineもアイコンから
+  直接起動できるようにしてほしいというユーザー要望への対応(現状未着手、
+  open-redmine自体がAndroidアプリ化されているか要確認)。
+
 ### 2026-08-06(続き) macOS対応を新規追加(ユーザー指示「将来的にはMacも対応で」、open-web-serverと同時着手)
 
 Windows(`install.ps1`)・Linux(`install.sh`、systemdサービス登録)に続き、

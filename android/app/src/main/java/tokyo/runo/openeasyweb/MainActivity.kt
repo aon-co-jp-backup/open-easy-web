@@ -98,6 +98,8 @@ class MainActivity : AppCompatActivity() {
         val statusText = findViewById<TextView>(R.id.statusText)
         val logText = findViewById<TextView>(R.id.logText)
         val startButton = findViewById<Button>(R.id.startButton)
+        val shutdownButton = findViewById<Button>(R.id.shutdownButton)
+        val restartButton = findViewById<Button>(R.id.restartButton)
         val openBrowserButton = findViewById<Button>(R.id.openBrowserButton)
         val changeProfileButton = findViewById<Button>(R.id.changeProfileButton)
 
@@ -107,31 +109,30 @@ class MainActivity : AppCompatActivity() {
         startButton.setOnClickListener {
             startButton.isEnabled = false
             CoroutineScope(Dispatchers.Main).launch {
-                val log = StringBuilder()
-                log.appendLine("profile: ${currentProfile.label} (${currentProfile.prefValue})")
-                statusText.text = "[${currentProfile.emoji} ${currentProfile.label}] starting..."
-                val startResult = withContext(Dispatchers.IO) { startServerProcess(log) }
-                if (!startResult) {
-                    statusText.text = "[${currentProfile.emoji} ${currentProfile.label}] failed to start (see log)"
-                    logText.text = log.toString()
-                    startButton.isEnabled = true
-                    return@launch
-                }
-
-                applyProfilePowerBehavior(log)
-
-                val healthOk = withContext(Dispatchers.IO) { pollHealthz(log) }
-                statusText.text = if (healthOk) {
-                    "[${currentProfile.emoji} ${currentProfile.label}] RUNNING: GET /healthz responded 200"
-                } else {
-                    "[${currentProfile.emoji} ${currentProfile.label}] started, but /healthz did not respond (see log)"
-                }
-                logText.text = log.toString()
+                startAndPollServer(statusText, logText)
                 startButton.isEnabled = true
+            }
+        }
 
-                if (healthOk) {
-                    startPeriodicHealthPoll(statusText)
-                }
+        shutdownButton.setOnClickListener {
+            val log = StringBuilder()
+            stopServerProcess(log)
+            statusText.text = "[${currentProfile.emoji} ${currentProfile.label}] shut down"
+            logText.text = log.toString()
+            startButton.isEnabled = true
+        }
+
+        restartButton.setOnClickListener {
+            restartButton.isEnabled = false
+            startButton.isEnabled = false
+            CoroutineScope(Dispatchers.Main).launch {
+                val log = StringBuilder()
+                stopServerProcess(log)
+                statusText.text = "[${currentProfile.emoji} ${currentProfile.label}] restarting..."
+                logText.text = log.toString()
+                startAndPollServer(statusText, logText, log)
+                startButton.isEnabled = true
+                restartButton.isEnabled = true
             }
         }
 
@@ -676,7 +677,7 @@ class MainActivity : AppCompatActivity() {
                 val script = buildString {
                     append("mkdir -p ${shellQuote(dataDir)}; ")
                     append("cd ${shellQuote(dataDir)} && ")
-                    append("export OPEN_EASYWEB_SERVER_BIND=${shellQuote("127.0.0.1:$bindPort")}; ")
+                    append("export OPEN_EASYWEB_SERVER_BIND=${shellQuote("0.0.0.0:$bindPort")}; ")
                     append("export OPEN_EASYWEB_SITES_ROOT=${shellQuote("$dataDir/sites")}; ")
                     append("export OPEN_EASYWEB_USERS_STATE=${shellQuote("$dataDir/.open-easy-web-users.json")}; ")
                     append("export OPEN_EASYWEB_DB_ENCRYPTION_KEY_FILE=${shellQuote("$dataDir/.open-easy-web-db-encryption.key")}; ")
@@ -691,7 +692,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 val pb = ProcessBuilder(binaryPath.absolutePath)
                 pb.directory(filesDir)
-                pb.environment()["OPEN_EASYWEB_SERVER_BIND"] = "127.0.0.1:$bindPort"
+                pb.environment()["OPEN_EASYWEB_SERVER_BIND"] = "0.0.0.0:$bindPort"
                 pb.environment()["OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL"] = fixedAccountEmail
                 // WASM UIバンドルは同梱していないため既定の"."のままで良い
                 // (「/」は404になるが `/healthz`・`/api/...` は機能する、doc参照)。
@@ -718,6 +719,64 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             log.appendLine("ERROR launching process: ${e}")
             false
+        }
+    }
+
+    /**
+     * サーバープロセスの起動〜`/healthz`疎通確認〜定期ポーリング開始まで
+     * を一気通貫で行う(Startボタン・再起動ボタンの両方から共有する
+     * ロジック、2026-08-07新設)。
+     */
+    private suspend fun startAndPollServer(
+        statusText: TextView,
+        logText: TextView,
+        existingLog: StringBuilder? = null
+    ) {
+        val log = existingLog ?: StringBuilder()
+        log.appendLine("profile: ${currentProfile.label} (${currentProfile.prefValue})")
+        statusText.text = "[${currentProfile.emoji} ${currentProfile.label}] starting..."
+        val startResult = withContext(Dispatchers.IO) { startServerProcess(log) }
+        if (!startResult) {
+            statusText.text = "[${currentProfile.emoji} ${currentProfile.label}] failed to start (see log)"
+            logText.text = log.toString()
+            return
+        }
+
+        applyProfilePowerBehavior(log)
+
+        val healthOk = withContext(Dispatchers.IO) { pollHealthz(log) }
+        statusText.text = if (healthOk) {
+            "[${currentProfile.emoji} ${currentProfile.label}] RUNNING: GET /healthz responded 200"
+        } else {
+            "[${currentProfile.emoji} ${currentProfile.label}] started, but /healthz did not respond (see log)"
+        }
+        logText.text = log.toString()
+
+        if (healthOk) {
+            startPeriodicHealthPoll(statusText)
+        }
+    }
+
+    /**
+     * サーバープロセスをシャットダウンする(シャットダウン/再起動ボタンの
+     * 両方から共有するロジック、2026-08-07新設)。定期ヘルスチェックの
+     * 停止・プロセス破棄・WakeLock解放を行う(`onDestroy()`と同じ後始末
+     * 内容だが、Activity自体は終了させない)。
+     */
+    private fun stopServerProcess(log: StringBuilder) {
+        healthPollJob?.cancel()
+        healthPollJob = null
+        val process = serverProcess
+        if (process != null) {
+            process.destroy()
+            log.appendLine("server process destroyed")
+        } else {
+            log.appendLine("server process was not running")
+        }
+        serverProcess = null
+        if (wakeLock?.isHeld == true) {
+            wakeLock?.release()
+            log.appendLine("wake lock released")
         }
     }
 
