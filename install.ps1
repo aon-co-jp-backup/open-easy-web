@@ -1,4 +1,4 @@
-# open-easy-web(open-easy-web-server)インストールスクリプト(Windows /
+﻿# open-easy-web(open-easy-web-server)インストールスクリプト(Windows /
 # Windows Server 共通)。
 #
 # 正直な開示: このバイナリは固定アカウント制の認証を持ち、起動時に
