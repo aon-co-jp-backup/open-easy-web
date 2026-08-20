@@ -180,6 +180,16 @@ curl -fsSL https://github.com/aon-co-jp/open-easy-web/releases/latest/download/o
 sudo ./install.sh
 ```
 
+### Windows向けインストーラー(2026-08-19新設、2026-08-20 サービス登録方式に一本化)
+
+`installer/open-easy-web-install.iss`(Inno Setup)は、既存の
+`install.ps1`/`uninstall.ps1`(Windowsサービス`OpenEasyWeb`として登録)を
+そのまま呼び出す薄いラッパー。open-easy-webは複数の関連リポジトリを
+統括する中央サービスであるため、**常時稼働するWindowsサービスとして
+登録される方式のみを正式採用**している(手動起動する単体プロセス方式は
+不適切と判断し廃止した)。ビルド方法・詳細はスクリプト冒頭のコメント、
+および`CLAUDE.md`のHANDOFF(2026-08-20)を参照。
+
 ### macOS向けインストール(2026-08-06追加)
 
 `install-macos.sh`(launchd用plistを`~/Library/LaunchAgents/`へ配置)を

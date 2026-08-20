@@ -230,6 +230,53 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-08-20(続き) インストーラー方式をサービス登録方式に統合、実ビルド検証まで完了
+
+前回セッションのHANDOFFで「未解決事項」として記録されていた
+`installer/open-easy-web-install.iss`(サービス登録方式)と
+`installer/windows/open-easy-web.iss`(`PrivilegesRequired=lowest`の
+単体プロセス起動方式)の二重実装に対して、ユーザーから明確な判断指示
+「open-easy-webのインストーラー方式は、単体プロセスというのはありえ
+ないです。様々なリポジトリを統括するサービスです。」を受けた。
+
+- **採用した設計**: `installer/open-easy-web-install.iss`(既存の
+  `install.ps1`/`uninstall.ps1`をそのまま呼び、Windowsサービス
+  `OpenEasyWeb`として登録する方式)を正式採用。理由: open-easy-webは
+  open-english・aruaru-llm等の複数の関連リポジトリを統括する中央
+  サービス・管理ハブであり、ユーザーが手動起動する一時的なプロセス
+  ではなく常時稼働するサービスとして動くべき、というユーザー判断に
+  基づく。
+- **削除**: `installer/windows/open-easy-web.iss`(単体プロセス方式)を
+  `git rm`で削除。付随していた`installer/windows/README-INSTALLED.txt`
+  (固定アカウントメール設定・自己アップデート機能の説明、日英併記)は
+  内容が有用だったため`installer/README-INSTALLED.txt`へ移動し、
+  採用した`.iss`の`[Files]`セクションへ`isreadme`フラグ付きで同梱する
+  よう変更した(インストール完了後に表示される)。空になった
+  `installer/windows/`ディレクトリも削除。
+- **`installer/open-easy-web-install.iss`のヘッダーコメントに統合の
+  経緯を追記**(なぜサービス登録方式が正しいか、廃止した設計との比較)。
+- **README.md**: 「サーバー側(open-easy-web-server)のインストール」節に
+  「Windows向けインストーラー」小節を新設し、サービス登録方式への
+  一本化を明記。
+- **実ビルド検証**: この開発機に`Inno Setup 6`(`ISCC.exe`、
+  `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`)が実際に導入されて
+  いることを確認(前回セッションの「未導入」という記録は誤り、または
+  その後導入された)。`server/target/release/open-easy-web-server.exe`
+  (既存のreleaseビルド成果物)を`installer/`へ一時配置し、
+  `ISCC.exe open-easy-web-install.iss`を実際に実行——**7.9秒で
+  コンパイル成功**、`installer/open-easy-web-install.exe`
+  (約4.97MB)が実際に生成されることを確認した。検証後、ビルド成果物
+  (`.exe`2つ)はgit管理対象外のためリポジトリから削除済み(ソース
+  `.iss`のみコミット対象)。
+- **正直な開示・未実施**: 生成した`open-easy-web-install.exe`を実際に
+  実行してインストール・サービス起動・アンインストールまでを行う
+  実機E2E検証は今回未実施(コンパイル成功・出力ファイル実在の確認に
+  留まる)。
+- 次にすべきこと: (1) 実際に`open-easy-web-install.exe`を実行し、
+  サービス登録(`OpenEasyWeb`)・起動・`/healthz`応答・アンインストール
+  までの一気通貫の実機検証、(2) `.github/workflows/release.yml`への
+  Windowsインストーラービルドの組み込み検討(現状はzip配布のみ)。
+
 ### 2026-08-20 前回セッション(APIリミットで中断)の未コミット変更を検証・コミット
 
 前回セッションがAPI利用上限で中断した際に残っていた未コミット変更
