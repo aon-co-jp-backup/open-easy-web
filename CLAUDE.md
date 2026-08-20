@@ -230,6 +230,56 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-08-20 前回セッション(APIリミットで中断)の未コミット変更を検証・コミット
+
+前回セッションがAPI利用上限で中断した際に残っていた未コミット変更
+(`server/src/auto_update.rs`のWindows向けプローブポート方式のヘルス
+チェック+失敗時ロールバック追加、Android JNI用`.so`2種の再ビルド、
+本ファイルへの2026-08-19 HANDOFF追記)を検証した。
+
+- `server/src/auto_update.rs`の差分は、Windowsには`SO_REUSEPORT`相当が
+  無いため実ポートでの並行起動確認ができなかった問題を、「実ポート+1」
+  の一時プローブポートで新バイナリを先に起動し`/healthz`到達性を
+  確認してから旧プロセスを止める」設計で解消するもの——内容は完結して
+  おり未完成部分・矛盾は無かった。
+- `cargo build --release`(`server/`)は警告4件(いずれも
+  `power_profile.rs`の未使用コード、本変更と無関係の既存warning)のみで
+  ビルド成功。
+- `cargo test --release`は92件全て成功(`auto_update::tests::*`含む)。
+- 実際に`OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`等を設定した上で
+  `open-easy-web-server.exe`を起動し、実HTTPで`GET /healthz`が
+  `200 {"status":"ok"}`を返すことを確認した。
+- Android用`.so`2種(`arm64-v8a`/`x86_64`)のバイナリサイズ増加は、
+  `auto_update.rs`変更を含むRustソースの再ビルド結果として整合的
+  (意図不明な変更ではない)と判断し、そのままコミット対象に含めた。
+- **正直な開示(未解決事項)**: `installer/`ディレクトリを確認したところ、
+  2026-08-19 HANDOFF(下記)が言及する`installer/open-easy-web-install.iss`
+  (`install.ps1`/`uninstall.ps1`をそのまま呼ぶ薄いラッパー、サービス
+  登録方式)に加えて、`installer/windows/open-easy-web.iss`という
+  **別設計**(`PrivilegesRequired=lowest`の単体プロセス起動方式、
+  `open-english/installer/windows/open-english.iss`を参考実装とした
+  もの)が未追跡ファイルとして併存していた。両者は同じ目的に対する
+  異なる二つの実装であり、今回のセッションではどちらを正とするか
+  判断する材料が無かったため**あえて統合・削除せず両方をそのまま
+  コミット**した。次回、どちらの設計を正式採用するか(またはユーザー
+  に確認するか)を決めること。
+
+### 2026-08-19 自己アップデート機構+インストーラー(.iss)の確認・作成
+
+ユーザー指示「自己アップデート機構実装+インストーラー作成」への対応。
+自己アップデート本体(`server/src/auto_update.rs`)は2026-07-27に既に
+実装・検証済みだったため、今回は`installer/open-easy-web-install.iss`
+(Inno Setup)を新規作成した——既存`install.ps1`/`uninstall.ps1`
+(Windowsサービス`OpenEasyWeb`登録)をそのまま呼び出す薄いラッパーとし、
+サービス登録ロジックを二重実装しない設計。**正直な開示**: この開発機に
+`ISCC.exe`(Inno Setup Compiler)が導入されておらず(`where ISCC.exe`で
+未検出を確認済み)、`.iss`ファイル自体の作成に留まり実ビルドは
+していない。
+- 次にすべきこと: Inno Setupを導入できる環境で
+  `iscc open-easy-web-install.iss`を実際に実行し
+  `open-easy-web-install.exe`を生成、実インストール/アンインストール
+  の実機確認。
+
 ### 2026-08-07(続き) rs-sync HANDOFFで発見したmaxWidth横展開バグを修正
 
 rs-syncの2026-08-07 HANDOFFで発見された「`layout-sw600dp/activity_main.xml`の

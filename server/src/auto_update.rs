@@ -400,8 +400,51 @@ pub async fn check_and_apply_update(bind_addr: SocketAddr, stop_accepting: &std:
     }
     #[cfg(not(unix))]
     {
+        // 2026-08-19追記(ユーザー指示「安全な入れ替え〈旧バイナリ退避→
+        // 新バイナリ起動→ヘルスチェック→失敗時ロールバック〉」への対応):
+        // 以前はヘルスチェック無しで無条件に旧プロセスを終了していた
+        // (Windowsには`SO_REUSEPORT`相当が無く実ポートを新旧で共有できない
+        // ため、実ポートでの正式な起動確認ができなかったことが理由)。
+        // これをopen-english/self_update.rsのUnix版と同じ「一時プローブ
+        // ポート(実ポート+1)で新バイナリを先に起動してヘルスチェック」
+        // という工夫で解消した——実ポートを一切奪わずに新バイナリの生死・
+        // `/healthz`到達性を確認できるため、Windows上でも安全にロール
+        // バックできる(失敗時はプローブ子プロセスをkillし、旧プロセスは
+        // 一度も止めていないためそのまま動作を継続するだけで復旧完了)。
+        let probe_addr: SocketAddr = SocketAddr::new(bind_addr.ip(), bind_addr.port().wrapping_add(1));
+        let mut probe_child = std::process::Command::new(&new_binary)
+            .env("OPEN_EASYWEB_SERVER_BIND", probe_addr.to_string())
+            .spawn()
+            .context("failed to spawn probe instance of new binary")?;
+
+        let health_client = reqwest::Client::builder().timeout(Duration::from_secs(2)).build().context("failed to build health-check HTTP client")?;
+        let probe_deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        let mut probe_healthy = false;
+        while tokio::time::Instant::now() < probe_deadline {
+            if let Ok(Some(status)) = probe_child.try_wait() {
+                tracing::warn!(%status, "auto_update: probe instance of new binary exited immediately, treating as unhealthy");
+                break;
+            }
+            if let Ok(resp) = health_client.get(format!("http://{probe_addr}/healthz")).send().await {
+                if resp.status().is_success() {
+                    probe_healthy = true;
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        let _ = probe_child.kill();
+
+        if !probe_healthy {
+            tracing::warn!("auto_update: new binary failed the pre-switch health check on the probe port — rolling back (this process was never stopped, so no restart is needed)");
+            anyhow::bail!("new binary did not become healthy on probe port {probe_addr} within timeout");
+        }
+
+        tracing::info!("auto_update: new binary passed pre-switch health check; proceeding with sequential handoff");
         // SO_REUSEPORT相当が無いため、正直な開示通り「受付停止→即起動」の
-        // 逐次切り替え(真のゼロダウンタイムではない)。
+        // 逐次切り替え(真のゼロダウンタイムではない)。ただし上記の
+        // プローブヘルスチェックにより、少なくとも「壊れた新バイナリへ
+        // 切り替えてサービスが完全に落ちる」事故は防げるようになった。
         stop_accepting.store(true, std::sync::atomic::Ordering::SeqCst);
         tokio::time::sleep(Duration::from_millis(500)).await;
         let _child = std::process::Command::new(&new_binary).spawn().context("failed to spawn new binary")?;
