@@ -230,6 +230,88 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-08-24 `/rsync`(RSyncバックアップ 使い方ガイド)ページを新設、Completed Projectsへ掲載
+
+ユーザー指示「`https://easy-web.tokyo/rsync`にRSyncバックアップの使い方
+ガイドページを新設(日英)。**open-easy-web自体にRSync機構があるかのような
+誤解を招く表現は避け、『使い方ガイド』という位置づけにする**」への対応。
+
+**背景(正直な記録、重要)**: `open-english`側の学習履歴DBの案内文に
+「open-easy-webのRSyncでバックアップ同期できる」という記述があったが、
+実際に本リポジトリのドキュメント・ソースを検索した結果**rsyncに関する
+実装は存在しなかった**ことが判明済み。今回はその誤った案内を解消するため、
+「open-easy-webの機能」ではなく「**一般的なrsyncの使い方を説明する独立した
+ドキュメントページ**」として新設した。**この位置づけを将来変えないこと**
+——本リポジトリにrsync同期機構は無い。
+
+1. **`src/shell.rs`に`#rsync-guide-section`を新設**(既定`class="hidden"`)。
+   内容は日英併記の8節: (1) rsyncとは、(2) OS別インストール手順、
+   (3) 基本的な使い方(`-a`/`-v`/`-z`/`--delete`/`--dry-run`、末尾スラッシュの
+   注意)、(4) **稼働中DBの注意**(データディレクトリを直接rsyncすると
+   書き込み途中のファイルを複製して復元できないバックアップになる——
+   `pg_dump`でダンプしてからそのファイルだけをrsyncする)、(5) Googleドライブ
+   (`rclone config` + `rclone sync`)、(6) レンタルサーバー・VPS
+   (`ssh-keygen`/`ssh-copy-id` + rsync)、(7) cron/タスクスケジューラでの
+   定期実行、(8) 復元(「実際に復元できることを一度試すまでバックアップが
+   取れているとは言えない」旨を明記)。
+   **冒頭に日英とも打ち消し文を置いてある**——「open-easy-web に rsync の
+   同期機構が組み込まれているわけではありません」/「open-easy-web does
+   *not* contain an rsync synchronisation mechanism」。回帰テスト
+   `rsync_guide_explicitly_denies_being_an_open_easy_web_feature`で
+   この2文の存在を機械的に守っている。**このテストを消さないこと。**
+2. **表示制御**(`src/auth_ui.rs`): `is_rsync_path`(`pathname.contains("/rsync")`)
+   を追加。`/ddns`と同じく単機能ページとして扱い管理系セクションを全て隠すが、
+   **`/ddns`と違いログイン不要**(公開ドキュメントのため)。
+   `completed-projects-section`も`/rsync`では非表示にしている
+   (ガイド1本に集中させるため)。`is_demo_path`の判定からも`/rsync`を除外した。
+3. **ルーティング**(`server/src/main.rs`): `GET /rsync`・`GET /rsync/`を
+   `index.html`(SPAシェル)へ割り当て。表示するセクションはWASM側が
+   `location.pathname`から判定する既存パターンをそのまま踏襲
+   (新しい仕組みは増やしていない)。
+4. **Completed Projectsへ掲載**: 既存カードと同じ`project-card`書式で
+   「RSync (Backup Sync Guide / バックアップ同期ガイド)」を追加
+   (`/rsync`へのリンク+rclone公式へのリンク)。説明文にも
+   「A usage guide, not a feature of open-easy-web / open-easy-webの機能では
+   なく『使い方ガイド』です」と明記。
+5. **実機検証(ビルド成功だけで完了と報告しない方針の徹底)**:
+   `cargo test` **16件全green**(新規3件+既存13件、回帰なし)。
+   `cargo build --target wasm32-unknown-unknown --release`+`wasm-bindgen`で
+   `pkg/`を再生成し、`server/`をreleaseビルドして実際に起動
+   (ポート8477)。実HTTPで`/`・`/rsync`・`/rsync/`・`/pkg/*.wasm`が
+   いずれも**200**を返すことを確認。さらに実ブラウザ(Claude Browser)で:
+   (a) `/rsync`にて`rsync-guide-section`が**VISIBLE**、
+   `completed-projects-section`/`site-ops-section`/`site-mgmt-section`/
+   `freedomain-section`/`system-memory-section`がすべて**HIDDEN**になること、
+   見出しが期待の8節+タイトルの計9個、`<pre>`コードブロックが7個
+   描画されていることを確認。(b) `/`ではガイドが**HIDDEN**・Completed
+   Projectsが**VISIBLE**で、カードが5枚(末尾がRSyncガイド)並ぶことを確認。
+   (c) **実際にCompleted Projectsの「Guide (ガイド)」リンクをクリック**し、
+   `/rsync`へ遷移してガイドが表示されるところまで確認(リンク切れでない
+   ことの実証)。(d) **コンソールエラー0件**、ガイドセクションの
+   `offsetHeight`が2378px・テキスト5243文字で、**白画面バグでないこと**も
+   数値で確認。検証後サーバーは終了済み。
+   - **起動時のハマりどころ(次回のためのメモ)**: bind先の環境変数は
+     `OPEN_EASYWEB_SERVER_BIND`(`OPEN_EASYWEB_BIND`ではない)。加えて
+     `OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`は必須で、**`OPEN_EASYWEB_FIXED_ACCOUNT_BACKUP_EMAIL`
+     (または`..._PHONE`)も設定しないと**起動時のシードが
+     `MissingBackupContact`で失敗しサーバーが待ち受けを始めない。
+6. **未実施(正直な開示)**: (a) **VPS本番(`easy-web.tokyo`)へのデプロイは
+   していない**——検証はすべてローカル(127.0.0.1:8477)。本番反映には
+   `git pull`→再ビルド→`wasm-bindgen`→`systemctl restart`が必要。
+   (b) 本番では手前の`open-web-server`がパスごとテナントへ転送するため、
+   **`/rsync`が実際にこのバックエンドへ到達するかは未確認**——過去に
+   `/admin/power-profile`が`open-web-server`自身のAPIに横取りされた
+   前例(2026-07-31のHANDOFF参照)があるので、デプロイ時は必ず
+   `curl https://easy-web.tokyo/rsync`で実到達を確認すること
+   (`/rsync`は`open-web-server`の既存管理APIパス一覧——`tenants`・`keys`・
+   `watchdog`・`redirects`・`power-profile`・`web-vhost`・`ddns`・
+   `disaster-email-backup`——とは衝突しないので、おそらく問題ない見込み)。
+   (c) `/demo`側での表示確認はしていない(ガイドは本番・デモ共通のシェルに
+   入っているため同じ挙動になるはず、だが未検証)。
+- 次にすべきこと: (1) VPS本番へデプロイし、上記6-(b)の実HTTPS到達確認、
+  (2) `open-english`側の案内文からこのガイドへのリンクが実際に機能するか
+  本番URLで確認(リンク自体は`open-english`側へ実装・コミット済み)。
+
 ### 2026-08-20(続き) インストーラー方式をサービス登録方式に統合、実ビルド検証まで完了
 
 前回セッションのHANDOFFで「未解決事項」として記録されていた

@@ -63,6 +63,13 @@ pub const SHELL_HTML: &str = r#"
     <a href="https://easy-web.tokyo/rs-link-fusion/demo">Demo (デモ)</a> ・
     <a href="https://easy-web.tokyo/rs-link-fusion/">Windows / Linux download (Android: coming soon / 準備中)</a>
   </div>
+
+  <div class="project-card">
+    <h3>RSync (Backup Sync Guide / バックアップ同期ガイド)</h3>
+    <p class="muted">How to back up databases and files with the standard rsync tool — commands, rclone for Google Drive, shared hosting/VPS, scheduling and restore. A usage guide, not a feature of open-easy-web / 標準のrsyncでデータベースやファイルをバックアップする手順 — コマンド例、Googleドライブ向けrclone、レンタルサーバー/VPS、定期実行と復元。open-easy-webの機能ではなく「使い方ガイド」です</p>
+    <a href="/rsync">Guide (ガイド)</a> ・
+    <a href="https://rclone.org/drive/">rclone (Google Drive)</a>
+  </div>
 </section>
 
 <section id="setup-wizard-section" class="hidden">
@@ -881,6 +888,150 @@ Windows: .\uninstall.ps1 (as Administrator / 管理者権限で)</pre>
   </div>
 </section>
 
+<section id="rsync-guide-section" class="hidden">
+  <h2>RSync Backup Guide (RSyncバックアップ 使い方ガイド)</h2>
+
+  <p class="muted">
+    <strong>まずはっきりさせておきます: これは「RSyncの使い方ガイド」です。</strong>
+    open-easy-web に rsync の同期機構が組み込まれているわけではありません——
+    このページは、OS標準の <code>rsync</code>(と、必要に応じて
+    <code>rclone</code>)を使ってデータベースやファイルをバックアップする
+    <strong>一般的な手順</strong>を、独立したドキュメントとしてまとめたものです。
+    open-easy-web が自動でどこかへ同期することはありません。<br>
+    <strong>To be clear up front: this is a usage guide for RSync.</strong>
+    open-easy-web does <em>not</em> contain an rsync synchronisation mechanism.
+    This page simply documents the <strong>general procedure</strong> for backing up
+    databases and files with the standard <code>rsync</code> tool (and
+    <code>rclone</code> where relevant). open-easy-web never syncs anything anywhere
+    on your behalf.
+  </p>
+
+  <h3>1. rsync とは / What rsync is</h3>
+  <p class="muted">
+    <code>rsync</code> は、ファイルやディレクトリを別の場所へ差分コピーする
+    標準的なコマンドラインツールです。前回からの変更分だけを転送するため、
+    大きなデータでも2回目以降は高速です。Linux・macOS には最初から入っている
+    ことが多く、Windows では WSL・Git Bash・cwRsync 等を通して利用できます。<br>
+    <code>rsync</code> is the standard command-line tool for copying files and
+    directories to another location. It transfers only what has changed since the
+    last run, so repeat backups of large data sets are fast. It ships with most
+    Linux and macOS systems; on Windows you can use it via WSL, Git Bash, or cwRsync.
+  </p>
+
+  <h3>2. インストール / Installing</h3>
+  <p class="muted">
+    OS標準のパッケージマネージャで入ります。/ Install it with your OS package manager.
+  </p>
+  <pre class="setup-script">Debian / Ubuntu :  sudo apt-get install -y rsync
+Fedora / RHEL   :  sudo dnf install -y rsync
+Arch Linux      :  sudo pacman -S rsync
+macOS (Homebrew):  brew install rsync
+Windows (winget):  winget install -e --id cwrsync.cwrsync
+Windows (choco) :  choco install rsync -y
+Android (Termux):  pkg install -y rsync</pre>
+
+  <h3>3. 基本的な使い方 / Basic usage</h3>
+  <p class="muted">
+    もっとも基本的な形は <code>rsync [オプション] コピー元 コピー先</code> です。/
+    The basic form is <code>rsync [options] SOURCE DESTINATION</code>.
+  </p>
+  <pre class="setup-script"># ローカルの外付けドライブ・USBメモリへ / to an external drive or USB stick
+rsync -av /path/to/data/ /mnt/usb-backup/
+
+# 進捗表示つき・圧縮つきでネットワーク越しに / over the network, compressed, with progress
+rsync -avz --progress /path/to/data/ user@backup-host:/backups/data/
+
+# コピー元で消したファイルをコピー先でも消す(完全な鏡像にする)
+# mirror exactly, deleting files at the destination that are gone from the source
+rsync -avz --delete /path/to/data/ user@backup-host:/backups/data/</pre>
+  <p class="muted">
+    よく使うオプション / Common options:
+    <code>-a</code> アーカイブ(パーミッション・タイムスタンプを保持 / preserve
+    permissions and timestamps)、<code>-v</code> 詳細表示 / verbose、
+    <code>-z</code> 転送時に圧縮 / compress during transfer、
+    <code>--delete</code> 上記のとおり鏡像化 / mirror as above、
+    <code>--dry-run</code> 実際にはコピーせず結果だけ確認 / show what would happen
+    without copying anything.
+  </p>
+  <p class="muted">
+    <strong>注意(末尾のスラッシュ)</strong>: コピー元の末尾に <code>/</code> を
+    付けると「その<em>中身</em>」を、付けないと「そのディレクトリ<em>ごと</em>」を
+    コピーします。意図しない入れ子を防ぐため、最初は <code>--dry-run</code> で
+    確認することをおすすめします。<br>
+    <strong>Note on trailing slashes</strong>: a trailing <code>/</code> on the source
+    copies its <em>contents</em>; without it, the directory <em>itself</em> is copied
+    into the destination. Run with <code>--dry-run</code> first to avoid surprises.
+  </p>
+
+  <h3>4. 稼働中のデータベースをバックアップする場合 / Backing up a running database</h3>
+  <p class="muted">
+    <strong>これは重要です。</strong> PostgreSQL などのデータベースが
+    <em>稼働中</em>のデータディレクトリを <code>rsync</code> でそのままコピーすると、
+    書き込み途中のファイルを中途半端な状態で複製してしまい、復元できない
+    バックアップになることがあります。稼働させたままバックアップを取るなら、
+    まず <code>pg_dump</code> で一貫性のあるダンプファイルへ書き出し、
+    <strong>そのダンプファイルだけを</strong> rsync してください。<br>
+    <strong>This matters.</strong> Copying a <em>running</em> database's data directory
+    directly with <code>rsync</code> can capture files mid-write and produce a backup
+    that will not restore. To back up without stopping the service, first write a
+    consistent dump with <code>pg_dump</code>, then rsync <strong>only that dump file</strong>.
+  </p>
+  <pre class="setup-script">pg_dump "host=127.0.0.1 user=myuser dbname=mydb" -f /tmp/mydb.sql
+rsync -avz /tmp/mydb.sql user@backup-host:/backups/db/</pre>
+
+  <h3>5. Googleドライブへ同期する / Syncing to Google Drive</h3>
+  <p class="muted">
+    <code>rsync</code> 自体は Googleドライブに直接は対応していません。
+    <a href="https://rclone.org/drive/" target="_blank" rel="noopener noreferrer">rclone</a>
+    という別のツールを併用します。手順は3つだけです:
+    (1) rclone をインストール、(2) <code>rclone config</code> で Google Drive の
+    リモート(例: <code>gdrive</code>)を作成、(3) 同期コマンドを実行。<br>
+    <code>rsync</code> itself cannot talk to Google Drive; pair it with
+    <a href="https://rclone.org/drive/" target="_blank" rel="noopener noreferrer">rclone</a>.
+    Three steps: install rclone, run <code>rclone config</code> to add a Google Drive
+    remote (say <code>gdrive</code>), then run the sync command.
+  </p>
+  <pre class="setup-script">rclone config                       # 対話形式で gdrive リモートを作成 / create the remote
+rclone sync /path/to/backup gdrive:my-backup</pre>
+
+  <h3>6. レンタルサーバー・VPSへ同期する / Syncing to shared hosting or a VPS</h3>
+  <p class="muted">
+    SSHで入れるレンタルサーバー(ロリポップ、さくらインターネット等のSSH対応プラン)や
+    VPS(ConoHa、さくらのVPS等)なら、rsync でそのまま同期できます。SSH鍵を
+    設定しておけばパスワード入力なしで実行できます。SSHが使えない共有サーバーでは、
+    FTPS/SFTP に対応した rclone のリモート設定で代替できます。<br>
+    Any host you can reach over SSH — shared hosting plans with SSH access, or a VPS —
+    works directly with rsync. Add an SSH key to avoid password prompts. For shared
+    hosting without SSH, an rclone remote over FTPS/SFTP is an alternative.
+  </p>
+  <pre class="setup-script">ssh-keygen -t ed25519                      # 鍵がまだ無ければ / if you have no key yet
+ssh-copy-id user@your-vps-host             # 公開鍵を相手側へ / install the public key
+rsync -avz /path/to/backup user@your-vps-host:/backup/</pre>
+
+  <h3>7. 定期実行する / Running it on a schedule</h3>
+  <p class="muted">
+    rsync 自体にスケジュール機能はありません。OS のスケジューラに登録してください。/
+    rsync has no built-in scheduler; register the command with your OS scheduler.
+  </p>
+  <pre class="setup-script"># Linux / macOS — crontab -e で毎日 3:00 に実行 / run daily at 03:00
+0 3 * * * rsync -az /path/to/data/ user@backup-host:/backups/data/
+
+# Windows — タスク スケジューラへ登録 / register with Task Scheduler
+schtasks /create /tn "Daily Backup" /tr "C:\path\to\backup.bat" /sc daily /st 03:00</pre>
+
+  <h3>8. 復元する / Restoring</h3>
+  <p class="muted">
+    復元は、コピー元とコピー先を入れ替えて実行するだけです。
+    <strong>バックアップは、実際に復元できることを一度試すまで
+    「取れている」とは言えません</strong>——テスト用のディレクトリへ
+    復元してみることを強くおすすめします。<br>
+    Restoring is just the same command with source and destination swapped.
+    <strong>A backup is not proven until you have actually restored from it once</strong> —
+    we strongly recommend a trial restore into a scratch directory.
+  </p>
+  <pre class="setup-script">rsync -avz user@backup-host:/backups/data/ /path/to/restore-here/</pre>
+</section>
+
 <p id="status" class="muted" aria-live="polite"></p>
 "#;
 
@@ -991,5 +1142,48 @@ mod tests {
         assert!(SHELL_HTML.contains("https://easy-web.tokyo/open-web-server/\">Production"));
         assert!(SHELL_HTML.contains("https://easy-web.tokyo/open-web-server/demo"));
         assert!(SHELL_HTML.contains("https://github.com/aon-co-jp/open-web-server/releases/latest"));
+    }
+
+    /// RSyncバックアップ使い方ガイド(`/rsync`)のセクションが存在し、
+    /// 日英併記で主要な手順(rsyncコマンド例・rclone経由のGoogleドライブ・
+    /// レンタルサーバー/VPS・定期実行・復元)を含むことの回帰確認
+    /// (2026-08-24追加)。
+    #[test]
+    fn shell_html_contains_rsync_guide_section_bilingually() {
+        assert!(SHELL_HTML.contains(r#"id="rsync-guide-section""#));
+        // 既定は非表示(`/rsync`のときだけWASM側が`hidden`を外す)。
+        assert!(SHELL_HTML.contains(r#"<section id="rsync-guide-section" class="hidden">"#));
+        assert!(SHELL_HTML.contains("rsync -avz"));
+        assert!(SHELL_HTML.contains("rclone sync"));
+        assert!(SHELL_HTML.contains("pg_dump"));
+        assert!(SHELL_HTML.contains("crontab -e"));
+        assert!(SHELL_HTML.contains("ssh-copy-id"));
+        // 日英併記。
+        assert!(SHELL_HTML.contains("RSyncバックアップ 使い方ガイド"));
+        assert!(SHELL_HTML.contains("this is a usage guide for RSync"));
+    }
+
+    /// このガイドが「open-easy-web自身のRSync機構」であるかのような誤解を
+    /// 招かないよう、日英どちらにも明示的な打ち消し文が入っていることの
+    /// 回帰確認(2026-08-24追加)。**この表現を弱めないこと**——
+    /// open-easy-webにrsync同期機構は実在しない。
+    #[test]
+    fn rsync_guide_explicitly_denies_being_an_open_easy_web_feature() {
+        assert!(SHELL_HTML.contains("open-easy-web に rsync の同期機構が組み込まれているわけではありません"));
+        assert!(SHELL_HTML.contains("does <em>not</em> contain an rsync synchronisation mechanism"));
+    }
+
+    /// Completed ProjectsにRSyncガイドへのリンクが、既存カードと同じ
+    /// `project-card`書式で載っていることの回帰確認(2026-08-24追加)。
+    #[test]
+    fn shell_html_lists_rsync_guide_in_completed_projects() {
+        let section = SHELL_HTML
+            .split_once(r#"id="completed-projects-section""#)
+            .and_then(|(_, rest)| rest.split_once("</section>"))
+            .map(|(section, _)| section)
+            .expect("completed projects section present");
+        assert!(section.contains("<h3>RSync (Backup Sync Guide / バックアップ同期ガイド)</h3>"));
+        assert!(section.contains(r#"<a href="/rsync">"#));
+        assert!(section.contains(r#"class="project-card""#));
     }
 }

@@ -69,7 +69,12 @@ pub fn apply_page_and_auth_visibility() {
     let logged_in = api_auth::saved_token().is_some();
     let pathname = crate::dom::window().location().pathname().unwrap_or_default();
     let is_ddns_path = pathname.contains("/ddns");
-    let is_demo_path = pathname.contains("/demo") && !is_ddns_path;
+    // `/rsync`はRSyncの使い方を説明するだけの公開ドキュメントページ
+    // (2026-08-24新設)。管理機能を一切持たないため`/ddns`と同様に
+    // 単機能ページとして扱い、管理系セクションはすべて隠す——ただし
+    // `/ddns`と違い**ログイン不要**(公開ドキュメントのため)。
+    let is_rsync_path = pathname.contains("/rsync");
+    let is_demo_path = pathname.contains("/demo") && !is_ddns_path && !is_rsync_path;
 
     if let Some(el) = try_by_id("auth-logged-out") {
         el.set_class_name(if logged_in { "hidden" } else { "" });
@@ -82,8 +87,11 @@ pub fn apply_page_and_auth_visibility() {
     }
 
     // `completed-projects-section`(公開情報の紹介リンク集)は非機密のため
-    // ログイン不要——`/ddns`の単機能ページでのみ非表示にする。
-    set_hidden("completed-projects-section", is_ddns_path);
+    // ログイン不要——`/ddns`・`/rsync`の単機能ページでのみ非表示にする。
+    set_hidden("completed-projects-section", is_ddns_path || is_rsync_path);
+
+    // RSync使い方ガイド: `/rsync`のときだけ表示(ログイン不要)。
+    set_hidden("rsync-guide-section", !is_rsync_path);
 
     // 初回セットアップガイド: `/demo`かつログイン済みの時のみ表示
     // (パス条件は既存のまま、ログイン条件を追加)。
@@ -105,13 +113,13 @@ pub fn apply_page_and_auth_visibility() {
         "db-encryption-section",
         "external-tools-section",
     ] {
-        set_hidden(id, is_ddns_path || !logged_in);
+        set_hidden(id, is_ddns_path || is_rsync_path || !logged_in);
     }
 
     // サイト操作・サイト管理(従来からログイン必須、2026-07-16)。
     // `/ddns`単機能ページでは常に非表示。
-    set_hidden("site-ops-section", is_ddns_path || !logged_in);
-    set_hidden("site-mgmt-section", is_ddns_path || !logged_in);
+    set_hidden("site-ops-section", is_ddns_path || is_rsync_path || !logged_in);
+    set_hidden("site-mgmt-section", is_ddns_path || is_rsync_path || !logged_in);
 }
 
 fn on_request_otp() {

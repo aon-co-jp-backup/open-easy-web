@@ -477,6 +477,16 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
             confirm_email_change(&state, &req).await
         }
         (&Method::GET, "/") => serve_static(&state, "index.html", "text/html; charset=utf-8").await,
+        // RSync使い方ガイド(2026-08-24新設)。`/demo`・`/ddns`と同じく
+        // 単一のSPAシェルを返し、WASM側`auth_ui::apply_page_and_auth_visibility`
+        // が`location.pathname`を見て該当セクションだけを表示する。
+        // 本番では手前のopen-web-serverがパスごとテナントへ転送するため、
+        // ここでのパス名は`/rsync`のまま到達する場合と、プレフィックスが
+        // 剥がされて到達する場合の両方があり得る——`contains("/rsync")`で
+        // 判定しているので、いずれでも表示条件は満たされる。
+        (&Method::GET, "/rsync") | (&Method::GET, "/rsync/") => {
+            serve_static(&state, "index.html", "text/html; charset=utf-8").await
+        }
         (&Method::GET, p) if p.starts_with("/pkg/") => {
             let rel = p.trim_start_matches('/');
             let content_type = if rel.ends_with(".wasm") {
