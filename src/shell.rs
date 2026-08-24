@@ -65,6 +65,13 @@ pub const SHELL_HTML: &str = r#"
   </div>
 
   <div class="project-card">
+    <h3>Ecosystem Projects (エコシステム関連プロジェクト一覧)</h3>
+    <p class="muted">Every related repository under the aon-co-jp organization, with a one-line summary taken from its own README, plus links to whichever demos are actually hosted / aon-co-jp organization配下の関連リポジトリを一覧で紹介するページ。説明は各リポジトリのREADMEに基づき、実際にホストされているデモへのリンクを掲載しています</p>
+    <a href="/projects">Project directory (プロジェクト一覧)</a> ・
+    <a href="https://github.com/aon-co-jp/RUNO">aon-co-jp/RUNO (索引の正本)</a>
+  </div>
+
+  <div class="project-card">
     <h3>RSync (Backup Sync Guide / バックアップ同期ガイド)</h3>
     <p class="muted">How to back up databases and files with the standard rsync tool — commands, rclone for Google Drive, shared hosting/VPS, scheduling and restore. A usage guide, not a feature of open-easy-web / 標準のrsyncでデータベースやファイルをバックアップする手順 — コマンド例、Googleドライブ向けrclone、レンタルサーバー/VPS、定期実行と復元。open-easy-webの機能ではなく「使い方ガイド」です</p>
     <a href="/rsync">Guide (ガイド)</a> ・
@@ -1032,12 +1039,381 @@ schtasks /create /tn "Daily Backup" /tr "C:\path\to\backup.bat" /sc daily /st 03
   <pre class="setup-script">rsync -avz user@backup-host:/backups/data/ /path/to/restore-here/</pre>
 </section>
 
+<section id="ecosystem-projects-section" class="hidden">
+  <h2>Ecosystem Projects (エコシステム関連プロジェクト)</h2>
+  <p class="muted">
+    <code>aon-co-jp</code> organization配下の関連リポジトリ・プロジェクトの一覧です。
+    各説明は、それぞれのリポジトリの実際のREADME.mdの記載に基づいており、
+    <strong>推測では埋めていません</strong>。デモが公開されていないプロジェクトは
+    「デモ準備中」と正直に表示し、GitHubのREADMEへのリンクのみを掲載しています。<br>
+    A directory of the related repositories under the <code>aon-co-jp</code>
+    organization. Every description is taken from that repository&#39;s own
+    README.md — <strong>nothing here is guessed</strong>. Projects without a
+    hosted demo say so plainly and link to their GitHub README instead.
+  </p>
+  <p class="muted">
+    索引の正本は <a href="https://github.com/aon-co-jp/RUNO" target="_blank" rel="noopener noreferrer">aon-co-jp/RUNO</a>
+    のREADMEです(このページはその内容を各プロジェクトのREADMEで補ったものです)。 /
+    The canonical index lives in the RUNO repository; this page enriches it from each project&#39;s README.
+  </p>
+
+  <h3>A. Live / demo available (稼働中・デモ公開中)</h3>
+  <p class="muted">実際にホストされていて、いますぐブラウザから触れるプロジェクトです。リンク先は2026-08-24時点でHTTP 200を返すことを確認済みです。 / Projects that are actually hosted and can be opened right now. Every link below was verified to return HTTP 200 on 2026-08-24.</p>
+
+  <div class="project-card">
+    <h4>open-easy-web</h4>
+    <p class="muted">「第二のKUSANAGI」— アプリのアップロード後にIPアドレスから起動し、ドメイン登録・HTTPS化を自動適用する運用ツール(Rust→WebAssembly)。 / "Second KUSANAGI": deploy, domain and HTTPS automation for any backend stack.</p>
+    <a href="https://easy-web.tokyo/" target="_blank" rel="noopener noreferrer">Live (公開中)</a> ・ <a href="https://easy-web.tokyo/demo" target="_blank" rel="noopener noreferrer">Demo (デモ)</a> ・ <a href="https://github.com/aon-co-jp/open-easy-web" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-web-server</h4>
+    <p class="muted">Rust + tokio/hyper自前実装のWebサーバー/リバースプロキシ。TLS終端・テナントルーティング・DDNSを1バイナリで提供し、課金・金融データを「消失させない」ことを狙う。 / Rust-native web server and reverse proxy — TLS termination, tenant routing and DDNS in a single binary.</p>
+    <a href="https://easy-web.tokyo/open-web-server/" target="_blank" rel="noopener noreferrer">Live (公開中)</a> ・ <a href="https://easy-web.tokyo/open-web-server/demo" target="_blank" rel="noopener noreferrer">Demo (デモ)</a> ・ <a href="https://github.com/aon-co-jp/open-web-server" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-redmine</h4>
+    <p class="muted">チケット管理・Wiki(Redmine互換)のRust実装。旧名RS-Chiketto→RS-Red。 / Ticket management and wiki, Redmine-compatible, written in Rust.</p>
+    <a href="https://easy-web.tokyo/open-redmine/" target="_blank" rel="noopener noreferrer">Live (公開中)</a> ・ <a href="https://easy-web.tokyo/open-redmine/demo" target="_blank" rel="noopener noreferrer">Demo (デモ)</a> ・ <a href="https://github.com/aon-co-jp/open-redmine" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>RS-Link-Fusion</h4>
+    <p class="muted">有線LAN・WiFi等の複数回線をボンディングし、障害時に自動フェイルオーバーする回線多重化ツール。 / Multi-link bonding and automatic failover across LAN, WiFi and mobile links.</p>
+    <a href="https://easy-web.tokyo/rs-link-fusion/" target="_blank" rel="noopener noreferrer">Live (公開中)</a> ・ <a href="https://easy-web.tokyo/rs-link-fusion/demo" target="_blank" rel="noopener noreferrer">Demo (デモ)</a> ・ <a href="https://github.com/aon-co-jp/rs-link-fusion" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>RS-Sync</h4>
+    <p class="muted">GitHub・open-gitea・RS-Gitbucket等、複数のGitホスティングサービス/複数アカウントをまたいだリポジトリのミラー同期・バックアップツール。 / Repository mirror and backup tool spanning multiple git-hosting providers and accounts.</p>
+    <a href="https://easy-web.tokyo/rs-sync/" target="_blank" rel="noopener noreferrer">Live (公開中)</a> ・ <a href="https://easy-web.tokyo/rs-sync/demo" target="_blank" rel="noopener noreferrer">Demo (デモ)</a> ・ <a href="https://github.com/aon-co-jp/RS-Sync" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-gitea</h4>
+    <p class="muted">Go言語版GiteaのRust+RPoem版。git clone/push・OTPログイン・アクセス制御・README閲覧を実装した自己ホスト型Git forge(旧名RS-Git)。 / A Rust + RPoem reimplementation of Gitea: a self-hosted git forge.</p>
+    <a href="https://easy-web.tokyo/open-gitea/ui/" target="_blank" rel="noopener noreferrer">Live (公開中)</a> ・ <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-gitea" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>aruaru.tokyo</h4>
+    <p class="muted">aruaru.tokyoのTOPページ。Rust + Poem製、DB非依存・1バイナリ完結。 / Front page of aruaru.tokyo — Rust + Poem, database-free, single binary.</p>
+    <a href="https://aruaru.tokyo/" target="_blank" rel="noopener noreferrer">Live (公開中)</a> ・ <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/aruaru.tokyo" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>karu.tokyo</h4>
+    <p class="muted">karu.tokyoのTOPページ。軽井沢・あきる野・東京の観光とリモートワーク、IT/AI/AUDIO/貿易産業を紹介。 / Front page of karu.tokyo — tourism, remote work and industry in western Tokyo.</p>
+    <a href="https://karu.tokyo/" target="_blank" rel="noopener noreferrer">Live (公開中)</a> ・ <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/karu-tokyo" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>runo.tokyo</h4>
+    <p class="muted">東京都西部(あきる野・五日市・青梅・奥多摩・八王子等)の暮らしとテレワーク、およびこのエコシステムの入口となるWebサイト。 / Living and telework in western Tokyo, and an entry point to this ecosystem.</p>
+    <a href="https://runo.tokyo/" target="_blank" rel="noopener noreferrer">Live (公開中)</a> ・ <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/runo.tokyo" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>aon.tokyo / aon.co.jp</h4>
+    <p class="muted">aon.tokyo / aon.co.jp(同一内容配信)のTOPページ。Rust + Poem製、DB非依存の1バイナリ完結サーバー。 / Corporate front page for aon.tokyo and aon.co.jp.</p>
+    <a href="https://aon.tokyo/" target="_blank" rel="noopener noreferrer">Live (公開中)</a> ・ <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/aon-tokyo" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>e-gov.info</h4>
+    <p class="muted">行政のデジタル化と、個人〜貿易商社まで対応するオンライン貿易・不動産プラットフォーム。<strong>まだサンプル・デモンストレーション段階</strong>とREADMEに明記されています。 / Digital-government and online trade platform — still explicitly at sample/demo stage.</p>
+    <a href="https://e-gov.info/" target="_blank" rel="noopener noreferrer">Live (公開中)</a> ・ <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/e-gov" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>audiocafe.tokyo</h4>
+    <p class="muted">PHP製のマルチコンテンツサイト。IT/建築系求人・女性向け求人・楽天モバイル関連情報・会社案内などを扱う。 / PHP multi-content site: job listings, mobile-carrier info and company pages.</p>
+    <a href="https://audiocafe.tokyo/" target="_blank" rel="noopener noreferrer">Live (公開中)</a> ・ <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/audiocafe-tokyo" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>audiocafe-tokyo-rust</h4>
+    <p class="muted">上記audiocafe.tokyoの既存PHPモノリスをRust + Poemへ段階的に移行するプロジェクト(第一段)。既存PHP実装は並行運用中です。 / Incremental migration of the audiocafe.tokyo PHP monolith to Rust + Poem.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/audiocafe-tokyo-rust" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <h3>B. Platform &amp; libraries (基盤・ライブラリ)</h3>
+  <p class="muted">他のプロジェクトから再利用される土台です。単体のWeb画面を持たないものが多く、その場合はデモではなくGitHubのREADMEをご覧ください。 / Foundations reused by the other projects. Most have no web UI of their own, so the honest link is the GitHub README rather than a demo.</p>
+
+  <div class="project-card">
+    <h4>open-raid-z</h4>
+    <p class="muted">Rust製の実マウント可能なRAID-Z/Z2/Z3ストレージプール実装(ZFS「風」のCoW・チェックサム・スナップショット。ZFS自体には非依存)。<strong>エコシステム開発ルールの正本</strong>リポジトリでもあります。 / Mountable RAID-Z/Z2/Z3 storage pool in Rust; also the canonical source of this ecosystem's development rules.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-raid-z" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>aruaru-db</h4>
+    <p class="muted">CockroachDBの分散強整合 × Snowflakeのストレージ/コンピュート分離 × Git-on-SQLバージョン管理を、すべてPure Rustで実装するハイブリッド分散データベース。 / A hybrid distributed database that speaks Git — all in pure Rust.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/aruaru-db" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>RPoem</h4>
+    <p class="muted">Rust製GraphQL Federationプラットフォーム(Poem/Tauri/Cosmoは非依存の互換自前実装)。独自の自己学習AIを搭載し外部LLM契約を必要としません。 / Rust GraphQL Federation platform with a built-in self-learning AI — no external LLM contract required.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/RPoem" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-cosmo</h4>
+    <p class="muted">RPoemと同種のRust製GraphQL Federationプラットフォーム(旧`open-runo`、GitHub上で改称)。 / Sibling GraphQL Federation platform, formerly named open-runo.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-cosmo" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-runo</h4>
+    <p class="muted">上記の分岐元にあたるGraphQL Federationプラットフォーム。歴史的経緯によりopen-cosmo・RPoemと系譜を共有します。 / The ancestor repository from which open-cosmo and RPoem descend.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-runo" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>RCosmo</h4>
+    <p class="muted">WunderGraph Cosmoの有料版機能をOSS・Pure Rustで実現することを狙うGraphQL Federationプラットフォーム。 / An open-source, pure-Rust take on the paid features of WunderGraph Cosmo.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/RCosmo" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>RFrontEnd</h4>
+    <p class="muted">HTML5/CSS3/TypeScript/React相当を、既存実装のコードを一切流用せず一から開発する複数プロジェクト(RHTML/RCSS/RTypeScript等)を束ねる親リポジトリ。 / Umbrella repository for from-scratch reimplementations of HTML5, CSS3, TypeScript and React.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/RFrontEnd" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-cuda</h4>
+    <p class="muted">CUDA Runtime API相当の`GpuDevice`トレイトを軸に、CPU(rayon)・Vulkan Compute等の複数バックエンドを束ねるGPUランタイム抽象化(OmniGPU設計)。 / GPU runtime abstraction unifying CPU and Vulkan Compute backends behind a CUDA-like device trait.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-cuda" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-cpu</h4>
+    <p class="muted">エコシステム共通のCPU命令セット検出・ランタイムディスパッチライブラリ。各プロジェクトが独自にCPU機能検出を重複実装するのを避けるために新設されました。 / Shared CPU feature detection and runtime dispatch library for the whole ecosystem.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-cpu" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-directx</h4>
+    <p class="muted">DXVK / vkd3d-protonの思想に倣う、DirectX(D3D9/10/11/12)互換のクロスプラットフォーム抽象化層。DXBC/DXILシェーダーをSPIR-Vへ変換してVulkanへ委譲します。 / A cross-platform DirectX compatibility layer translating DXBC/DXIL shaders to SPIR-V.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-directx" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>RS-JSON</h4>
+    <p class="muted">寛容(lenient)モードと厳密(strict)モードの両方を1クレートで提供するJSON処理ライブラリ。結果は常に標準の`serde_json::Value`です。 / A JSON library offering both lenient and strict parsing, always yielding serde_json::Value.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/RS-JSON" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>RS-SmartTCP</h4>
+    <p class="muted">有線LAN・WiFi・Bluetooth・複数WAN回線の管理と、ルーター/セキュリティルーター機能、ダウンロードファイルのウイルススキャンを統合するネットワーク基盤。 / Network stack unifying multi-WAN routing, security-router features and download virus scanning.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/RS-SmartTCP" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>RS-Guard</h4>
+    <p class="muted">エコシステムのリポジトリ・依存パッケージに悪意あるコードが混入していないかを静的にチェックするサプライチェーンスキャナ(ClamAV連携あり)。 / Supply-chain scanner checking this ecosystem's repositories and dependencies for malicious code.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/RS-Guard" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>RS-Ops</h4>
+    <p class="muted">エコシステム全体マップ生成 × AIエージェント向けコンテキストファイル生成 × 複数のGit/課題管理サービス連携を1つにまとめたツール。 / Ecosystem mapping, AI-agent context generation and multi-provider git/issue integration in one tool.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/RS-Ops" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>runo-scanner</h4>
+    <p class="muted">作業ドライブ配下の全プロジェクトを自動認識するRust製スキャナー。RS-Ops等から利用されます。 / Rust scanner that auto-discovers every project under the working drive.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/runo-scanner" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>rs-to-readme</h4>
+    <p class="muted">Rustクレートの`Cargo.toml`メタデータからREADME.mdを自動生成するCLIツール(crates.io公開済み)。 / CLI that generates README.md from a Rust crate's Cargo.toml metadata; published on crates.io.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/rs-to-readme" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>aruaru-llm</h4>
+    <p class="muted">aruaruエコシステム共通の「AIチャットコマース」応答サービス。各サイトが個別にチャット応答を実装せず、この単一HTTPサービスを呼びます。 / Shared "AI chat commerce" reply service called over HTTP by every site in the ecosystem.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/aruaru-llm" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>sftp-git</h4>
+    <p class="muted">SFTPアップロードとGit管理を統合し、テストサーバーと本番環境の差分チェック・デプロイの手間とミスを減らすツール。 / Combines SFTP upload with git management to make staging-to-production deploys safer.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/sftp-git" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <h3>C. Applications in development (開発中のアプリケーション)</h3>
+  <p class="muted">コードは実在しますが、まだ一般公開されたデモ環境がありません。デモが用意でき次第このページへ追加します。 / Real code exists, but there is no publicly hosted demo yet. Each will be added here once a demo goes live.</p>
+
+  <div class="project-card">
+    <h4>RS-Blog</h4>
+    <p class="muted">WordPressのRust + RPoem版。ハイスピード・ハイセキュリティ・省メモリを狙い、投稿CRUD・OTPログイン・カテゴリ/タグ/コメント/固定ページを実装済みです。 / A Rust + RPoem take on WordPress; posts, OTP login, categories, tags, comments and pages are implemented.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/RS-Blog" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>RS-EC</h4>
+    <p class="muted">EC-CUBEのRust + RPoem版。商品カタログCRUD・カテゴリ管理・お気に入り・OTPログインを実装済みで、Stripe等の実決済連携を目指します。 / A Rust + RPoem take on EC-CUBE, heading toward real payment integration.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/RS-EC" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-english</h4>
+    <p class="muted">PC・タブレット・スマホ向けの英会話学習Webアプリ。魔法少女メイドのキャラクターが、保育園児〜高3の13学年+社会人までを学年制限なしに指導します。 / Browser-based English-conversation learning app covering 13 school years with no age restriction.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-english" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-fudousan</h4>
+    <p class="muted">土地・物件検索システム(Rust製MVP)。最大の目的は、検索した敷地情報を姉妹プロジェクトopen-cg-cadへスムーズに引き継ぐことです。 / Land and property search MVP whose main purpose is feeding site data into open-cg-cad.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-fudousan" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-cg-cad</h4>
+    <p class="muted">「AI工務店＆AI建設」機能を提供するCADシステム。日照権・建ぺい率・容積率等の法規制チェックと、3D建築ボリュームの自動CAD生成を行います。 / CAD system performing building-regulation checks and automatic 3D volume generation.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-cg-cad" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-koumuten</h4>
+    <p class="muted">AI工務店(仮称)。AI間取り提案・違法性チェックシミュレーションを行うRust製MVPで、open-fudousanから敷地情報を受け取りopen-cg-cadへ渡します。 / AI floor-plan proposals and legality simulation, bridging open-fudousan and open-cg-cad.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-koumuten" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-mqa</h4>
+    <p class="muted">MQAの互換再実装ではなく、「配信帯域に収まる高解像度オーディオ体験」という目的自体を、FLAC・DSD256/512等のオープン規格の上で独自パイプラインとして実現します。 / Not an MQA clone: high-resolution audio built on open formats such as FLAC and DSD.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-mqa" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>dream-os</h4>
+    <p class="muted">LinuxとTRON OSのハイブリッドカーネルを目指すOSプロジェクト。単一カーネル上でWindows/macOS/Androidのアプリを互換動作させることを狙い、実機検証済みのPoCがあります。 / An OS aiming at a Linux/TRON hybrid kernel running Windows, macOS and Android apps side by side.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/dream-os" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>open-shop</h4>
+    <p class="muted">一般個人から貿易商社まで出品・出店可能な総合通販システム(<strong>構想段階</strong>)。国際発送・貿易対応まで視野に入れています。 / General-purpose marketplace for individuals through trading companies — at concept stage.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-shop" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>world-lab</h4>
+    <p class="muted"><strong>構想段階</strong>。世界中の個人のPC・タブレット・スマホの余剰計算資源(GPU/NPU/CPU)を、AIワークロードへボランティア提供する分散基盤(BOINC/Folding@home型)。 / Concept-stage volunteer computing grid donating spare GPU/NPU/CPU capacity to AI workloads.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/world-lab" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>RS-Gitbucket</h4>
+    <p class="muted"><strong>プレースホルダー</strong>(2026-07-23時点でコード未着手)。GitBucket相当のGit forgeを想定しています。 / A placeholder repository; no code has been written yet.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/RS-Gitbucket" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>sample-mario</h4>
+    <p class="muted">マリオ風2Dプラットフォーマーのショートゲームプロトタイプ。 / A short Mario-style 2D platformer prototype.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/sample-mario" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>sample-harrier</h4>
+    <p class="muted">スペースハリアー風、疑似3Dスケーリングスプライトのショートゲームプロトタイプ。 / A short Space-Harrier-style pseudo-3D sprite-scaling prototype.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/sample-harrier" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <div class="project-card">
+    <h4>sample-maid</h4>
+    <p class="muted">魔法少女メイドカフェの3Dオンラインゲーム(Phase 0: 2Dスプライトのプレースホルダー)。open-directxの実用ターゲットも兼ねています。 / A magical-girl maid-cafe 3D online game, currently at a 2D placeholder phase; also a proving ground for open-directx.</p>
+    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/sample-maid" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+
+  <h3>D. Meta index (メタ索引)</h3>
+
+  <div class="project-card">
+    <h4>RUNO</h4>
+    <p class="muted">このエコシステム全体の「プロジェクトシリーズ索引」を担うメタリポジトリ。個別のコード実装は持たず、本ページの一覧もこのリポジトリのREADMEを出典としています。 / The meta index for the whole ecosystem; it holds no implementation code. This page is sourced from its README.</p>
+    <a href="https://aruaru.tokyo/open-aruaru-runo-iLumi" target="_blank" rel="noopener noreferrer">Live (公開中)</a> ・ <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/RUNO" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+  </div>
+</section>
+
 <p id="status" class="muted" aria-live="polite"></p>
 "#;
 
 #[cfg(test)]
 mod tests {
     use super::SHELL_HTML;
+
+    /// 2026-08-24追加: エコシステム関連プロジェクト紹介ページ(`/projects`)の
+    /// 回帰確認。セクションが既定で隠されていること(表示制御は
+    /// `auth_ui::apply_page_and_auth_visibility`が`location.pathname`から行う)、
+    /// 主要な稼働中プロジェクトが掲載されていること、`completed-projects-section`
+    /// からこのページへの導線があることを機械的に守る。
+    #[test]
+    fn shell_html_has_ecosystem_projects_page_with_live_links() {
+        assert!(SHELL_HTML.contains(r#"<section id="ecosystem-projects-section" class="hidden">"#));
+        assert!(SHELL_HTML.contains("Ecosystem Projects (エコシステム関連プロジェクト)"));
+        // Completed Projectsからの導線。
+        assert!(SHELL_HTML.contains(r#"<a href="/projects">"#));
+        // 実際にホスト済みであることをHTTP 200で確認したリンク(抜粋)。
+        for url in [
+            "https://easy-web.tokyo/open-web-server/demo",
+            "https://easy-web.tokyo/open-redmine/demo",
+            "https://easy-web.tokyo/rs-link-fusion/demo",
+            "https://easy-web.tokyo/rs-sync/demo",
+            "https://easy-web.tokyo/open-gitea/ui/",
+            "https://aruaru.tokyo/",
+            "https://karu.tokyo/",
+            "https://runo.tokyo/",
+            "https://aon.tokyo/",
+            "https://e-gov.info/",
+            "https://audiocafe.tokyo/",
+        ] {
+            assert!(SHELL_HTML.contains(url), "missing live link: {url}");
+        }
+    }
+
+    /// デモが存在しないプロジェクトについて、**デモがあるかのように偽らない**
+    /// ことの回帰確認(このリポジトリの「正直な開示」方針)。デモ未公開の
+    /// プロジェクトは「デモ準備中」+GitHubリンクのみで掲載する。
+    #[test]
+    fn projects_without_a_demo_are_labelled_honestly() {
+        assert!(SHELL_HTML.contains("Demo: coming soon (デモ準備中)"));
+        // 構想段階・プレースホルダーであることを隠さない。
+        assert!(SHELL_HTML.contains("<strong>構想段階</strong>"));
+        assert!(SHELL_HTML.contains("<strong>プレースホルダー</strong>"));
+        // 推測で埋めていないことの明示。
+        assert!(SHELL_HTML.contains("<strong>推測では埋めていません</strong>"));
+        assert!(SHELL_HTML.contains("<strong>nothing here is guessed</strong>"));
+    }
+
+    /// 一覧に載せると約束した主要プロジェクトが実際に全て載っていることの
+    /// 回帰確認(掲載漏れの検出)。
+    #[test]
+    fn ecosystem_projects_page_lists_every_tracked_repository() {
+        for repo in [
+            "RCosmo", "RFrontEnd", "RPoem", "RS-Blog", "RS-EC", "RS-Guard", "RS-JSON",
+            "RS-Ops", "RS-SmartTCP", "RS-Sync", "RS-Gitbucket", "RUNO", "aon-tokyo",
+            "aruaru-db", "aruaru-llm", "aruaru.tokyo", "audiocafe-tokyo",
+            "audiocafe-tokyo-rust", "dream-os", "e-gov", "karu-tokyo", "open-cg-cad",
+            "open-cosmo", "open-cpu", "open-cuda", "open-directx", "open-easy-web",
+            "open-english", "open-fudousan", "open-gitea", "open-koumuten", "open-mqa",
+            "open-raid-z", "open-redmine", "open-runo", "open-shop", "open-web-server",
+            "rs-link-fusion", "rs-to-readme", "runo-scanner", "runo.tokyo",
+            "sample-harrier", "sample-maid", "sample-mario", "sftp-git", "world-lab",
+        ] {
+            let link = format!("https://github.com/aon-co-jp/{repo}");
+            assert!(SHELL_HTML.contains(&link), "missing project card for: {repo}");
+        }
+    }
 
     /// 2026-07-29追記: 本番ページ自体(open-easy-webのapp-header)に
     /// `/demo`へのデモ案内リンクを日英併記で追加したことの回帰確認。

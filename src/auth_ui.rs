@@ -74,7 +74,12 @@ pub fn apply_page_and_auth_visibility() {
     // 単機能ページとして扱い、管理系セクションはすべて隠す——ただし
     // `/ddns`と違い**ログイン不要**(公開ドキュメントのため)。
     let is_rsync_path = pathname.contains("/rsync");
-    let is_demo_path = pathname.contains("/demo") && !is_ddns_path && !is_rsync_path;
+    // `/projects`はエコシステム関連プロジェクトの紹介ページ(2026-08-24新設)。
+    // `/rsync`と同じく管理機能を持たない**ログイン不要**の公開ページとして扱う。
+    let is_projects_path = pathname.contains("/projects");
+    let is_single_purpose_path = is_ddns_path || is_rsync_path || is_projects_path;
+    let is_demo_path =
+        pathname.contains("/demo") && !is_ddns_path && !is_rsync_path && !is_projects_path;
 
     if let Some(el) = try_by_id("auth-logged-out") {
         el.set_class_name(if logged_in { "hidden" } else { "" });
@@ -88,10 +93,14 @@ pub fn apply_page_and_auth_visibility() {
 
     // `completed-projects-section`(公開情報の紹介リンク集)は非機密のため
     // ログイン不要——`/ddns`・`/rsync`の単機能ページでのみ非表示にする。
-    set_hidden("completed-projects-section", is_ddns_path || is_rsync_path);
+    set_hidden("completed-projects-section", is_single_purpose_path);
 
     // RSync使い方ガイド: `/rsync`のときだけ表示(ログイン不要)。
     set_hidden("rsync-guide-section", !is_rsync_path);
+
+    // エコシステム関連プロジェクト紹介: `/projects`のときだけ表示
+    // (ログイン不要の公開情報ページ)。
+    set_hidden("ecosystem-projects-section", !is_projects_path);
 
     // 初回セットアップガイド: `/demo`かつログイン済みの時のみ表示
     // (パス条件は既存のまま、ログイン条件を追加)。
@@ -113,13 +122,13 @@ pub fn apply_page_and_auth_visibility() {
         "db-encryption-section",
         "external-tools-section",
     ] {
-        set_hidden(id, is_ddns_path || is_rsync_path || !logged_in);
+        set_hidden(id, is_single_purpose_path || !logged_in);
     }
 
     // サイト操作・サイト管理(従来からログイン必須、2026-07-16)。
     // `/ddns`単機能ページでは常に非表示。
-    set_hidden("site-ops-section", is_ddns_path || is_rsync_path || !logged_in);
-    set_hidden("site-mgmt-section", is_ddns_path || is_rsync_path || !logged_in);
+    set_hidden("site-ops-section", is_single_purpose_path || !logged_in);
+    set_hidden("site-mgmt-section", is_single_purpose_path || !logged_in);
 }
 
 fn on_request_otp() {

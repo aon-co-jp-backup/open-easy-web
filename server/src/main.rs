@@ -487,6 +487,12 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         (&Method::GET, "/rsync") | (&Method::GET, "/rsync/") => {
             serve_static(&state, "index.html", "text/html; charset=utf-8").await
         }
+        // エコシステム関連プロジェクト紹介ページ(2026-08-24新設)。
+        // `/rsync`と同じくSPAシェルを返し、表示するセクションはWASM側が
+        // `location.pathname`から判定する(新しい仕組みは増やしていない)。
+        (&Method::GET, "/projects") | (&Method::GET, "/projects/") => {
+            serve_static(&state, "index.html", "text/html; charset=utf-8").await
+        }
         (&Method::GET, p) if p.starts_with("/pkg/") => {
             let rel = p.trim_start_matches('/');
             let content_type = if rel.ends_with(".wasm") {
