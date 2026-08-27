@@ -43,6 +43,23 @@ pub fn provisioning_uri(account: &str, issuer: &str, secret_b32: &str) -> String
     )
 }
 
+/// `provisioning_uri`をQRコード(SVG文字列)としてレンダリングする
+/// (2026-08-27追加、open-english/rs-syncと同じ実装パターンへ統一する
+/// ためのユーザー指示への対応)。**正直な開示**: これは認証アプリでの
+/// 読み取りを想定した補助手段であり、既存のテキストシークレット表示
+/// (`secret_to_base32`、QRを読めない端末向け)を置き換えるものではない
+/// ——両方を併記する。
+pub fn qr_svg(uri: &str) -> Result<String, String> {
+    let code = qrcode::QrCode::with_error_correction_level(uri, qrcode::EcLevel::M)
+        .map_err(|e| format!("QRコード生成に失敗しました / QR code generation failed: {e}"))?;
+    Ok(code
+        .render()
+        .min_dimensions(200, 200)
+        .dark_color(qrcode::render::svg::Color("#000000"))
+        .light_color(qrcode::render::svg::Color("#ffffff"))
+        .build())
+}
+
 fn urlencode(s: &str) -> String {
     let mut out = String::new();
     for b in s.bytes() {

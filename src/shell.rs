@@ -642,7 +642,8 @@ Windows: .\uninstall.ps1 (as Administrator / 管理者権限で)</pre>
         <button id="totp-setup-btn">Start setup (セットアップを開始)</button>
         <button id="totp-disable-btn" class="secondary">Disable 2FA (2FAを無効化)</button>
       </div>
-      <p class="muted">Secret (シークレット): <code id="totp-secret"></code></p>
+      <div id="totp-qr-container" style="margin: 8px 0;"></div>
+      <p class="muted">Secret (シークレット、QRを読めない端末向け): <code id="totp-secret"></code></p>
       <p class="muted">URI: <code id="totp-uri"></code></p>
       <div id="totp-enable-row" class="form-grid hidden">
         <div>

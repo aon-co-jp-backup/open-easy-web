@@ -53,6 +53,12 @@ aes-gcm = "0.10"
 # 実績あるクレート。自前でプラットフォーム別API(GlobalMemoryStatusEx/
 # /proc/meminfo)を書き分けない。
 sysinfo = "0.32"
+# TOTPセットアップ画面のQRコード表示(2026-08-27追加、open-english/
+# rs-syncで実機検証済みの実装〈HMAC-SHA1+base32は既存のtotp.rsが自前
+# 実装済み、QRコード描画部分のみこのcrateを追加〉と同じ設計に統一する
+# ためのユーザー指示への対応)。従来はprovisioning URI(テキスト)のみを
+# 返しており、認証アプリへは手入力が必要だった。
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json", "multipart"] }

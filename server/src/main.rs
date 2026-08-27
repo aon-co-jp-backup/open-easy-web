@@ -991,11 +991,23 @@ async fn totp_setup(state: &AppState, req: &Request<Incoming>) -> Response<BoxBo
         return error_response(StatusCode::INTERNAL_SERVER_ERROR, "failed to begin TOTP setup");
     }
     let uri = totp::provisioning_uri(&account_email, "open-easy-web", &secret_b32);
+    // 2026-08-27追加: 従来はprovisioning URI(テキスト)のみで、認証アプリへの
+    // 登録には手入力が必要だった。QRコード(SVG)を追加し、open-english/
+    // rs-syncと同じ「QR併記」方式へ統一する(ユーザー指示)。生成失敗時も
+    // セットアップ自体は続行できるよう、qr_svgはnull・error付きで返す
+    // (テキストのシークレットは引き続き使えるため、動くふりをせず正直に
+    // 開示しつつ全体を失敗させない)。
+    let (qr_svg, qr_error) = match totp::qr_svg(&uri) {
+        Ok(svg) => (Some(svg), None),
+        Err(e) => (None, Some(e)),
+    };
     json_response(
         StatusCode::OK,
         &serde_json::json!({
             "secret": secret_b32,
             "provisioning_uri": uri,
+            "qr_svg": qr_svg,
+            "qr_error": qr_error,
             "message_ja": "認証アプリでこのQRコード(またはシークレット)を登録し、表示された6桁コードで有効化してください。",
             "message_en": "Add this QR code (or secret) to your authenticator app, then confirm with the displayed 6-digit code.",
         }),
@@ -1642,6 +1654,12 @@ mod tests {
         let body: serde_json::Value = res.json().await.unwrap();
         let secret_b32 = body["secret"].as_str().unwrap().to_string();
         assert!(body["provisioning_uri"].as_str().unwrap().starts_with("otpauth://totp/"));
+        // 2026-08-27追加: QRコード(SVG)が実際に生成されることを確認
+        // (open-english/rs-syncと同じ「QR併記」方式への統一)。
+        let qr_svg = body["qr_svg"].as_str().expect("qr_svg should be present and non-null on success");
+        assert!(qr_svg.contains("<svg"), "qr_svg should contain an actual <svg> element, got: {qr_svg}");
+        assert!(qr_svg.len() > 100, "qr_svg should contain real QR module data, not a stub");
+        assert!(body["qr_error"].is_null(), "qr_error should be null on success");
 
         // 間違ったコードでは有効化できない。
         let res = client

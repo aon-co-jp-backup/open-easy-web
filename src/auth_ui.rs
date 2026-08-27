@@ -28,6 +28,16 @@ fn set_text(id: &str, text: &str) {
     }
 }
 
+/// 2026-08-27追加: QRコードSVGをそのまま埋め込むための`innerHTML`設定。
+/// `html`はサーバー(`totp::qr_svg`)が自前で生成したSVGのみを渡す用途に
+/// 限定する(利用者入力を直接ここへ流し込まない、既存の`set_text`との
+/// 使い分けを明確にするための専用ヘルパー)。
+fn set_html(id: &str, html: &str) {
+    if let Some(el) = try_by_id(id) {
+        el.set_inner_html(html);
+    }
+}
+
 fn bilingual_message(value: &serde_json::Value, fallback: &str) -> String {
     let ja = value.get("message_ja").and_then(|v| v.as_str());
     let en = value.get("message_en").and_then(|v| v.as_str());
@@ -213,10 +223,22 @@ fn on_totp_setup() {
                 let uri = value.get("provisioning_uri").and_then(|v| v.as_str()).unwrap_or("");
                 set_text("totp-secret", secret);
                 set_text("totp-uri", uri);
+                // 2026-08-27追加: QRコード(SVG)をその場に描画する
+                // (open-english/rs-syncと同じ「QR併記」方式への統一)。
+                // 生成失敗時(qr_svgがnull)は、既存のテキストシークレット
+                // 表示のみで引き続き利用できる旨を正直に案内する。
+                match value.get("qr_svg").and_then(|v| v.as_str()) {
+                    Some(svg) if !svg.is_empty() => set_html("totp-qr-container", svg),
+                    _ => set_text(
+                        "totp-qr-container",
+                        "(QRコードを生成できませんでした。上のシークレット文字列を手入力してください / \
+                         Could not generate a QR code. Please enter the secret above manually.)",
+                    ),
+                }
                 set_text(
                     "totp-result",
-                    "認証アプリでシークレットまたはURIを登録し、表示された6桁コードを下に入力して有効化してください。 / \
-                     Add the secret or URI to your authenticator app, then enter the displayed 6-digit code below to enable.",
+                    "表示されたQRコードを認証アプリで撮影する(またはシークレット/URIを手入力する)と、表示された6桁コードを下に入力して有効化してください。 / \
+                     Scan the QR code with your authenticator app (or enter the secret/URI manually), then enter the displayed 6-digit code below to enable.",
                 );
                 if let Some(el) = try_by_id("totp-enable-row") {
                     el.set_class_name("");
