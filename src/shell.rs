@@ -1267,7 +1267,8 @@ schtasks /create /tn "Daily Backup" /tr "C:\path\to\backup.bat" /sc daily /st 03
   <div class="project-card">
     <h4>open-english</h4>
     <p class="muted">PC・タブレット・スマホ向けの英会話学習Webアプリ。魔法少女メイドのキャラクターが、保育園児〜高3の13学年+社会人までを学年制限なしに指導します。 / Browser-based English-conversation learning app covering 13 school years with no age restriction.</p>
-    <span class="muted">Demo: coming soon (デモ準備中)</span> ・ <a href="https://github.com/aon-co-jp/open-english" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+    <p class="muted">⚠️ このWEB版はデモです。フル機能はインストーラー付きアプリをダウンロードしてご利用ください。 / This WEB version is a demo — please download and install the app for the full experience.</p>
+    <a href="https://easy-web.tokyo/open-english/demo" target="_blank" rel="noopener noreferrer">Demo (デモ)</a> ・ <a href="https://github.com/aon-co-jp/open-english/releases/latest" target="_blank" rel="noopener noreferrer">Download installer (インストーラーをダウンロード)</a> ・ <a href="https://github.com/aon-co-jp/open-english" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
   </div>
 
   <div class="project-card">
@@ -1498,6 +1499,24 @@ mod tests {
         assert!(SHELL_HTML.contains("<h3>open-easy-web</h3>"));
         assert!(SHELL_HTML.contains(r#"href="/demo""#));
         assert!(SHELL_HTML.contains("https://github.com/aon-co-jp/open-easy-web/releases/latest"));
+    }
+
+    /// open-englishのカードが「Demo: coming soon」のプレースホルダーの
+    /// ままではなく、実際のデモリンクを持つことの回帰確認(2026-08-27
+    /// 追加、ユーザー指示「https://easy-web.tokyo/にて、open-englishへの
+    /// リンクを張ってそこでデモをして」——open-english側で既に
+    /// https://easy-web.tokyo/open-english/ がデモとして実際に配信
+    /// されていることを確認済み)。
+    #[test]
+    fn shell_html_links_open_english_to_its_real_demo_not_a_placeholder() {
+        assert!(SHELL_HTML.contains("<h4>open-english</h4>"));
+        // 2026-08-27追記(続き): 本番と同じくRS-Sync/open-redmineの
+        // /demoパターンに合わせ、デモ専用パス /open-english/demo を指す
+        // (本番トップページ /open-english/ とは別、インストーラー
+        // ダウンロード導線付きのデモ画面という位置づけ)。
+        assert!(SHELL_HTML.contains("https://easy-web.tokyo/open-english/demo"));
+        assert!(!SHELL_HTML.contains("Demo: coming soon (デモ準備中)</span> ・ <a href=\"https://github.com/aon-co-jp/open-english\""));
+        assert!(SHELL_HTML.contains("https://github.com/aon-co-jp/open-english/releases/latest"));
     }
 
     /// open-web-serverもCompleted Projectsに、open-easy-webの次に

@@ -230,6 +230,57 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-08-27 open-englishのCompleted Projectsカードを「デモ準備中」プレースホルダーから実デモリンク(`/open-english/demo`)へ修正
+
+ユーザー指示「`https://easy-web.tokyo/`にてopen-englishへのリンクを張って
+そこでデモをして」「`https://easy-web.tokyo/open-english/demo`にて
+インストーラーダウンロード様のデモ画面として」への対応。
+
+1. **発見**: Completed Projectsセクション(`src/shell.rs`)の
+   open-englishカードが、実際にはopen-english側で
+   `https://easy-web.tokyo/open-english/`が既に本番稼働している
+   (open-english側CLAUDE.md 2026-08-27エントリで確認済み)にも
+   関わらず、いつまでも`<span class="muted">Demo: coming soon
+   (デモ準備中)</span>`のプレースホルダーのままだった。RS-Sync・
+   open-redmineは既に「Live」・「Demo」の2リンクを持つパターンで
+   実装済みだったのに対し、open-englishだけ取り残されていた。
+2. **修正**: RS-Sync/open-redmineと同じ「Demo (デモ)」・
+   「Download installer (インストーラーをダウンロード)」・
+   「GitHub (詳細を見る)」の3リンク構成へ変更。Demoリンクは
+   `https://easy-web.tokyo/open-english/demo`(本番トップページ
+   `/open-english/`とは別の、RS-Sync/open-redmineの`/demo`パターンに
+   揃えたパス)。カード本文にも「このWEB版はデモです。フル機能は
+   インストーラー付きアプリをダウンロードしてご利用ください」という
+   日英併記の注記を追加(open-english側のダウンロード誘導バナーと
+   同じ文言、2026-08-27にopen-english側で追加済みのもの)。
+3. **正直な開示・未完了(VPS側の実登録が必要)**: このパスは
+   `src/shell.rs`のソース修正のみであり、**VPS本番
+   (`easy-web.tokyo`)側での`/open-english/demo`テナント登録は
+   今回未実施**——過去のRS-Sync/open-redmineの`/demo`もそうだった
+   ように、実際に`POST /admin/tenants`で
+   `path_prefix=/open-english/demo`を登録するVPS側の作業、および
+   `open-easy-web-wasm`の再ビルド・再デプロイ(`git pull`→
+   `cargo build --target wasm32-unknown-unknown --release`→
+   `wasm-bindgen`→`static/`反映→`systemctl restart`)が別途必要。
+   この開発セッションではVPSへのSSH接続を行っていない
+   (認証情報・接続の是非を確認せずに本番へ直接作業することを避けた)。
+4. **検証**: `cargo test shell::`**15件全green**(新規1件
+   `shell_html_links_open_english_to_its_real_demo_not_a_placeholder`
+   を`/open-english/demo`を検証する形へ更新)。`cargo build --target
+   wasm32-unknown-unknown`(ローカル`--target-dir`経由)警告0件。
+   **正直な開示**: 実ブラウザでの表示確認・本番デプロイ後の実HTTP
+   到達確認はこのパスでは未実施(ソースコード変更・ローカルテスト
+   green確認までに留まる)。
+- 次にすべきこと: (1) VPS本番へ`/open-english/demo`テナントを
+  実際に登録(既存の`/open-english/`と同じバックエンドへ向ける
+  エイリアス方式か、独立デモにするかは要判断——RS-Sync/open-redmineの
+  「現状はエイリアス」という前例に倣うのが手早いが、独立性を持たせる
+  場合は別途設計が必要)、(2) VPS上の`open-easy-web-wasm`を再ビルド・
+  再デプロイして本番反映、(3) 反映後、実ブラウザで
+  `https://easy-web.tokyo/`→Completed Projectsのopen-englishカード→
+  「Demo」リンククリック→`/open-english/demo`到達、という一連の流れを
+  実地確認する。
+
 ### 2026-08-24 `/rsync`(RSyncバックアップ 使い方ガイド)ページを新設、Completed Projectsへ掲載
 
 ユーザー指示「`https://easy-web.tokyo/rsync`にRSyncバックアップの使い方
