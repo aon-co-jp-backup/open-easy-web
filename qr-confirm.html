@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Confirm Login / ログイン確認 - open-easy-web</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #14181d;
+    color: #ffffff;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+  .card {
+    max-width: 420px;
+    width: 100%;
+    background: #1f262e;
+    border: 1px solid #38424d;
+    border-radius: 14px;
+    padding: 24px;
+    text-align: center;
+  }
+  h1 { font-size: 1.15rem; margin: 0 0 12px; }
+  p { line-height: 1.6; margin: 8px 0; }
+  .who { font-weight: bold; font-size: 1.05rem; margin: 16px 0; word-break: break-all; }
+  button {
+    font-size: 1.05rem;
+    padding: 14px 20px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 12px;
+  }
+  #confirm-btn { background: #6ad0c8; color: #0b201d; font-weight: bold; }
+  .status { margin-top: 16px; min-height: 1.4em; }
+  .status.ok { color: #6ad0c8; }
+  .status.err { color: #ff8080; }
+  .warn { font-size: 0.85rem; color: #c8d2da; margin-top: 20px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Confirming this login... / このログインを確認しています...</h1>
+    <p>Opening this page on your phone / tablet / webcam device automatically confirms the login
+       — no button press needed. / このページをスマホ・タブレット・WEBカメラ端末で開くだけで
+       自動的にログインが確認されます——ボタン操作は不要です。</p>
+    <div class="who" id="who">Loading... / 読み込み中...</div>
+    <button id="confirm-btn" class="hidden">✅ Retry confirm / 再確認する</button>
+    <div class="status" id="status"></div>
+    <p class="warn">
+      ⚠️ Only open this link if you personally requested this login just now. / 今まさにご自身がログイン操作を行った場合のみ、このリンクを開いてください。
+      This link expires in a few minutes and can be used only once. / このリンクは数分で失効し、1回のみ使用できます。
+    </p>
+  </div>
+<script>
+(function () {
+  "use strict";
+  var params = new URLSearchParams(location.search);
+  var id = params.get("id") || "";
+  var whoEl = document.getElementById("who");
+  var btn = document.getElementById("confirm-btn");
+  var statusEl = document.getElementById("status");
+
+  if (!id) {
+    whoEl.textContent = "Invalid link (missing id). / 無効なリンクです(idがありません)。";
+    return;
+  }
+
+  function doConfirm() {
+    btn.classList.add("hidden");
+    statusEl.className = "status";
+    statusEl.textContent = "Confirming... / 確認中...";
+    fetch("/api/auth/qr-login/confirm", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: id }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        if (res.ok && res.body && res.body.ok) {
+          statusEl.className = "status ok";
+          statusEl.textContent = "✅ Confirmed! You can close this page now. / 確認しました！このページは閉じて構いません。";
+        } else {
+          statusEl.className = "status err";
+          statusEl.textContent = "⚠ " + ((res.body && res.body.error) || "Failed to confirm. / 確認に失敗しました。");
+          btn.classList.remove("hidden");
+        }
+      })
+      .catch(function () {
+        statusEl.className = "status err";
+        statusEl.textContent = "⚠ Could not reach the server. / サーバーに接続できませんでした。";
+        btn.classList.remove("hidden");
+      });
+  }
+
+  fetch("/api/auth/qr-login/whoami?id=" + encodeURIComponent(id))
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+    .then(function (res) {
+      if (res.ok && res.body && res.body.masked_email) {
+        whoEl.textContent = res.body.masked_email;
+        doConfirm();
+      } else {
+        whoEl.textContent = "This link is invalid or has expired. / このリンクは無効または期限切れです。";
+      }
+    })
+    .catch(function () {
+      whoEl.textContent = "Could not reach the server. / サーバーに接続できませんでした。";
+    });
+
+  btn.addEventListener("click", doConfirm);
+})();
+</script>
+</body>
+</html>

@@ -310,6 +310,39 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         return json_response(StatusCode::OK, &snap);
     }
 
+    // `/admin/easyweb-login-mode` — ログイン方式(otp/qr/otp_qr)の取得・
+    // 変更(2026-08-28新設)。`open-web-server`との名前衝突を避けるため
+    // 最初からアプリ固有の名前(`easyweb-`接頭辞)にしてある
+    // (上記power-profileの実バグ教訓を踏まえた設計)。
+    if path == "/admin/easyweb-login-mode" {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        return match method {
+            Method::GET => json_response(StatusCode::OK, &serde_json::json!({"login_mode": state.auth.login_mode()})),
+            Method::POST => {
+                let bytes = match req.into_body().collect().await {
+                    Ok(c) => c.to_bytes(),
+                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
+                };
+                #[derive(serde::Deserialize)]
+                struct Payload {
+                    login_mode: String,
+                }
+                let payload: Payload = match serde_json::from_slice(&bytes) {
+                    Ok(p) => p,
+                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
+                };
+                if !auth::is_valid_login_mode(&payload.login_mode) {
+                    return error_response(StatusCode::BAD_REQUEST, "login_mode must be one of: otp, qr, otp_qr");
+                }
+                state.auth.set_login_mode(&payload.login_mode);
+                json_response(StatusCode::OK, &serde_json::json!({"ok": true, "login_mode": payload.login_mode}))
+            }
+            _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string()),
+        };
+    }
+
     // `/admin/easyweb-power-profile` — 電源プロファイル(省メモリ/省電力/
     // 常時電源接続、組み合わせ選択可能)の取得・変更。`x-admin-token`
     // ヘッダによる認証必須(既存の`dist_sync`管理APIと同じ方式を再利用、
@@ -468,6 +501,17 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         (&Method::POST, "/api/auth/request-otp") => request_otp(&state, req).await,
         (&Method::POST, "/api/auth/verify-otp") => verify_otp(&state, req).await,
         (&Method::POST, "/api/auth/totp-login") => totp_login(&state, req).await,
+        // QR確認ログイン(2026-08-28新設、ユーザー指示「email OTP+QR撮影・
+        // QR撮影のみ、いずれも自動送受信・自動承認・自動ログイン」への
+        // 対応)。`/api/auth/qr-login/start`はTOTP登録済みアカウントの
+        // メールアドレスを受け取りQRセッションを開始する(`qr`モード用、
+        // 事前のOTP検証は不要)。`otp_qr`モードでは`verify_otp`が
+        // (TOTPコードの代わりに)このQRセッションを開始して返す設計。
+        (&Method::POST, "/api/auth/qr-login/start") => qr_login_start(&state, req).await,
+        (&Method::POST, "/api/auth/qr-login/confirm") => qr_login_confirm(&state, req).await,
+        (&Method::GET, "/api/auth/qr-login/status") => qr_login_status(&state, &req).await,
+        (&Method::POST, "/api/auth/qr-login/finish") => qr_login_finish(&state, req).await,
+        (&Method::GET, "/api/auth/qr-login/whoami") => qr_login_whoami(&state, &req).await,
         (&Method::POST, "/api/auth/logout") => logout(&state, req).await,
         (&Method::POST, "/api/auth/totp/setup") => totp_setup(&state, &req).await,
         (&Method::POST, "/api/auth/totp/enable") => totp_enable(&state, req).await,
@@ -477,6 +521,9 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
             confirm_email_change(&state, &req).await
         }
         (&Method::GET, "/") => serve_static(&state, "index.html", "text/html; charset=utf-8").await,
+        // QR確認ログインページ(2026-08-28新設)。スマホ/タブレット/WEBカメラ
+        // 搭載端末で開き、開いた時点で自動的に確認が完了する単体完結ページ。
+        (&Method::GET, "/qr-confirm.html") => serve_static(&state, "qr-confirm.html", "text/html; charset=utf-8").await,
         // RSync使い方ガイド(2026-08-24新設)。`/demo`・`/ddns`と同じく
         // 単一のSPAシェルを返し、WASM側`auth_ui::apply_page_and_auth_visibility`
         // が`location.pathname`を見て該当セクションだけを表示する。
@@ -903,6 +950,135 @@ async fn totp_login(state: &AppState, req: Request<Incoming>) -> Response<BoxBod
     )
 }
 
+fn qr_confirm_url(req_host: &str, scheme: &str, id: &str) -> String {
+    format!("{scheme}://{req_host}/qr-confirm.html?id={id}")
+}
+
+fn request_host_scheme(req: &Request<Incoming>) -> (String, &'static str) {
+    let host = req.headers().get(hyper::header::HOST).and_then(|v| v.to_str().ok()).unwrap_or("localhost").to_string();
+    let scheme = if req.headers().get("x-forwarded-proto").and_then(|v| v.to_str().ok()) == Some("https") {
+        "https"
+    } else {
+        "http"
+    };
+    (host, scheme)
+}
+
+fn qr_login_start_response(host: &str, scheme: &str, id: String) -> Response<BoxBody> {
+    let confirm_url = qr_confirm_url(host, scheme, &id);
+    match totp::qr_svg(&confirm_url) {
+        Ok(qr_svg) => json_response(
+            StatusCode::OK,
+            &serde_json::json!({
+                "ok": true,
+                "qr_login_id": id,
+                "qr_svg": qr_svg,
+                "confirm_url": confirm_url,
+            }),
+        ),
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, format!("failed to generate QR code: {e}")),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct QrLoginStartRequest {
+    account_email: String,
+}
+
+/// `POST /api/auth/qr-login/start` — `qr`モード(QR撮影のみ、事前のOTP
+/// 検証なし)専用の開始エンドポイント。TOTPが有効化されているアカウント
+/// のみ対象(そのアカウントに対して既に「認証を要求してよい持ち主」で
+/// あることが確認済みという前提を流用するため——TOTP登録済み=一度は
+/// セッション認証済みでセットアップを完了している、という既存の要件と
+/// 整合させた設計)。
+async fn qr_login_start(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+    let (host, scheme) = request_host_scheme(&req);
+    let bytes = match req.into_body().collect().await {
+        Ok(c) => c.to_bytes(),
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
+    };
+    let payload: QrLoginStartRequest = match serde_json::from_slice(&bytes) {
+        Ok(p) => p,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
+    };
+    if !state.users.totp_enabled(&payload.account_email) {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "TOTP is not enabled for this account, so QR-only login is not available / このアカウントは認証アプリの2段階認証が有効になっていないため、QR撮影のみでのログインは利用できません",
+        );
+    }
+    let id = state.auth.start_qr_login(&payload.account_email);
+    qr_login_start_response(&host, scheme, id)
+}
+
+#[derive(serde::Deserialize)]
+struct QrLoginIdRequest {
+    id: String,
+}
+
+/// `POST /api/auth/qr-login/confirm` — QR確認ページ(`qr-confirm.html`、
+/// スマホ/タブレット/WEBカメラ搭載端末で開く)がページ読み込み時に
+/// 自動的に呼ぶ(ユーザー指示「撮影すると自動受信・自動承認」——ボタン
+/// 操作は不要)。
+async fn qr_login_confirm(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+    let bytes = match req.into_body().collect().await {
+        Ok(c) => c.to_bytes(),
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
+    };
+    let payload: QrLoginIdRequest = match serde_json::from_slice(&bytes) {
+        Ok(p) => p,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
+    };
+    match state.auth.confirm_qr_login(&payload.id) {
+        Ok(()) => json_response(StatusCode::OK, &serde_json::json!({"ok": true})),
+        Err(e) => error_response(StatusCode::BAD_REQUEST, format!("{} / {}", e.message_ja(), e.message_en())),
+    }
+}
+
+/// `GET /api/auth/qr-login/status?id=` — プライマリ端末が数秒おきに
+/// ポーリングし、別端末での確認が済んだかを見る。
+async fn qr_login_status(state: &AppState, req: &Request<Incoming>) -> Response<BoxBody> {
+    let query = req.uri().query().unwrap_or("");
+    let id = query.split('&').find_map(|kv| kv.strip_prefix("id=")).unwrap_or("");
+    if id.is_empty() {
+        return error_response(StatusCode::BAD_REQUEST, "missing id");
+    }
+    match state.auth.qr_login_status(id) {
+        Some(confirmed) => json_response(StatusCode::OK, &serde_json::json!({"confirmed": confirmed})),
+        None => error_response(StatusCode::NOT_FOUND, "this QR login link is invalid or has expired"),
+    }
+}
+
+/// `POST /api/auth/qr-login/finish` — 別端末での確認が済んだことを
+/// ポーリングで確認したプライマリ端末が呼ぶ。ここで初めて実際の
+/// セッショントークンを発行する。
+async fn qr_login_finish(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+    let bytes = match req.into_body().collect().await {
+        Ok(c) => c.to_bytes(),
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
+    };
+    let payload: QrLoginIdRequest = match serde_json::from_slice(&bytes) {
+        Ok(p) => p,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
+    };
+    match state.auth.finish_qr_login(&payload.id) {
+        Ok(token) => json_response(StatusCode::OK, &serde_json::json!({"ok": true, "token": token})),
+        Err(e) => error_response(StatusCode::BAD_REQUEST, format!("{} / {}", e.message_ja(), e.message_en())),
+    }
+}
+
+/// `GET /api/auth/qr-login/whoami?id=` — QR確認ページが「どのアカウント
+/// のログインを確認しようとしているか」を、マスク済みメールアドレスで
+/// 表示するために使う。
+async fn qr_login_whoami(state: &AppState, req: &Request<Incoming>) -> Response<BoxBody> {
+    let query = req.uri().query().unwrap_or("");
+    let id = query.split('&').find_map(|kv| kv.strip_prefix("id=")).unwrap_or("");
+    match state.auth.qr_login_masked_email(id) {
+        Some(masked) => json_response(StatusCode::OK, &serde_json::json!({"ok": true, "masked_email": masked})),
+        None => error_response(StatusCode::NOT_FOUND, "this QR login link is invalid or has expired"),
+    }
+}
+
 #[derive(serde::Deserialize)]
 struct VerifyOtpRequest {
     contact: String,
@@ -916,6 +1092,7 @@ struct VerifyOtpRequest {
 /// トークンを返す。`contact`にどの登録済み連絡先を入力しても、同じ
 /// アカウント(主メール)に対するセッションが発行される。
 async fn verify_otp(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+    let (host, scheme) = request_host_scheme(&req);
     let bytes = match req.into_body().collect().await {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
@@ -931,6 +1108,12 @@ async fn verify_otp(state: &AppState, req: Request<Incoming>) -> Response<BoxBod
 
     match state.auth.consume_otp(&payload.contact, &payload.code) {
         Ok(()) => {
+            // `otp_qr`モード(2026-08-28新設)かつTOTP登録済みなら、
+            // TOTPコード入力の代わりにQR確認(第二要素)を要求する。
+            if state.auth.login_mode() == auth::LOGIN_MODE_OTP_QR && state.users.totp_enabled(&account_email) {
+                let id = state.auth.start_qr_login(&account_email);
+                return qr_login_start_response(&host, scheme, id);
+            }
             if state.users.totp_enabled(&account_email) {
                 let Some(totp_code) = payload.totp_code.as_deref() else {
                     return json_response(
@@ -1356,6 +1539,13 @@ mod tests {
         assert!(parse_site_path("/api/sites/").is_none());
     }
 
+    /// `OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN`を読み書きするテストが複数に
+    /// 増えた(2026-08-28、`otp_qr`ログインモードの管理APIテスト追加)ため、
+    /// 直列化する(Rustの既定テストランナーは並列実行するため、環境変数を
+    /// 複数テストが同時に書き換えるとフレーキーになる——open-english側
+    /// `local_agent.rs`/`vps_agent.rs`で実際に踏んだのと同じ既知の罠)。
+    static ENV_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     async fn spawn_test_server() -> (std::net::SocketAddr, Arc<AppState>) {
         let dir = tempfile::tempdir().unwrap();
         let state = Arc::new(AppState {
@@ -1526,6 +1716,7 @@ mod tests {
     /// (無効化)→トークン設定→登録→一覧→削除→一覧、を実際にHTTP経由で検証する。
     #[tokio::test]
     async fn dist_sync_admin_api_register_list_and_delete_over_real_http() {
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
         let (addr, _state) = spawn_test_server().await;
         let client = reqwest::Client::new();
 
@@ -1728,6 +1919,218 @@ mod tests {
         let body: serde_json::Value = res.json().await.unwrap();
         assert_eq!(body["email"].as_str(), Some("totp-user@example.com"));
         assert!(body["token"].as_str().is_some());
+    }
+
+    /// TOTP登録済みのアカウントを1件作り、`account_email`と有効化済み
+    /// シークレットを返すテストヘルパー(2026-08-28新設、QR系テストの
+    /// 前提を共通化)。
+    async fn register_and_enable_totp(addr: std::net::SocketAddr, state: &Arc<AppState>, email: &str) -> Vec<u8> {
+        let client = reqwest::Client::new();
+        state.users.register(email, None, Some(format!("backup-{email}"))).unwrap();
+        let auth::RequestOtpOutcome::Issued(code) = state.auth.request_otp(email);
+        let res = client
+            .post(format!("http://{addr}/api/auth/verify-otp"))
+            .json(&serde_json::json!({"contact": email, "code": code}))
+            .send()
+            .await
+            .unwrap();
+        let body: serde_json::Value = res.json().await.unwrap();
+        let token = body["token"].as_str().unwrap().to_string();
+
+        let res = client.post(format!("http://{addr}/api/auth/totp/setup")).bearer_auth(&token).send().await.unwrap();
+        let body: serde_json::Value = res.json().await.unwrap();
+        let secret_b32 = body["secret"].as_str().unwrap().to_string();
+        let secret_bytes = totp::base32_to_secret(&secret_b32).unwrap();
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let correct_code = totp::code_at(&secret_bytes, now);
+        let res = client
+            .post(format!("http://{addr}/api/auth/totp/enable"))
+            .bearer_auth(&token)
+            .json(&serde_json::json!({"code": correct_code}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+        secret_bytes
+    }
+
+    /// `qr`モード(QR撮影のみ、事前のOTP検証なし)の一連の流れを実HTTP
+    /// 経由で検証する(2026-08-28新設)。
+    #[tokio::test]
+    async fn qr_only_login_full_flow_over_real_http() {
+        let (addr, state) = spawn_test_server().await;
+        register_and_enable_totp(addr, &state, "qr-user@example.com").await;
+        let client = reqwest::Client::new();
+
+        // start: TOTP登録済みアカウントならQRセッションを開始できる。
+        let res = client
+            .post(format!("http://{addr}/api/auth/qr-login/start"))
+            .json(&serde_json::json!({"account_email": "qr-user@example.com"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+        let body: serde_json::Value = res.json().await.unwrap();
+        let id = body["qr_login_id"].as_str().unwrap().to_string();
+        assert!(body["qr_svg"].as_str().unwrap().contains("<svg"));
+        assert!(body["confirm_url"].as_str().unwrap().contains(&id));
+
+        // whoami: マスク済みメールアドレスが取得できる(実メールアドレス
+        // そのものは返さない)。
+        let res = client.get(format!("http://{addr}/api/auth/qr-login/whoami?id={id}")).send().await.unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+        let body: serde_json::Value = res.json().await.unwrap();
+        let masked = body["masked_email"].as_str().unwrap();
+        assert!(masked.contains("***@example.com"));
+        assert!(!masked.contains("qr-user@example.com"));
+
+        // status: 確認前はfalse。
+        let res = client.get(format!("http://{addr}/api/auth/qr-login/status?id={id}")).send().await.unwrap();
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(body["confirmed"].as_bool(), Some(false));
+
+        // confirm: 確認端末(qr-confirm.html)側のリクエストを模す。
+        let res = client
+            .post(format!("http://{addr}/api/auth/qr-login/confirm"))
+            .json(&serde_json::json!({"id": id}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+
+        // status: 確認後はtrue。
+        let res = client.get(format!("http://{addr}/api/auth/qr-login/status?id={id}")).send().await.unwrap();
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(body["confirmed"].as_bool(), Some(true));
+
+        // finish: プライマリ端末がセッショントークンを受け取る。
+        let res = client
+            .post(format!("http://{addr}/api/auth/qr-login/finish"))
+            .json(&serde_json::json!({"id": id}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+        let body: serde_json::Value = res.json().await.unwrap();
+        let token = body["token"].as_str().unwrap().to_string();
+        assert_eq!(state.auth.session_email(&token).as_deref(), Some("qr-user@example.com"));
+
+        // 使い捨て: 同じidで再度finishを呼ぶと失敗する。
+        let res = client
+            .post(format!("http://{addr}/api/auth/qr-login/finish"))
+            .json(&serde_json::json!({"id": id}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::BAD_REQUEST);
+    }
+
+    /// TOTP未登録アカウントは`qr`モードで拒否される(実HTTP経由)。
+    #[tokio::test]
+    async fn qr_only_login_rejects_accounts_without_totp() {
+        let (addr, state) = spawn_test_server().await;
+        state.users.register("no-totp-qr@example.com", None, Some("backup@example.com".into())).unwrap();
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("http://{addr}/api/auth/qr-login/start"))
+            .json(&serde_json::json!({"account_email": "no-totp-qr@example.com"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::FORBIDDEN);
+    }
+
+    /// `otp_qr`モード: メールOTP検証成功後、TOTPコード入力の代わりに
+    /// QR確認セッションが返され、確認後にログインが完了することを実HTTP
+    /// 経由で検証する(2026-08-28新設、真の2FA)。
+    #[tokio::test]
+    async fn otp_qr_mode_uses_qr_confirmation_as_the_second_factor_over_real_http() {
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        std::env::set_var("OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN", "test-dist-sync-token");
+        let (addr, state) = spawn_test_server().await;
+        register_and_enable_totp(addr, &state, "otpqr-user@example.com").await;
+        let client = reqwest::Client::new();
+
+        // 管理APIでotp_qrモードへ切り替える。
+        let res = client
+            .post(format!("http://{addr}/admin/easyweb-login-mode"))
+            .header("x-admin-token", "test-dist-sync-token")
+            .json(&serde_json::json!({"login_mode": "otp_qr"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(body["login_mode"].as_str(), Some("otp_qr"));
+
+        // GETでも反映が確認できる。
+        let res = client
+            .get(format!("http://{addr}/admin/easyweb-login-mode"))
+            .header("x-admin-token", "test-dist-sync-token")
+            .send()
+            .await
+            .unwrap();
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(body["login_mode"].as_str(), Some("otp_qr"));
+
+        // メールOTPを検証すると、TOTPコードではなくQRセッションが返る。
+        let auth::RequestOtpOutcome::Issued(code) = state.auth.request_otp("otpqr-user@example.com");
+        let res = client
+            .post(format!("http://{addr}/api/auth/verify-otp"))
+            .json(&serde_json::json!({"contact": "otpqr-user@example.com", "code": code}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert!(body["token"].is_null(), "no session token should be issued before QR confirmation");
+        let id = body["qr_login_id"].as_str().expect("qr_login_id should be present in otp_qr mode").to_string();
+
+        // QR確認→finishでセッション発行。
+        let res = client
+            .post(format!("http://{addr}/api/auth/qr-login/confirm"))
+            .json(&serde_json::json!({"id": id}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+        let res = client
+            .post(format!("http://{addr}/api/auth/qr-login/finish"))
+            .json(&serde_json::json!({"id": id}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+        let body: serde_json::Value = res.json().await.unwrap();
+        let token = body["token"].as_str().unwrap().to_string();
+        assert_eq!(state.auth.session_email(&token).as_deref(), Some("otpqr-user@example.com"));
+
+        // 後始末: 他テストへ影響しないよう既定のotpへ戻す。
+        let _ = client
+            .post(format!("http://{addr}/admin/easyweb-login-mode"))
+            .header("x-admin-token", "test-dist-sync-token")
+            .json(&serde_json::json!({"login_mode": "otp"}))
+            .send()
+            .await;
+        std::env::remove_var("OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN");
+    }
+
+    /// 不正な`login_mode`値は拒否される。
+    #[tokio::test]
+    async fn login_mode_admin_api_rejects_unknown_value() {
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        std::env::set_var("OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN", "test-dist-sync-token");
+        let (addr, _state) = spawn_test_server().await;
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("http://{addr}/admin/easyweb-login-mode"))
+            .header("x-admin-token", "test-dist-sync-token")
+            .json(&serde_json::json!({"login_mode": "bogus"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::BAD_REQUEST);
+        std::env::remove_var("OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN");
     }
 
     #[tokio::test]

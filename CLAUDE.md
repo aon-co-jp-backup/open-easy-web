@@ -230,6 +230,61 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-08-28 QR確認ログイン(`qr`/`otp_qr`モード)をopen-englishから横展開
+
+ユーザー指示「open-englishに限らず、ログインはパスワード無し・email OTP・
+QR撮影のみ・email OTP+QR撮影と選べるように」への横展開(open-english側で
+先に実装・検証済みの4択ログイン方式のうち、このアプリの性質に合わせて
+3方式を移植)。
+
+1. **「パスワード無し」モードは意図的に実装しなかった(正直な設計判断)**:
+   このアプリはVPS/サイト管理という重要操作を扱うため、認証の完全省略を
+   選択肢に含めるのは不適切と判断した。既存の`otp`(メール/電話OTP単体、
+   TOTP有効時はAND条件でTOTPコードも必須)はそのまま維持し、新たに`qr`
+   (TOTP登録済みアカウントに対しQR撮影のみでログイン、事前のOTP検証
+   不要)・`otp_qr`(OTP検証成功後、TOTPコード入力の代わりにQR確認を
+   第二要素として要求する真の2FA)の2モードを追加した。
+2. **QR確認は公開鍵・秘密鍵などの非対称暗号を一切使わない
+   (ユーザー確認済み)**: 短命(3分・1回限り)なランダムトークンを含む
+   URLを生成するだけで、既存のTOTP秘密鍵(共有対称鍵)とは別物。
+   `server/src/auth.rs`に`start_qr_login`/`confirm_qr_login`/
+   `qr_login_status`/`finish_qr_login`/`qr_login_masked_email`を新設
+   (open-englishと同じ設計、`totp::qr_svg`〈既に汎用実装済みだった〉を
+   再利用しQRコードSVGを生成)。
+3. **新規エンドポイント**: `POST /api/auth/qr-login/{start,confirm,finish}`・
+   `GET /api/auth/qr-login/{status,whoami}`。`GET/POST
+   /admin/easyweb-login-mode`(`x-admin-token`認証、`otp`/`qr`/`otp_qr`の
+   切替、`open-web-server`との名前衝突を避けるため最初から`easyweb-`
+   接頭辞——2026-07-31の`power-profile`実バグの教訓を踏まえた設計)。
+4. **`qr-confirm.html`(新規)**: スマホ/タブレット/WEBカメラ搭載端末で
+   開くと、**ボタン操作なしにページ読み込み時点で自動的に確認が完了する**
+   単体完結ページ(ユーザー指示「撮影すると自動受信・自動承認」への対応)。
+   `server/src/main.rs`の`STATIC_FILES`相当の配信ロジックへ`/qr-confirm.html`
+   ルートを追加。
+5. **実機検証(型チェック・ビルド成功だけで完了と報告しない方針の徹底)**:
+   `cargo build`成功(警告なし、既存の`power_profile.rs`未使用コード
+   警告のみ残存・無関係)。**実HTTP統合テスト4件を新規追加**
+   (`qr_only_login_full_flow_over_real_http`——start→whoami→status→
+   confirm→status→finish→セッション発行→使い捨て消費の確認まで一気通貫、
+   `qr_only_login_rejects_accounts_without_totp`、
+   `otp_qr_mode_uses_qr_confirmation_as_the_second_factor_over_real_http`
+   ——管理APIでモード切替→OTP検証→QRセッション返却→確認→finish→
+   セッション発行、`login_mode_admin_api_rejects_unknown_value`)。
+   `cargo test`**96件全green**、3回連続実行して安定(環境変数
+   `OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN`を複数テストが共有するように
+   なったため、既存の`ENV_TEST_LOCK`パターン〈open-english
+   `local_agent.rs`/`vps_agent.rs`と同じ〉を新設し直列化、フレーク無し
+   を確認)。実ブラウザ(Claude Browser)で`qr-confirm.html`単体(id無し)が
+   正しく「無効なリンク」表示になりコンソールエラーが無いことも確認した。
+6. **正直な開示・未実施**: (a) 実際にAndroid/PCの2台の別端末を使った
+   QRコード撮影(カメラでの読み取り)自体のE2Eは未実施(統合テストは
+   `confirm`エンドポイントを直接呼ぶ形で「確認端末側の操作」を模している
+   ——`qr-confirm.html`の自動確認ロジック自体はブラウザで動作確認済み
+   だが、実際のQRコードを実カメラで撮影する工程は検証していない)。
+   (b) VPS本番(`easy-web.tokyo`)への反映は未実施。
+- 次にすべきこと: (1) VPS本番へデプロイ、(2) 他の対象リポジトリ
+  (RS-Blog/RS-EC/RS-Ops/open-gitea/open-redmine/rs-sync)への同様の横展開。
+
 ### 2026-08-27 open-englishのCompleted Projectsカードを「デモ準備中」プレースホルダーから実デモリンク(`/open-english/demo`)へ修正
 
 ユーザー指示「`https://easy-web.tokyo/`にてopen-englishへのリンクを張って
