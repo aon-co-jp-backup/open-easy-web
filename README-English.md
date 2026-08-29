@@ -1,5 +1,14 @@
 # open-easy-web
 
+> 🎯 **aruaru-db × RPoem SET policy (2026-08-29)**: `aruaru-db`'s
+> `CLAUDE.md` opening note explains that aruaru-db only delivers "no
+> REST API needed, compatible with WunderGraph Cosmo's paid
+> Enterprise tier" when paired (SET) with RPoem — and warns against
+> building REST replacements aimlessly. As the domain/tenant
+> management hub that calls both aruaru-db's and RPoem's admin APIs,
+> always ask "does this strengthen the aruaru-db+RPoem SET value?"
+> before migrating this repo's own admin API away from REST.
+
 > **Updated 2026-07-25**: The dev-policy file (`CLAUDE.md`) heading was
 > renamed from "Development Policy & Dev Environment Rules" to
 > "Design Philosophy & Development Policy & Dev Environment Rules",
