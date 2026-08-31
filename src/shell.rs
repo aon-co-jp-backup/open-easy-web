@@ -65,6 +65,14 @@ pub const SHELL_HTML: &str = r#"
   </div>
 
   <div class="project-card">
+    <h3>open-english</h3>
+    <p class="muted">Browser-based English-conversation learning app covering 13 school years with no age restriction / PC・タブレット・スマホ向け英会話学習Webアプリ(魔法少女メイドが保育園児〜高3+社会人まで指導)</p>
+    <a href="https://easy-web.tokyo/open-english/">Production (本番)</a> ・
+    <a href="https://easy-web.tokyo/open-english/">Demo (デモ)</a> ・
+    <a href="https://github.com/aon-co-jp/open-english/releases/latest">Windows / Linux / Android download</a>
+  </div>
+
+  <div class="project-card">
     <h3>Ecosystem Projects (エコシステム関連プロジェクト一覧)</h3>
     <p class="muted">Every related repository under the aon-co-jp organization, with a one-line summary taken from its own README, plus links to whichever demos are actually hosted / aon-co-jp organization配下の関連リポジトリを一覧で紹介するページ。説明は各リポジトリのREADMEに基づき、実際にホストされているデモへのリンクを掲載しています</p>
     <a href="/projects">Project directory (プロジェクト一覧)</a> ・
