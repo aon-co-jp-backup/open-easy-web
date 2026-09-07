@@ -314,6 +314,15 @@ pub const SHELL_HTML: &str = r#"
     必須ではないセクション(簡単ドメイン設定・外部ツール)を非表示にして
     描画負荷を抑えるだけです。
   </p>
+  <h4>Breakdown by app / repo (アプリ・リポジトリ別内訳)</h4>
+  <div class="buttons">
+    <button id="memory-breakdown-refresh-btn">Check (確認)</button>
+  </div>
+  <div id="memory-breakdown-apps-chart" class="pie-chart-multi"></div>
+  <div id="memory-breakdown-apps-legend" class="pie-legend"></div>
+  <h4>Other memory, by AI category (その他メモリ・AIカテゴリ別、aruaru-llm使用)</h4>
+  <div id="memory-breakdown-other-chart" class="pie-chart-multi"></div>
+  <div id="memory-breakdown-other-legend" class="pie-legend"></div>
 </section>
 
 <section id="disk-usage-section">
@@ -334,6 +343,18 @@ pub const SHELL_HTML: &str = r#"
     <p id="disk-stats-text" class="muted">Click Refresh to load (「更新」を押して読み込んでください)</p>
   </div>
   <p id="disk-per-disk-text" class="muted" style="white-space:pre-line;"></p>
+  <div class="buttons">
+    <button id="disk-breakdown-refresh-btn">Check (確認)</button>
+  </div>
+  <h4>1. By app / repo (アプリ・リポジトリ別)</h4>
+  <div id="disk-breakdown-apps-chart" class="pie-chart-multi"></div>
+  <div id="disk-breakdown-apps-legend" class="pie-legend"></div>
+  <h4>2. By file extension (拡張子別、"other" area only / その他領域のみ)</h4>
+  <div id="disk-breakdown-ext-chart" class="pie-chart-multi"></div>
+  <div id="disk-breakdown-ext-legend" class="pie-legend"></div>
+  <h4>3. By AI category (カテゴリ・ジャンル別、aruaru-llm使用)</h4>
+  <div id="disk-breakdown-category-chart" class="pie-chart-multi"></div>
+  <div id="disk-breakdown-category-legend" class="pie-legend"></div>
 </section>
 
 <section id="uninstall-section">

@@ -58,7 +58,7 @@ use std::process::Command;
 
 /// このVPS上で2026-09-07時点に実際に稼働が確認された、
 /// aon-co-jpエコシステムのアプリケーションサービス一覧(既定値)。
-const DEFAULT_UNITS: &[&str] = &[
+pub const DEFAULT_UNITS: &[&str] = &[
     "aon-tokyo-server.service",
     "aruaru-db-web.service",
     "aruaru-llm.service",
@@ -94,7 +94,7 @@ const DEFAULT_UNITS: &[&str] = &[
 
 const DEFAULT_LIMIT_MIB: u64 = 256;
 
-fn target_units() -> Vec<String> {
+pub fn target_units() -> Vec<String> {
     match std::env::var("OPEN_EASYWEB_MEMORY_GOVERNOR_UNITS") {
         Ok(v) if !v.trim().is_empty() => v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
         _ => DEFAULT_UNITS.iter().map(|s| s.to_string()).collect(),

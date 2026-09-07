@@ -75,6 +75,20 @@ pub async fn get_disk_snapshot(base_url: &str, admin_token: &str) -> Result<Valu
     call::<()>(base_url, "/admin/system/disk", "GET", admin_token, None).await
 }
 
+/// `GET /admin/easyweb-system-memory-breakdown` — メモリ使用状況を
+/// アプリ(サービス)別+その他(aruaru-llmのAIでカテゴリ分類)の2枚の
+/// 円グラフ用データへ分解して取得する(2026-09-07追加)。
+pub async fn get_memory_breakdown(base_url: &str, admin_token: &str) -> Result<Value, String> {
+    call::<()>(base_url, "/admin/easyweb-system-memory-breakdown", "GET", admin_token, None).await
+}
+
+/// `GET /admin/easyweb-system-disk-breakdown` — ディスク使用状況を
+/// アプリ別+拡張子別+カテゴリ別(aruaru-llmのAI分類)の3枚の円グラフ用
+/// データへ分解して取得する(2026-09-07追加)。
+pub async fn get_disk_breakdown(base_url: &str, admin_token: &str) -> Result<Value, String> {
+    call::<()>(base_url, "/admin/easyweb-system-disk-breakdown", "GET", admin_token, None).await
+}
+
 #[derive(Serialize)]
 struct SetPowerProfileBody {
     profiles: Vec<String>,

@@ -382,6 +382,8 @@ pub fn wire() -> Result<(), JsValue> {
     wire_click("memory-switch-minimal-btn", on_switch_to_minimal_profile)?;
     wire_click("memory-restore-full-btn", on_restore_full_features)?;
     wire_click("disk-refresh-btn", on_refresh_disk)?;
+    wire_click("memory-breakdown-refresh-btn", on_refresh_memory_breakdown)?;
+    wire_click("disk-breakdown-refresh-btn", on_refresh_disk_breakdown)?;
     apply_minimal_ui_from_storage();
     on_load_power_profile_from_server();
     Ok(())
@@ -650,4 +652,160 @@ fn wire_dist_sync_remove_delegation() -> Result<(), JsValue> {
         .set_onclick(Some(closure.as_ref().unchecked_ref()));
     closure.forget();
     Ok(())
+}
+
+/// 文字列から安定した色相(0〜359度)を導く簡易ハッシュ(外部crateへの
+/// 依存を避けるためFNV-1a風の手書き実装、暗号強度は不要)。
+fn label_to_hue(label: &str) -> u32 {
+    let mut hash: u32 = 2166136261;
+    for b in label.as_bytes() {
+        hash ^= *b as u32;
+        hash = hash.wrapping_mul(16777619);
+    }
+    hash % 360
+}
+
+/// `(label, bytes)`の一覧から、`conic-gradient`によるカラフルな円グラフ
+/// (`container_id`のdiv要素の`background`)+凡例HTML(`legend_id`)を
+/// 描画する汎用ヘルパー(2026-09-07新設)。専用チャートライブラリへの
+/// 新規依存を避け、CSS `conic-gradient`のみで多色円グラフを表現する。
+/// 合計が0の場合は「データなし」とだけ表示する。
+fn render_multi_pie(container_id: &str, legend_id: &str, entries: &[(String, u64)]) {
+    let total: u64 = entries.iter().map(|(_, b)| *b).sum();
+    let Some(chart) = try_by_id(container_id) else { return };
+    let Some(legend) = try_by_id(legend_id) else { return };
+    if total == 0 || entries.is_empty() {
+        chart.set_attribute("style", "background: var(--border, #d1d5db);").ok();
+        legend.set_inner_html("<span class=\"muted\">No data (データなし)</span>");
+        return;
+    }
+    let mut stops: Vec<String> = Vec::new();
+    let mut legend_html = String::new();
+    let mut acc_percent = 0.0f64;
+    for (label, bytes) in entries {
+        let percent = (*bytes as f64 / total as f64) * 100.0;
+        let hue = label_to_hue(label);
+        let color = format!("hsl({hue}, 65%, 55%)");
+        let start = acc_percent;
+        let end = acc_percent + percent;
+        stops.push(format!("{color} {start:.3}% {end:.3}%"));
+        acc_percent = end;
+        let gib = *bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+        legend_html.push_str(&format!(
+            "<span class=\"pie-legend-item\"><span class=\"pie-legend-swatch\" style=\"background:{color};\"></span>{}: {:.2} GiB ({:.1}%)</span>",
+            html_escape(label),
+            gib,
+            percent
+        ));
+    }
+    let gradient = format!("conic-gradient({})", stops.join(", "));
+    chart.set_attribute("style", &format!("background: {gradient};")).ok();
+    legend.set_inner_html(&legend_html);
+}
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+/// メモリ使用状況の内訳(アプリ別+その他AIカテゴリ別)を取得・描画する
+/// (2026-09-07新設、`GET /admin/easyweb-system-memory-breakdown`)。
+fn on_refresh_memory_breakdown() {
+    let admin_token = input_value("memory-admin-token");
+    let base_url = same_origin_base_url();
+    spawn_local(async move {
+        match crate::api_auto_update::get_memory_breakdown(&base_url, &admin_token).await {
+            Ok(value) => {
+                let apps: Vec<(String, u64)> = value
+                    .get("services")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|e| {
+                                let unit = e.get("unit")?.as_str()?.to_string();
+                                let bytes = e.get("bytes")?.as_u64()?;
+                                Some((unit, bytes))
+                            })
+                            .filter(|(_, b)| *b > 0)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                render_multi_pie("memory-breakdown-apps-chart", "memory-breakdown-apps-legend", &apps);
+
+                let other: Vec<(String, u64)> = value
+                    .get("other_by_category")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|e| {
+                                let category = e.get("category")?.as_str()?.to_string();
+                                let bytes = e.get("bytes")?.as_u64()?;
+                                Some((category, bytes))
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                render_multi_pie("memory-breakdown-other-chart", "memory-breakdown-other-legend", &other);
+            }
+            Err(e) => set_status(&format!("❌ {e}")),
+        }
+    });
+}
+
+/// ディスク使用状況の内訳(アプリ別+拡張子別+AIカテゴリ別)を取得・描画
+/// する(2026-09-07新設、`GET /admin/easyweb-system-disk-breakdown`)。
+fn on_refresh_disk_breakdown() {
+    let admin_token = input_value("disk-admin-token");
+    let base_url = same_origin_base_url();
+    spawn_local(async move {
+        match crate::api_auto_update::get_disk_breakdown(&base_url, &admin_token).await {
+            Ok(value) => {
+                let apps: Vec<(String, u64)> = value
+                    .get("apps")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|e| {
+                                let unit = e.get("unit")?.as_str()?.to_string();
+                                let bytes = e.get("bytes")?.as_u64()?;
+                                Some((unit, bytes))
+                            })
+                            .filter(|(_, b)| *b > 0)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                render_multi_pie("disk-breakdown-apps-chart", "disk-breakdown-apps-legend", &apps);
+
+                let extensions: Vec<(String, u64)> = value
+                    .get("extensions")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|e| {
+                                let extension = e.get("extension")?.as_str()?.to_string();
+                                let bytes = e.get("bytes")?.as_u64()?;
+                                Some((extension, bytes))
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                render_multi_pie("disk-breakdown-ext-chart", "disk-breakdown-ext-legend", &extensions);
+
+                let categories: Vec<(String, u64)> = value
+                    .get("categories")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|e| {
+                                let category = e.get("category")?.as_str()?.to_string();
+                                let bytes = e.get("bytes")?.as_u64()?;
+                                Some((category, bytes))
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                render_multi_pie("disk-breakdown-category-chart", "disk-breakdown-category-legend", &categories);
+            }
+            Err(e) => set_status(&format!("❌ {e}")),
+        }
+    });
 }

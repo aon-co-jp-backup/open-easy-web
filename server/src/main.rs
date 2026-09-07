@@ -8,11 +8,14 @@
 //! 依存)提供する。
 
 mod appserver_registration;
+mod aruaru_llm_client;
 mod auth;
 mod auto_update;
 mod db_encryption;
+mod disk_breakdown;
 mod dist_sync;
 mod local_proxy;
+mod memory_breakdown;
 mod memory_governor;
 mod mail;
 mod php_detector;
@@ -310,6 +313,78 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         }
         let snap = system_disk::snapshot();
         return json_response(StatusCode::OK, &snap);
+    }
+
+    // `/admin/easyweb-system-memory-breakdown` — メモリ円グラフを
+    // 「アプリ(サービス)別」+「その他をaruaru-llmのAIでカテゴリ分類」の
+    // 2枚へ分解する(2026-09-07新設、`memory_breakdown.rs`参照)。
+    if path == "/admin/easyweb-system-memory-breakdown" {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        if method != Method::GET {
+            return error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string());
+        }
+        let mem_snapshot = system_memory::snapshot();
+        let candidates = tokio::task::spawn_blocking(memory_breakdown::other_process_candidates).await.unwrap_or_default();
+        let items: Vec<String> = candidates.iter().map(|(comm, _)| comm.clone()).collect();
+        let categories = memory_breakdown::fixed_categories();
+        let classified = match aruaru_llm_client::classify_many(&items, &categories).await {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::warn!("aruaru-llm classify failed, marking as unclassified: {err}");
+                Vec::new()
+            }
+        };
+        let category_of: std::collections::HashMap<&str, &str> =
+            classified.iter().map(|(item, cat)| (item.as_str(), cat.as_str())).collect();
+        let other_process_categories: Vec<(String, String, u64)> = candidates
+            .into_iter()
+            .map(|(comm, bytes)| {
+                let category = category_of.get(comm.as_str()).map(|c| c.to_string()).unwrap_or_else(memory_breakdown::unclassified_label);
+                (comm, category, bytes)
+            })
+            .collect();
+        let used_bytes = mem_snapshot.used_bytes;
+        let breakdown = tokio::task::spawn_blocking(move || memory_breakdown::build(used_bytes, other_process_categories))
+            .await
+            .unwrap_or_else(|_| memory_breakdown::build(used_bytes, Vec::new()));
+        return json_response(StatusCode::OK, &breakdown);
+    }
+
+    // `/admin/easyweb-system-disk-breakdown` — ディスク使用状況円グラフを
+    // 「アプリ別」+「その他の拡張子別」+「その他をaruaru-llmのAIで
+    // カテゴリ分類」の3枚へ分解する(2026-09-07新設、
+    // `disk_breakdown.rs`参照)。
+    if path == "/admin/easyweb-system-disk-breakdown" {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        if method != Method::GET {
+            return error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string());
+        }
+        let (apps, extensions) =
+            tokio::task::spawn_blocking(|| (disk_breakdown::app_disk_usage(), disk_breakdown::other_extension_breakdown()))
+                .await
+                .unwrap_or((Vec::new(), Vec::new()));
+        let items: Vec<String> = extensions.iter().map(|e| e.extension.clone()).collect();
+        let categories: Vec<String> = disk_breakdown::DISK_CATEGORIES.iter().map(|s| s.to_string()).collect();
+        let classified = match aruaru_llm_client::classify_many(&items, &categories).await {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::warn!("aruaru-llm classify failed, marking as unclassified: {err}");
+                Vec::new()
+            }
+        };
+        let categories_breakdown = disk_breakdown::build_category_breakdown(&extensions, &classified);
+        return json_response(
+            StatusCode::OK,
+            &serde_json::json!({
+                "apps": apps,
+                "extensions": extensions,
+                "categories": categories_breakdown,
+            }),
+        );
     }
 
     // `/admin/easyweb-login-mode` — ログイン方式(otp/qr/otp_qr)の取得・
