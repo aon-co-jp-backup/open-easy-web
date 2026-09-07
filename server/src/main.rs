@@ -12,6 +12,7 @@ mod auth;
 mod auto_update;
 mod db_encryption;
 mod dist_sync;
+mod local_proxy;
 mod mail;
 mod php_detector;
 mod power_profile;
@@ -524,16 +525,20 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         // QR確認ログインページ(2026-08-28新設)。スマホ/タブレット/WEBカメラ
         // 搭載端末で開き、開いた時点で自動的に確認が完了する単体完結ページ。
         (&Method::GET, "/qr-confirm.html") => serve_static(&state, "qr-confirm.html", "text/html; charset=utf-8").await,
-        // RSync使い方ガイド(2026-08-24新設)。`/demo`・`/ddns`と同じく
-        // 単一のSPAシェルを返し、WASM側`auth_ui::apply_page_and_auth_visibility`
-        // が`location.pathname`を見て該当セクションだけを表示する。
-        // 本番では手前のopen-web-serverがパスごとテナントへ転送するため、
-        // ここでのパス名は`/rsync`のまま到達する場合と、プレフィックスが
-        // 剥がされて到達する場合の両方があり得る——`contains("/rsync")`で
-        // 判定しているので、いずれでも表示条件は満たされる。
-        (&Method::GET, "/rsync") | (&Method::GET, "/rsync/") => {
-            serve_static(&state, "index.html", "text/html; charset=utf-8").await
-        }
+        // 2026-09-07変更(ユーザー指示): 従来は`/rsync`にRSync使い方ガイド
+        // (SPAシェル、`index.html`の`#rsync-guide-section`)を配信していたが、
+        // 名前が似ている別プロジェクト`rs-sync`(GitHub複数アカウント・
+        // 複数プロバイダのリポジトリ同期ツール、`easy-web.tokyo/rs-sync/`)と
+        // 混同されやすいと判明したため、`/rsync`・`/rsync/`は実プロジェクト
+        // `rs-sync`へ302リダイレクトするよう変更した。旧ガイド本文
+        // (`#rsync-guide-section`、`index.html`内)自体は削除していない
+        // (直接`index.html`を開けば引き続き閲覧可能)——このルートだけを
+        // リダイレクトに切り替えた。
+        (&Method::GET, "/rsync") | (&Method::GET, "/rsync/") => Response::builder()
+            .status(StatusCode::FOUND)
+            .header("Location", "https://easy-web.tokyo/rs-sync/")
+            .body(Full::new(Bytes::new()))
+            .expect("static response headers are always valid"),
         // エコシステム関連プロジェクト紹介ページ(2026-08-24新設)。
         // `/rsync`と同じくSPAシェルを返し、表示するセクションはWASM側が
         // `location.pathname`から判定する(新しい仕組みは増やしていない)。
@@ -1451,6 +1456,15 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
+
+    // ローカルモード(Windows PC上での簡易リバースプロキシ+DuckDNS、
+    // `OPEN_EASY_WEB_LOCAL_MODE=1`のときのみ有効、2026-09-07新設):
+    // 既存のVPS向けnginx/PHP-FPM経路とは完全に独立した早期分岐。
+    // ここで分岐した場合、以降のVPS向け起動処理(AppState::from_env等)
+    // には一切到達しない。
+    if local_proxy::is_local_mode_enabled() {
+        return local_proxy::run_local_mode().await;
+    }
 
     let state = Arc::new(AppState::from_env());
 

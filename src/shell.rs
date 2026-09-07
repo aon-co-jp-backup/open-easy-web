@@ -80,10 +80,11 @@ pub const SHELL_HTML: &str = r#"
   </div>
 
   <div class="project-card">
-    <h3>RSync (Backup Sync Guide / バックアップ同期ガイド)</h3>
-    <p class="muted">How to back up databases and files with the standard rsync tool — commands, rclone for Google Drive, shared hosting/VPS, scheduling and restore. A usage guide, not a feature of open-easy-web / 標準のrsyncでデータベースやファイルをバックアップする手順 — コマンド例、Googleドライブ向けrclone、レンタルサーバー/VPS、定期実行と復元。open-easy-webの機能ではなく「使い方ガイド」です</p>
-    <a href="/rsync">Guide (ガイド)</a> ・
-    <a href="https://rclone.org/drive/">rclone (Google Drive)</a>
+    <h3>rs-sync (Backup Sync Guide / バックアップ同期ガイド)</h3>
+    <p class="muted">Repository mirror and backup tool spanning multiple git-hosting providers and accounts (GitHub, open-gitea, RS-Gitbucket, etc.) / GitHub・open-gitea・RS-Gitbucket等、複数のGitホスティングサービス/複数アカウントをまたいだリポジトリのミラー同期・バックアップツール</p>
+    <a href="https://easy-web.tokyo/rs-sync/">Live (公開中)</a> ・
+    <a href="https://easy-web.tokyo/rs-sync/demo">Demo (デモ)</a> ・
+    <a href="https://github.com/aon-co-jp/RS-Sync">GitHub (詳細を見る)</a>
   </div>
 </section>
 
@@ -1577,17 +1578,20 @@ mod tests {
         assert!(SHELL_HTML.contains("does <em>not</em> contain an rsync synchronisation mechanism"));
     }
 
-    /// Completed ProjectsにRSyncガイドへのリンクが、既存カードと同じ
-    /// `project-card`書式で載っていることの回帰確認(2026-08-24追加)。
+    /// Completed Projectsにrs-syncへのリンクが、既存カードと同じ
+    /// `project-card`書式で載っていることの回帰確認(2026-08-24追加、
+    /// 2026-09-07更新——ユーザー報告により、紛らわしい名前だった
+    /// `/rsync`使い方ガイドへのリンクから、実プロジェクト`rs-sync`への
+    /// リンクへ差し替えた)。
     #[test]
-    fn shell_html_lists_rsync_guide_in_completed_projects() {
+    fn shell_html_lists_rs_sync_in_completed_projects() {
         let section = SHELL_HTML
             .split_once(r#"id="completed-projects-section""#)
             .and_then(|(_, rest)| rest.split_once("</section>"))
             .map(|(section, _)| section)
             .expect("completed projects section present");
-        assert!(section.contains("<h3>RSync (Backup Sync Guide / バックアップ同期ガイド)</h3>"));
-        assert!(section.contains(r#"<a href="/rsync">"#));
+        assert!(section.contains("<h3>rs-sync (Backup Sync Guide / バックアップ同期ガイド)</h3>"));
+        assert!(section.contains(r#"<a href="https://easy-web.tokyo/rs-sync/">"#));
         assert!(section.contains(r#"class="project-card""#));
     }
 }
