@@ -68,7 +68,7 @@ pub const SHELL_HTML: &str = r#"
     <h3>open-english</h3>
     <p class="muted">Browser-based English-conversation learning app covering 13 school years with no age restriction / PC・タブレット・スマホ向け英会話学習Webアプリ(魔法少女メイドが保育園児〜高3+社会人まで指導)</p>
     <a href="https://easy-web.tokyo/open-english/">Production (本番)</a> ・
-    <a href="https://easy-web.tokyo/open-english/">Demo (デモ)</a> ・
+    <a href="https://easy-web.tokyo/open-english/demo">Demo (デモ)</a> ・
     <a href="https://github.com/aon-co-jp/open-english/releases/latest">Windows / Linux / Android download</a>
   </div>
 
