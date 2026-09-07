@@ -65,6 +65,24 @@ Source: "version.json"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesn
 ; 固定アカウントのメールアドレス設定(必須)・自己アップデート機能の
 ; 説明(日英併記)。インストール後に表示する。
 Source: "README-INSTALLED.txt"; DestDir: "{app}"; Flags: ignoreversion isreadme
+; aruaru-llm(任意)取得スクリプト(2026-09-07新設、README.md「🚀 なぜ
+; 関連プロジェクトと一緒に使うと強力なのか」節参照)。
+Source: "fetch-aruaru-llm.ps1"; DestDir: "{app}"; Flags: ignoreversion
+
+[Tasks]
+; aruaru-llm同梱タスク(ユーザー指示「ぜひ一緒にインストールした頂き
+; たいのはopen-directx open-cuda aruaru-llmです」への対応、2026-09-07)。
+; 既定は未チェック——open-easy-web本体の動作には必須ではないため。
+;
+; 正直な開示(open-directx/open-cudaを同梱しない理由): `open-cuda`は
+; `aruaru-llm`バイナリへ静的リンクされるライブラリであり、独立した
+; サービスとして別途インストールする対象ではない(この取得スクリプトが
+; 取得するaruaru-llmの実行ファイルに既に含まれている)。`open-directx`
+; は`open-cuda`とも`aruaru-llm`とも機能的な依存関係を持たない無関係な
+; 別リポジトリ(GPU描画実験用の2Dデモ)——このため両方とも本タスクの
+; 対象に含めていない(README.md「🚀 なぜ関連プロジェクトと一緒に使うと
+; 強力なのか」節に詳細な開示あり)。
+Name: "installaruarullm"; Description: "Also install aruaru-llm (optional, contract-free proprietary AI chat-commerce response service paired with open-cuda; NOT auto-started, and open-cuda itself is statically linked in — not a separate download) / aruaru-llm(任意、契約不要の独自AIチャットコマース応答サービス、open-cudaとSET構成)も一緒にインストール——自動起動はしません。open-cuda自体はaruaru-llmへ静的リンクされており別途ダウンロード対象ではありません"; Flags: unchecked
 
 [Run]
 ; install.ps1自体がサービス登録(New-Service)ロジックを持つため、
@@ -73,6 +91,11 @@ Filename: "powershell.exe"; \
     Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\install.ps1"""; \
     WorkingDir: "{app}"; StatusMsg: "open-easy-web サービスをセットアップしています..."; \
     Flags: runhidden waituntilterminated
+Filename: "powershell.exe"; \
+    Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\fetch-aruaru-llm.ps1"" -DestDir ""{app}\aruaru-llm"""; \
+    StatusMsg: "Downloading aruaru-llm (optional)... / aruaru-llm(任意)をダウンロード中..."; \
+    Flags: runhidden waituntilterminated; \
+    Tasks: installaruarullm
 
 [UninstallRun]
 Filename: "powershell.exe"; \

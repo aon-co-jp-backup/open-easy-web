@@ -34,6 +34,78 @@ Cache-Controlミドルウェア等、詳細は両リポジトリのCLAUDE.md参�
 
 ---
 
+## 🚀 なぜ関連プロジェクトと一緒に使うと強力なのか / Why using this together with related projects is powerful (2026-09-07追加)
+
+**日本語**: `https://easy-web.tokyo` は、**好きな有料ドメイン、または
+DuckDNS等の無料ドメイン/サブドメインを簡単に設定し、HTTPS(URLの
+末尾の`s`)を簡単に付けられる**ことを示すための運用サイトです
+(上記「ローカルモード」節・「簡単ドメイン設定ウィザード」節参照)。
+
+- **open-easy-webはApache+Nginx互換**(vhost自動生成、上記「配信
+  エンジン」節参照)、**RPoem(旧poem-cosmo-tauri)はTomcat互換**の
+  アプリケーションサーバー層として機能します。この2つを組み合わせる
+  ことで、高速・高セキュリティな「4層4重」通信の構成が実現できます
+  (詳細は`CLAUDE.md`「アプリケーションサーバー層の役割」節・
+  `open-raid-z/CLAUDE.md`参照)。
+- **open-raid-zとaruaru-dbを組み合わせる**ことで、高速・高セキュリティ
+  なDATABASE運用も同時に実現できます。**さらにPostgreSQLを併用する
+  ことで**(open-english側で実装・実機検証済みのDUAL DB同時書き込み
+  機能と同じ設計思想)、**どちらを先にインストールしても後から
+  インストールしても、片方のDATABASEに障害が発生した場合、もう片方の
+  DATABASEが自動的にデータを補完・復旧できます**——**正直な開示**:
+  この自動補完・自動復旧の実装本体は`aruaru-db`/`open-raid-z`側に
+  あり、`open-easy-web`自体はこれらを組み合わせて使うための土台
+  (ドメイン割り当て・リバースプロキシ)を提供するに留まります。
+- **一緒にインストールをおすすめするもの**: `aruaru-llm`
+  (契約不要の独自AIチャットコマース応答サービス、`open-cuda`とSET
+  構成)——Windowsインストーラーに任意タスクとして追加済み(下記
+  「インストーラー」節参照)。
+  **正直な開示(誇張しないこと)**: `open-cuda`自体は`aruaru-llm`
+  バイナリへ静的リンクされるライブラリであり、独立したサービスとして
+  別途インストールする対象ではありません(`open-english`側の
+  2026-08-19/2026-08-20の調査で確認済みの事実、詳細は
+  `open-english/CLAUDE.md`参照)。`open-directx`は`open-cuda`とは
+  無関係な別リポジトリ(Breakout風2Dデモ、GPU描画の実験用)であり、
+  `open-easy-web`・`aruaru-llm`とも機能的な依存関係はありません
+  ——このため`open-cuda`/`open-directx`は本リポジトリのインストーラー
+  へは同梱していません(実体の無い「同梱したふり」を避けるため)。
+
+**English**: `https://easy-web.tokyo` is an operational demo site
+showing how easy it is to **assign either a paid domain of your choice,
+or a free domain/subdomain via DuckDNS, and add HTTPS** (see the "Local
+mode" and "Free domain setup wizard" sections above).
+
+- **open-easy-web is Apache+Nginx compatible** (auto-generated vhosts,
+  see the "Delivery engine" section above), and **RPoem (formerly
+  poem-cosmo-tauri) is Tomcat-compatible** as the application-server
+  layer. Combining the two gives you a high-speed, high-security
+  "4-layer, 4-fold" communication setup (see `CLAUDE.md`'s "Role of the
+  application server layer" section and `open-raid-z/CLAUDE.md`).
+- **Combining open-raid-z and aruaru-db** also gives you a high-speed,
+  high-security DATABASE. **Adding PostgreSQL on top** (same design
+  philosophy as the DUAL DB simultaneous-write feature already
+  implemented and field-tested in open-english) means **regardless of
+  which database you install first or second, if one DATABASE fails,
+  the other automatically completes/recovers its data**. **Honest
+  disclosure**: the actual auto-heal/auto-recovery implementation lives
+  in `aruaru-db`/`open-raid-z` — `open-easy-web` itself only provides
+  the foundation (domain assignment, reverse proxying) for using them
+  together.
+- **Recommended companion to install alongside**: `aruaru-llm` (a
+  contract-free proprietary AI chat-commerce response service, paired
+  with `open-cuda` in a SET configuration) — already added as an
+  optional installer task (see the "Installer" section below).
+  **Honest disclosure (not overclaiming)**: `open-cuda` itself is a
+  library statically linked into the `aruaru-llm` binary, not a
+  standalone service to install separately (confirmed by open-english's
+  2026-08-19/2026-08-20 investigation, see `open-english/CLAUDE.md`).
+  `open-directx` is an unrelated separate repository (a Breakout-style
+  2D demo for experimenting with GPU rendering) with no functional
+  dependency on `open-cuda`, `open-easy-web`, or `aruaru-llm` — for
+  this reason, `open-cuda`/`open-directx` are NOT bundled into this
+  repository's installer (to avoid pretending to bundle something with
+  no substance behind it).
+
 ## いまできること
 
 - **スマホ縦画面レスポンシブ対応・英語(日本語)ハイブリッド表示(2026-07-24追加)**:
@@ -231,6 +303,94 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/jp.co.aon.open-easy-web.
 scripts/serve.sh 0.0.0.0 8080        # 全インターフェースで待受
 scripts/serve.sh 192.168.1.50 8080   # 特定のIPアドレスのみで待受
 ```
+
+## ローカルモード: Windows PC上の簡易リバースプロキシ + DuckDNS(2026-09-07追加)
+
+**English**: This is a NEW, opt-in local mode for running
+`open-easy-web-server` on your own Windows/Linux/macOS PC as a simple
+plain-HTTP reverse proxy in front of another local app — for example
+[open-english](https://github.com/aon-co-jp/open-english)'s local server
+(`127.0.0.1:4601` by default). It is a separate code path from the
+existing VPS-oriented nginx/PHP-FPM feature described above and does not
+touch it. **Honest limitations**: this proxy does NOT terminate TLS —
+plain HTTP only. It does NOT default to port 80/443 (binding those on
+Windows normally needs admin rights / URL ACL reservations, which this
+tool never attempts silently) — the default listen address is
+`127.0.0.1:8090`. DuckDNS support only points a domain name at your
+current IP address; it does NOT open router ports or set up port
+forwarding for you, and it does NOT give you HTTPS.
+
+**日本語**: これはWindows/Linux/macOSの自分のPC上で
+`open-easy-web-server`を、別のローカルアプリ(例:
+[open-english](https://github.com/aon-co-jp/open-english)のローカル
+サーバー、既定`127.0.0.1:4601`)の手前に立つ**単純な平文HTTPリバース
+プロキシ**として動かす、新規のopt-in機能です。上記のVPS向けnginx/
+PHP-FPM機能とは完全に別の経路で、そちらには一切手を加えていません。
+**正直な限界**: このプロキシはTLS終端を一切行いません(平文HTTPのみ)。
+80/443番ポートへは既定でbindしません(Windowsで特権ポートへのbindは
+通常管理者権限/URL ACL予約を要し、それを黙って試みることはありません)
+——既定の待受アドレスは`127.0.0.1:8090`です。DuckDNS対応はドメイン名を
+現在のIPアドレスへ結びつけるだけで、ルーターのポート開放・ポート
+フォワーディングは行いません。HTTPS化も行いません。
+
+### 起動方法 / How to run
+
+```powershell
+$env:OPEN_EASY_WEB_LOCAL_MODE = "1"
+$env:OPEN_EASY_WEB_LOCAL_BIND = "127.0.0.1:8090"       # 既定値(省略可)
+$env:OPEN_EASY_WEB_LOCAL_BACKEND = "127.0.0.1:4601"    # 既定値、open-englishのローカルサーバー
+.\open-easy-web-server.exe
+```
+
+```bash
+OPEN_EASY_WEB_LOCAL_MODE=1 \
+OPEN_EASY_WEB_LOCAL_BIND=127.0.0.1:8090 \
+OPEN_EASY_WEB_LOCAL_BACKEND=127.0.0.1:4601 \
+./open-easy-web-server
+```
+
+起動後、`http://127.0.0.1:8090/`(または`OPEN_EASY_WEB_LOCAL_BIND`で
+指定したアドレス)へのアクセスが、そのまま`OPEN_EASY_WEB_LOCAL_BACKEND`
+(既定`127.0.0.1:4601`)へ転送されます。バックエンドが起動していない
+場合はクラッシュせず`502 Bad Gateway`を返します。
+
+### 無料のDuckDNSサブドメインを取得する / Getting a free DuckDNS subdomain
+
+1. https://www.duckdns.org/ へアクセスし、GitHub/Google等のアカウントで
+   サインインします(**アカウント作成自体はこのツールから自動化しません**
+   ——ユーザー自身がブラウザで行ってください)。
+2. 好きなサブドメイン名(例: `myopenenglish`)を登録すると
+   `myopenenglish.duckdns.org`が使えるようになり、ページ上に表示される
+   **token**(長い英数字の文字列)を控えます。
+3. このサーバーの`POST /v1/duckdns/update`エンドポイントへ、
+   `{"domain": "myopenenglish", "token": "<あなたのtoken>"}`を送ると、
+   DuckDNS側のIPアドレスがこのPCの現在のグローバルIPへ更新されます
+   (トークンはディスクへ保存されません、リクエストのたびに渡してください)。
+   ```bash
+   curl -X POST http://127.0.0.1:8090/v1/duckdns/update \
+     -H "Content-Type: application/json" \
+     -d '{"domain":"myopenenglish","token":"YOUR-TOKEN-HERE"}'
+   ```
+4. **これだけでは外部からアクセスできません**——ご自身のルーターで、
+   このPCの待受ポート(`OPEN_EASY_WEB_LOCAL_BIND`で指定したポート)への
+   ポートフォワーディングを別途設定する必要があります。
+
+### 既に持っている有料ドメインを使う / Using a domain you already own
+
+DuckDNSの代わりに、購入済みの独自ドメインを使うこともできます。
+ドメインのDNS管理画面で、Aレコードをご自宅ルーターの**グローバル
+(WAN側)IPアドレス**へ向け、ルーターでこのPCの待受ポートへポート
+フォワーディングを設定してください。DuckDNSと同様、これはIPアドレスの
+紐付けとポート到達性の話であり、HTTPS化は別途必要です。
+
+### 正直な開示・TLS/HTTPSは未対応 / Honest limitation: no TLS/HTTPS
+
+このローカルモードのリバースプロキシは**平文HTTPのみ**をサポートします。
+HTTPSで公開したい場合は、ご自身で証明書を用意し、別のTLS終端
+(例: `stunnel`・IIS・別のリバースプロキシ)をこの手前に置く必要が
+あります——このパスでは意図的にACME/Let's Encrypt自動取得は実装して
+いません(既存のVPS向け機能`server/src/tls.rs`はサーバー証明書として
+別の設計であり、このローカルモードとは無関係です)。
 
 ## Android版: root化端末での外付けHDD対応 + ダウンロード導線(2026-08-04追加)
 

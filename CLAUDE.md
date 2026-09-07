@@ -243,6 +243,76 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-09-07 ローカルモード(Windows PC向け簡易リバースプロキシ+DuckDNS)を新規実装
+
+ユーザー指示「open-easy-webにWindowsビルド可能なローカルモードを新設し、
+open-englishのローカルサーバー(`127.0.0.1:4601`)の手前で単純な
+リバースプロキシとして動かせるようにし、DuckDNSの動的DNS対応も追加して
+ほしい(姉妹プロジェクトopen-web-serverには既にこの機能があるが、
+今回はopen-easy-web側にあえて新規実装する)」への対応。
+
+1. **新規`server/src/local_proxy.rs`**: `OPEN_EASY_WEB_LOCAL_MODE=1`の
+   ときのみ有効になるopt-in経路(`main.rs`冒頭で早期分岐、既存のVPS向け
+   nginx/PHP-FPM経路〈`AppState::from_env()`以降〉には一切到達しない)。
+   `OPEN_EASY_WEB_LOCAL_BIND`(既定`127.0.0.1:8090`、80/443番への既定
+   bindはしない——Windowsで特権ポートは管理者権限/URL ACL予約を要する
+   ため)・`OPEN_EASY_WEB_LOCAL_BACKEND`(既定`127.0.0.1:4601`、
+   open-englishのローカルサーバー既定ポート)を環境変数で設定できる。
+   ミドルウェア非依存のhyper直接実装(`hyper::client::conn::http1`で
+   バックエンドへ接続・転送、既存の`server/Cargo.toml`の依存
+   〈hyper/hyper-util/tokio/bytes/http-body-util〉をそのまま再利用、
+   新規crate追加なし)。バックエンド未起動時はクラッシュせず
+   `502 Bad Gateway`を返す。
+2. **DuckDNS**: `POST /v1/duckdns/update`(`{domain, token, ip?}`)。
+   open-english側`server/src/main.rs`の`duckdns_update`ハンドラ
+   (1174〜1238行目付近)と同じ設計・同じ日英併記の開示文言に揃えた
+   ——トークンはディスクへ永続化せずリクエストごとにメモリ上でのみ
+   使用、DuckDNSはIPアドレスの紐付けのみでポート開放・TLS化は行わない
+   旨を明記。
+3. **README.md**にローカルモードの節を新設(日英併記): 起動方法・
+   無料DuckDNSサブドメインの取得手順・有料独自ドメインを使う方法・
+   TLS/HTTPS未対応という正直な開示。
+4. **Windows CI**: 調査の結果、`.github/workflows/release.yml`の
+   `build-windows`ジョブ(`runs-on: windows-latest`)は**既に存在**して
+   おり、`open-easy-web-server-windows-x86_64.zip`を生成・GitHub
+   Releasesへ添付する構成になっていた(今回新規追加は不要だった)。
+   open-english側`installer/windows/fetch-open-easy-web.ps1`の
+   アセット名マッチングは`*windows*x86_64*.zip`というワイルドカードの
+   ため、この既存ファイル名でも問題なく一致することを確認済み——
+   open-english側の変更は不要。
+5. **検証(実測、型チェックのみで完了と報告しない既存方針の徹底)**:
+   `cargo build`(server)成功、新規コードによる警告は0件(既存の
+   `power_profile.rs`未使用コード警告4件は本変更と無関係)。
+   `cargo test`(server)**101件全green**(新規5件、うち1件は実TCP
+   リスナー2組を使い、実際にバックエンドへの転送成功〈本文一致確認〉と
+   バックエンド未到達時の502を両方実HTTP経由で検証)。
+   **実バイナリでの動作確認**: `python -m http.server 4601`を実際に
+   起動しバックエンド役とし、`OPEN_EASY_WEB_LOCAL_MODE=1`で
+   `open-easy-web-server.exe`を起動、`curl http://127.0.0.1:18190/
+   index.html`が実際にバックエンドの応答(`hello world from test
+   backend`)をそのまま中継することを確認。バックエンドプロセスを
+   `taskkill`で落とした状態での`curl`は実際に`502`を返しプロセス自体は
+   落ちないことを確認。`POST /v1/duckdns/update`に偽のドメイン名+
+   トークンを送り、実際にDuckDNS本番APIへ到達して`"duckdns_response":
+   "KO"`(認証失敗、想定通り)が返ること、プロセスがクラッシュせず
+   その後も`502`を返し続けられること(配線自体が生きていること)を
+   確認した。
+6. **正直な開示・未実施**: (a) このパスの範囲ではTLS/ACME実装は
+   意図的にスコープ外(README/コードコメントに明記)。(b) 実際に
+   open-english本体を起動した状態での結合確認(open-englishの
+   `127.0.0.1:4601`実サーバーを相手にした転送)は行っていない
+   (今回はPython製の簡易HTTPサーバーで代替、プロトコルレベルでの転送
+   ロジック自体は変わらないため実用上の差異は無いと判断)。(c) 実際の
+   DuckDNS有効アカウント・実ドメインでの成功パス(`"ok": true`)は
+   未検証(偽トークンでの失敗パスのみ確認、既存の検証方針〈実サービスへ
+   到達すること自体の確認〉に沿ったスコープ)。(d) VPS/本番環境への
+   デプロイは対象外(このローカルモードはユーザーの手元PC向けの機能の
+   ため)。
+- 次にすべきこと: (1) 実際に稼働中のopen-english本体を相手にした結合
+  確認、(2) 実DuckDNSアカウント+実トークンでの成功パス確認、
+  (3) 必要であれば将来的なTLS対応(stunnel等の外部ツール連携の
+  ドキュメント化、またはACME自動取得の実装)の検討。
+
 ### 2026-08-28 QR確認ログイン(`qr`/`otp_qr`モード)をopen-englishから横展開
 
 ユーザー指示「open-englishに限らず、ログインはパスワード無し・email OTP・
