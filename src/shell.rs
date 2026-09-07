@@ -279,8 +279,13 @@ pub const SHELL_HTML: &str = r#"
     このマシンの現在のメモリ使用状況・全体の使用可能メモリです。
   </p>
   <label>Admin token (管理トークン)<input type="password" id="memory-admin-token" placeholder="OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN"></label>
+  <p class="muted">
+    Windows: run this in PowerShell/Command Prompt/Git Bash to show the token stored on the VPS (requires SSH access already set up as "conoha"):<br>
+    Windows: 以下をPowerShell/コマンドプロンプト/Git Bashで実行するとVPS上に保存済みのトークンが表示されます(あらかじめ"conoha"というSSH接続設定が必要です):<br>
+    <code>ssh conoha "cat /root/.open-easy-web-admin-token"</code>
+  </p>
   <div class="buttons">
-    <button id="memory-refresh-btn">Refresh (更新)</button>
+    <button id="memory-refresh-btn">Check (確認)</button>
   </div>
   <div id="memory-chart-container" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
     <svg id="memory-pie-chart" width="140" height="140" viewBox="0 0 32 32" role="img" aria-label="Memory usage pie chart (メモリ使用率の円グラフ)">

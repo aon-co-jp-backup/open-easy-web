@@ -27,7 +27,7 @@ async fn call<T: Serialize>(
     opts.set_mode(RequestMode::Cors);
 
     let headers = Headers::new().map_err(|e| format!("headers init failed: {e:?}"))?;
-    headers.set("x-admin-token", admin_token).ok();
+    headers.set("x-admin-token", admin_token.trim()).ok();
 
     if let Some(b) = body {
         let body_str = serde_json::to_string(b).map_err(|e| format!("request encode failed: {e}"))?;

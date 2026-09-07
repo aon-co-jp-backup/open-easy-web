@@ -17,7 +17,11 @@ async fn call<T: Serialize>(base_url: &str, path: &str, method: &str, admin_toke
     opts.set_mode(RequestMode::Cors);
 
     let headers = Headers::new().map_err(|e| format!("headers init failed: {e:?}"))?;
-    headers.set("x-admin-token", admin_token).ok();
+    // 実バグ修正(2026-09-07): 管理トークン入力欄からコピペした値に前後の
+    // 空白・改行が混入していても常にサーバー側の期待値と一致するよう、
+    // ここで一律trimしてから送信する(以前は各呼び出し元がtrimしたり
+    // しなかったりで不統一だった)。
+    headers.set("x-admin-token", admin_token.trim()).ok();
 
     if let Some(b) = body {
         let body_str = serde_json::to_string(b).map_err(|e| format!("request encode failed: {e}"))?;

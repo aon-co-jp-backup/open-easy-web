@@ -13,6 +13,7 @@ mod auto_update;
 mod db_encryption;
 mod dist_sync;
 mod local_proxy;
+mod memory_governor;
 mod mail;
 mod php_detector;
 mod power_profile;
@@ -389,11 +390,21 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 match power_profile::PowerProfileFlags::from_pref_values(&payload.profiles) {
                     Ok(flags) => {
                         state.power_profile.set(flags);
+                        // AI省メモリ(2026-09-07追加): memory_saverフラグの
+                        // 実効果として、このVPS上の各サービス(systemdユニット)
+                        // へcgroup経由のMemoryHigh(ソフト上限、超過分はスワップへ
+                        // 退避)を適用する。ブロッキングI/O(systemctl起動)なので
+                        // spawn_blockingへ退避し、非同期ランタイムを塞がない。
+                        let governor_results =
+                            tokio::task::spawn_blocking(move || memory_governor::apply(flags.memory_saver))
+                                .await
+                                .unwrap_or_default();
                         json_response(
                             StatusCode::OK,
                             &serde_json::json!({
                                 "profiles": flags.active_pref_values(),
                                 "labels": flags.active_labels(),
+                                "ai_memory_governor": governor_results,
                             }),
                         )
                     }
