@@ -400,6 +400,43 @@ Windows: .\uninstall.ps1 (as Administrator / 管理者権限で)</pre>
   <p id="auto-update-status" class="muted" aria-live="polite"></p>
 </section>
 
+<section id="lolipop-cron-section">
+  <h3>ロリポップ!時間指定オートクロール (Lolipop timed auto-crawl / cron)</h3>
+  <p class="muted">
+    指定した時刻・曜日に、ロリポップ!上のPHP等のURLを自動で呼び出します
+    (ロリポップ側のcron機能・プランに依存しません)。サーバー停止中に過ぎた
+    時刻は、起動後に1回だけ後追い実行できます(直近24時間分)。登録内容は
+    ロリポップ管理画面のcron設定へ貼れる書式でも確認できます。<br>
+    Calls your Lolipop URLs at the given times/weekdays. Missed slots during
+    downtime can be run once after restart (last 24h).
+  </p>
+  <label>Admin token (管理トークン)<input type="password" id="lolipop-cron-admin-token" placeholder="OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN"></label>
+  <label>ジョブ名 (Name)<input type="text" id="lolipop-cron-name" maxlength="100" placeholder="例: 夜間バッチ"></label>
+  <label>URL<input type="url" id="lolipop-cron-url" placeholder="https://example.lolipop.jp/cron.php"></label>
+  <label>Method
+    <select id="lolipop-cron-method"><option value="GET">GET</option><option value="POST">POST</option></select>
+  </label>
+  <label>実行時刻 (HH:MM、カンマ区切りで複数可)<input type="text" id="lolipop-cron-times" placeholder="03:00, 15:30"></label>
+  <fieldset>
+    <legend>曜日 (未選択=毎日)</legend>
+    <label><input type="checkbox" id="lolipop-cron-wd-0">日</label>
+    <label><input type="checkbox" id="lolipop-cron-wd-1">月</label>
+    <label><input type="checkbox" id="lolipop-cron-wd-2">火</label>
+    <label><input type="checkbox" id="lolipop-cron-wd-3">水</label>
+    <label><input type="checkbox" id="lolipop-cron-wd-4">木</label>
+    <label><input type="checkbox" id="lolipop-cron-wd-5">金</label>
+    <label><input type="checkbox" id="lolipop-cron-wd-6">土</label>
+  </fieldset>
+  <label>タイムアウト秒 (1〜600)<input type="number" id="lolipop-cron-timeout" min="1" max="600" value="60"></label>
+  <label class="toggle-row"><input type="checkbox" id="lolipop-cron-catch-up" checked>停止中に過ぎた時刻を起動後に1回後追い実行する</label>
+  <div class="buttons">
+    <button id="lolipop-cron-add-btn">ジョブを登録 (Add job)</button>
+    <button id="lolipop-cron-refresh-btn">一覧を更新 (Refresh)</button>
+  </div>
+  <p id="lolipop-cron-status" class="muted" aria-live="polite"></p>
+  <div id="lolipop-cron-list"></div>
+</section>
+
 <section id="db-encryption-section">
   <h3>Database encryption (DATABASE暗号化、常時自動)</h3>
   <p class="muted">

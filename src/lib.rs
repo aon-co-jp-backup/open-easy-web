@@ -17,6 +17,7 @@
 
 mod api_auth;
 mod api_auto_update;
+mod api_lolipop_cron;
 mod api_dist_sync;
 mod api_free_domain;
 mod api_upload;
@@ -24,6 +25,7 @@ mod auth_ui;
 mod dom;
 mod free_domain_ui;
 mod profiles;
+mod lolipop_cron_ui;
 mod setup_wizard_ui;
 mod shell;
 pub mod view_bridge;
@@ -104,6 +106,7 @@ pub fn start() -> Result<(), JsValue> {
     auth_ui::wire()?;
     free_domain_ui::wire()?;
     setup_wizard_ui::wire()?;
+    lolipop_cron_ui::wire()?;
 
     set_status("準備完了。サイトを登録・選択・接続テストできます。");
     Ok(())

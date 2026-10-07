@@ -129,6 +129,7 @@ pub fn apply_page_and_auth_visibility() {
         "disk-usage-section",
         "uninstall-section",
         "auto-update-section",
+        "lolipop-cron-section",
         "db-encryption-section",
         "external-tools-section",
     ] {

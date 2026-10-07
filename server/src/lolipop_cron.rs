@@ -33,6 +33,12 @@ use serde::{Deserialize, Serialize};
 const DEFAULT_TZ_OFFSET_HOURS: i64 = 9;
 const TICK_SECS: u64 = 15;
 const MAX_JOBS: usize = 200;
+/// 後追い実行の対象とする取りこぼしの最大期間(24時間)。
+const CATCH_UP_WINDOW_MINUTES: i64 = 1440;
+
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Schedule {
@@ -53,6 +59,13 @@ pub struct Job {
     pub schedule: Schedule,
     pub enabled: bool,
     pub timeout_secs: u64,
+    /// サーバー停止中に過ぎた時刻の分を、起動後に1回だけ後追い実行するか
+    /// (直近`CATCH_UP_WINDOW_MINUTES`分以内の取りこぼしのみ対象)。
+    #[serde(default = "default_true")]
+    pub catch_up: bool,
+    /// 最後に発火したローカル時刻のエポック分(後追い判定用、永続化される)。
+    #[serde(default)]
+    pub last_fired_minute: Option<i64>,
     #[serde(default)]
     pub last_run_at_unix: Option<u64>,
     #[serde(default)]
@@ -68,13 +81,13 @@ pub struct NewJob {
     pub schedule: Schedule,
     #[serde(default)]
     pub timeout_secs: Option<u64>,
+    #[serde(default)]
+    pub catch_up: Option<bool>,
 }
 
 pub struct LolipopCron {
     path: PathBuf,
     jobs: Mutex<Vec<Job>>,
-    /// ジョブIDごとに「最後に発火した分(エポック分)」。同じ分の二重発火防止。
-    fired: Mutex<std::collections::HashMap<String, i64>>,
     tz_offset_hours: i64,
 }
 
@@ -159,7 +172,7 @@ impl LolipopCron {
             .and_then(|v| v.parse::<i64>().ok())
             .filter(|v| (-12..=14).contains(v))
             .unwrap_or(DEFAULT_TZ_OFFSET_HOURS);
-        Self { path, jobs: Mutex::new(jobs), fired: Mutex::new(Default::default()), tz_offset_hours }
+        Self { path, jobs: Mutex::new(jobs), tz_offset_hours }
     }
 
     fn persist(&self, jobs: &[Job]) -> Result<()> {
@@ -202,6 +215,10 @@ impl LolipopCron {
             schedule,
             enabled: true,
             timeout_secs: n.timeout_secs.unwrap_or(60).clamp(1, 600),
+            catch_up: n.catch_up.unwrap_or(true),
+            // 作成時刻より前のスロットは後追いしない。直前の分を基準にして、
+            // 作成と同じ分に指定した時刻は通常どおり発火させる。
+            last_fired_minute: Some(self.local_minute(now_unix() as i64) - 1),
             last_run_at_unix: None,
             last_result: None,
         };
@@ -257,18 +274,40 @@ impl LolipopCron {
         result
     }
 
-    /// 現在時刻に該当する有効ジョブのうち、この分にまだ発火していないものを返す。
-    pub fn due_jobs(&self, now_unix_secs: i64) -> Vec<Job> {
-        let local_minute = (now_unix_secs + self.tz_offset_hours * 3600).div_euclid(60);
-        let jobs = self.jobs.lock().unwrap().clone();
-        let mut fired = self.fired.lock().unwrap();
-        let ids: std::collections::HashSet<_> = jobs.iter().map(|j| j.id.clone()).collect();
-        fired.retain(|k, _| ids.contains(k));
-        jobs.into_iter()
-            .filter(|j| j.enabled && is_due(&j.schedule, local_minute))
-            .filter(|j| fired.insert(j.id.clone(), local_minute) != Some(local_minute))
-            .collect()
+    fn local_minute(&self, now_unix_secs: i64) -> i64 {
+        (now_unix_secs + self.tz_offset_hours * 3600).div_euclid(60)
     }
+
+    /// 今この分に発火すべき有効ジョブ(および停止中に取りこぼして後追い
+    /// 対象のジョブ)を返し、発火済みとして記録・永続化する。
+    pub fn due_jobs(&self, now_unix_secs: i64) -> Vec<Job> {
+        let local_minute = self.local_minute(now_unix_secs);
+        let mut jobs = self.jobs.lock().unwrap();
+        let mut out = Vec::new();
+        for j in jobs.iter_mut().filter(|j| j.enabled) {
+            let last = j.last_fired_minute;
+            let fire = if is_due(&j.schedule, local_minute) {
+                last != Some(local_minute)
+            } else {
+                j.catch_up && missed_slot(&j.schedule, last, local_minute).is_some()
+            };
+            if fire {
+                j.last_fired_minute = Some(local_minute);
+                out.push(j.clone());
+            }
+        }
+        if !out.is_empty() {
+            let _ = self.persist(&jobs);
+        }
+        out
+    }
+}
+
+/// `last_fired`より後・`local_minute`より前で、取りこぼした直近のスロットを探す。
+pub fn missed_slot(s: &Schedule, last_fired: Option<i64>, local_minute: i64) -> Option<i64> {
+    let last = last_fired?;
+    let lowest = (last + 1).max(local_minute - CATCH_UP_WINDOW_MINUTES);
+    (lowest..local_minute).rev().find(|m| is_due(s, *m))
 }
 
 async fn call(job: &Job) -> Result<u16> {
@@ -353,6 +392,7 @@ mod tests {
                 method: None,
                 schedule: sched(&[&t], &[]),
                 timeout_secs: Some(5),
+                catch_up: None,
             })
             .unwrap();
         let due = cron.due_jobs(now);
@@ -370,6 +410,49 @@ mod tests {
     }
 
     #[test]
+    fn missed_slot_finds_latest_slot_within_window() {
+        let s = sched(&["10:00"], &[]);
+        let day = 5 * 1440;
+        // 09:00に最後に発火→11:00時点で10:00を取りこぼし
+        assert_eq!(missed_slot(&s, Some(day + 540), day + 660), Some(day + 600));
+        // 10:00以降に発火済みなら取りこぼしなし
+        assert_eq!(missed_slot(&s, Some(day + 600), day + 660), None);
+        // 最終発火不明は後追いしない
+        assert_eq!(missed_slot(&s, None, day + 660), None);
+        // 24時間より古い取りこぼしは対象外(3日前に発火、3日後の09:00時点で見える最古は前日10:00)
+        let now_min = day + 3 * 1440 + 540;
+        assert_eq!(missed_slot(&s, Some(day), now_min), Some(day + 2 * 1440 + 600));
+        assert_eq!(missed_slot(&sched(&["09:30"], &[]), Some(day), day + 3 * 1440 + 570 + 1), Some(day + 3 * 1440 + 570));
+    }
+
+    #[test]
+    fn catch_up_fires_once_after_downtime_and_respects_opt_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let cron = LolipopCron::load(dir.path().join("c.json"));
+        let now = now_unix() as i64;
+        let slot = cron.local_minute(now + 3600).rem_euclid(1440);
+        let t = format!("{:02}:{:02}", slot / 60, slot % 60);
+        let mk = |catch_up| NewJob {
+            name: "x".into(),
+            url: "http://127.0.0.1:9/x".into(),
+            method: None,
+            schedule: sched(&[&t], &[]),
+            timeout_secs: Some(1),
+            catch_up,
+        };
+        let on = cron.add(mk(None)).unwrap();
+        let off = cron.add(mk(Some(false))).unwrap();
+        // 2時間後に起動したとする(1時間前に予定時刻を過ぎている)
+        let due = cron.due_jobs(now + 7200);
+        assert_eq!(due.iter().map(|j| j.id.as_str()).collect::<Vec<_>>(), vec![on.id.as_str()]);
+        assert!(cron.due_jobs(now + 7200 + 60).is_empty(), "catch-up runs only once");
+        // 永続化されている
+        let reloaded = LolipopCron::load(dir.path().join("c.json"));
+        assert!(reloaded.get(&on.id).unwrap().last_fired_minute.is_some());
+        let _ = off;
+    }
+
+    #[test]
     fn add_rejects_bad_input() {
         let dir = tempfile::tempdir().unwrap();
         let cron = LolipopCron::load(dir.path().join("c.json"));
@@ -379,6 +462,7 @@ mod tests {
             method: method.map(String::from),
             schedule: sched(&["01:00"], &[]),
             timeout_secs: None,
+            catch_up: None,
         };
         assert!(cron.add(mk("ftp://x", None)).is_err());
         assert!(cron.add(mk("https://x", Some("DELETE"))).is_err());

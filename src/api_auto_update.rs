@@ -9,7 +9,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Headers, Request, RequestInit, RequestMode, Response};
 
-async fn call<T: Serialize>(base_url: &str, path: &str, method: &str, admin_token: &str, body: Option<&T>) -> Result<Value, String> {
+pub(crate) async fn call<T: Serialize>(base_url: &str, path: &str, method: &str, admin_token: &str, body: Option<&T>) -> Result<Value, String> {
     let url = format!("{}{}", base_url.trim_end_matches('/'), path);
 
     let opts = RequestInit::new();

@@ -243,6 +243,36 @@ python -m http.server 8080   # index.html + pkg/ を配信
 
 ## HANDOFF(直近の自動巡回ログ、上が最新)
 
+### 2026-10-08 ロリポップ!向け時間指定オートクロール(cron相当)機能を新規実装
+
+ユーザー指示「LOLIPOPの時間指定可能なオートクロール設定機能を開発して搭載」
+(確認の結果「ロリポップ!サーバーのcron相当」)への対応。
+
+1. **新規`server/src/lolipop_cron.rs`**: ジョブ(URL・GET/POST・実行時刻
+   `HH:MM`複数・曜日・タイムアウト)を登録すると、サーバー内蔵スケジューラが
+   指定時刻に自動でHTTP呼び出しする。時刻は既定JST(UTC+9、環境変数
+   `OPEN_EASYWEB_LOLIPOP_TZ_OFFSET_HOURS`で変更)。設定は
+   `OPEN_EASYWEB_LOLIPOP_CRON_FILE`(既定`/var/www/.open-easy-web-lolipop-cron.json`)
+   へ永続化。同じ分の二重発火は防止。ロリポップ!管理画面のcron欄へ貼れる
+   「分 時 日 月 曜日」書式も併せて返す(ロリポップ側cronはプラン依存・外部API
+   無しのため、内蔵スケジューラ+書式書き出しの2本立てにした)。
+2. **後追い実行**: 各ジョブの`catch_up`(既定ON)が有効なら、サーバー停止中に
+   過ぎた時刻を起動後に**1回だけ**実行する(直近24時間以内の取りこぼしのみ、
+   複数スロット分は1回に集約)。最終発火分は`last_fired_minute`に永続化。
+   ジョブ作成時刻より前のスロットは後追いしない。
+3. **管理API**(`x-admin-token`認証、`dist_sync::require_admin_token`再利用):
+   `GET/POST /admin/lolipop-cron/jobs`、`DELETE .../jobs/{id}`、
+   `POST .../jobs/{id}/run`(今すぐ実行)、`PUT .../jobs/{id}/enabled`。
+4. **GUI(WASM)**: `src/lolipop_cron_ui.rs`・`src/api_lolipop_cron.rs`・
+   `src/shell.rs`の`lolipop-cron-section`。ログイン済みのメインページに表示。
+   ジョブ登録フォーム(曜日チェックボックス含む)・一覧・今すぐ実行・
+   有効/無効・削除・cron書式表示。
+5. **検証**: `cargo test --bin open-easy-web-server lolipop`で7件パス
+   (時刻/曜日判定・cron書式・後追い・モックHTTPへの実呼び出し・永続化)。
+   WASMビルド成功、実サーバー+ブラウザでのE2E確認(ローカルのモック先)。
+6. **正直な開示**: 実際のロリポップ!サーバーへの呼び出しは未検証
+   (接続先URLが未提供のため)。後追いは直近24時間・1回のみ。
+
 ### 2026-09-07 ローカルモード(Windows PC向け簡易リバースプロキシ+DuckDNS)を新規実装
 
 ユーザー指示「open-easy-webにWindowsビルド可能なローカルモードを新設し、
