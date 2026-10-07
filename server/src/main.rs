@@ -15,6 +15,7 @@ mod db_encryption;
 mod disk_breakdown;
 mod dist_sync;
 mod local_proxy;
+mod lolipop_cron;
 mod memory_breakdown;
 mod memory_governor;
 mod mail;
@@ -70,6 +71,8 @@ struct AppState {
     /// 深夜バックグラウンド自動アップデートの有効/無効設定
     /// (`auto_update.rs`参照、環境変数またはGUI/API経由で変更可能)。
     auto_update: Arc<auto_update::AutoUpdateState>,
+    /// ロリポップ!向け時間指定オートクロール(`lolipop_cron.rs`参照)。
+    lolipop_cron: Arc<lolipop_cron::LolipopCron>,
     /// 自分自身のリスンアドレス(`auto_update`のヘルスチェック・
     /// 「今すぐ確認」機能が新プロセスへ問い合わせる先として使う)。
     server_bind_addr: std::net::SocketAddr,
@@ -147,6 +150,10 @@ impl AppState {
             auto_update: Arc::new(auto_update::AutoUpdateState::load(env_path(
                 "OPEN_EASYWEB_AUTO_UPDATE_SETTINGS_FILE",
                 "/var/www/.open-easy-web-auto-update.json",
+            ))),
+            lolipop_cron: Arc::new(lolipop_cron::LolipopCron::load(env_path(
+                "OPEN_EASYWEB_LOLIPOP_CRON_FILE",
+                "/var/www/.open-easy-web-lolipop-cron.json",
             ))),
             server_bind_addr: std::env::var("OPEN_EASYWEB_SERVER_BIND")
                 .unwrap_or_else(|_| "0.0.0.0:8090".into())
@@ -487,6 +494,79 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 }
             }
             _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string()),
+        };
+    }
+
+    // `/admin/lolipop-cron/jobs[/{id}[/run|/enabled]]` — ロリポップ!向け
+    // 時間指定オートクロールの管理(`lolipop_cron.rs`参照、`x-admin-token`必須)。
+    if let Some(rest) = path.strip_prefix("/admin/lolipop-cron/jobs") {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        let rest = rest.trim_matches('/').to_string();
+        let mut parts = rest.splitn(2, '/');
+        let id = parts.next().unwrap_or("").to_string();
+        let action = parts.next().unwrap_or("").to_string();
+        let cron = Arc::clone(&state.lolipop_cron);
+        if id.is_empty() {
+            return match method {
+                Method::GET => json_response(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "tz_offset_hours": cron.tz_offset_hours(),
+                        "jobs": cron.list().iter().map(lolipop_cron::job_view).collect::<Vec<_>>(),
+                    }),
+                ),
+                Method::POST => {
+                    let bytes = match req.into_body().collect().await {
+                        Ok(c) => c.to_bytes(),
+                        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
+                    };
+                    let new: lolipop_cron::NewJob = match serde_json::from_slice(&bytes) {
+                        Ok(p) => p,
+                        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
+                    };
+                    match cron.add(new) {
+                        Ok(job) => json_response(StatusCode::CREATED, &lolipop_cron::job_view(&job)),
+                        Err(e) => error_response(StatusCode::BAD_REQUEST, e.to_string()),
+                    }
+                }
+                _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "unsupported method"),
+            };
+        }
+        return match (method, action.as_str()) {
+            (Method::DELETE, "") => match cron.delete(&id) {
+                Ok(true) => json_response(StatusCode::OK, &serde_json::json!({"deleted": id})),
+                Ok(false) => error_response(StatusCode::NOT_FOUND, "job not found"),
+                Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+            },
+            (Method::POST, "run") => match cron.get(&id) {
+                Some(job) => {
+                    let result = cron.run_job(&job).await;
+                    json_response(StatusCode::OK, &serde_json::json!({"result": result}))
+                }
+                None => error_response(StatusCode::NOT_FOUND, "job not found"),
+            },
+            (Method::PUT, "enabled") => {
+                let bytes = match req.into_body().collect().await {
+                    Ok(c) => c.to_bytes(),
+                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
+                };
+                #[derive(serde::Deserialize)]
+                struct Payload {
+                    enabled: bool,
+                }
+                let payload: Payload = match serde_json::from_slice(&bytes) {
+                    Ok(p) => p,
+                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
+                };
+                match cron.set_enabled(&id, payload.enabled) {
+                    Ok(true) => json_response(StatusCode::OK, &serde_json::json!({"enabled": payload.enabled})),
+                    Ok(false) => error_response(StatusCode::NOT_FOUND, "job not found"),
+                    Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+                }
+            }
+            _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "unsupported method"),
         };
     }
 
@@ -1583,6 +1663,8 @@ async fn main() -> anyhow::Result<()> {
     let listener = bind_listener(bind_addr, state.auto_update.is_enabled()).await?;
     tracing::info!(%bind_addr, auto_update_enabled = state.auto_update.is_enabled(), "open-easy-web-server listening");
 
+    tokio::spawn(lolipop_cron::run_scheduler(Arc::clone(&state.lolipop_cron)));
+
     {
         let auto_update_state = Arc::clone(&state.auto_update);
         let stop_accepting = Arc::clone(&state.stop_accepting);
@@ -1665,6 +1747,7 @@ mod tests {
             sms: None,
             dist_sync: Arc::new(dist_sync::DistSyncRegistry::new(dir.path().join("dist-sync-journal"))),
             auto_update: Arc::new(auto_update::AutoUpdateState::load(dir.path().join("auto-update.json"))),
+            lolipop_cron: Arc::new(lolipop_cron::LolipopCron::load(dir.path().join("lolipop-cron.json"))),
             server_bind_addr: ([127, 0, 0, 1], 0).into(),
             stop_accepting: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             power_profile: Arc::new(power_profile::PowerProfileRegistry::new()),
@@ -2267,6 +2350,7 @@ mod tests {
             smtp: None,
             dist_sync: Arc::new(dist_sync::DistSyncRegistry::new(dir.path().join("dist-sync-journal"))),
             auto_update: Arc::new(auto_update::AutoUpdateState::load(dir.path().join("auto-update.json"))),
+            lolipop_cron: Arc::new(lolipop_cron::LolipopCron::load(dir.path().join("lolipop-cron.json"))),
             server_bind_addr: ([127, 0, 0, 1], 0).into(),
             stop_accepting: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             power_profile: Arc::new(power_profile::PowerProfileRegistry::new()),
