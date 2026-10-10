@@ -661,6 +661,17 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
 
     match (&method, path.as_str()) {
         (&Method::GET, "/healthz") => json_response(StatusCode::OK, &serde_json::json!({"status":"ok"})),
+        // aruaru-IME のオンライン画面。入力は利用者自身のPCで動く aruaru-IME のエンジン(127.0.0.1:4660)へ直接つなぐ
+        // (入力内容はこのサーバーを通らない)。エンジン側は https://easy-web.tokyo からの接続だけを許可する。
+        (&Method::GET, "/ime") => {
+            let app = open_runo_crossui::ime_app("http://127.0.0.1:4660", "0.1.0");
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("content-type", "text/html; charset=utf-8")
+                .header("cache-control", "no-store")
+                .body(Full::new(Bytes::from(open_runo_crossui::page_html(&app, "http://127.0.0.1:4660"))))
+                .expect("static response headers are always valid")
+        }
         // 公開の新規登録は無効化済み(ユーザー指示、2026-07-15、セキュリティ
         // 上の理由)。ログイン可能なのは起動時にシードされる固定アカウント
         // (FIXED_ACCOUNT_EMAIL)のみ——`/api/auth/register`自体を存在しない

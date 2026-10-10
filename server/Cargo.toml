@@ -21,6 +21,8 @@ bytes = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
+# aruaru-IME の共有フロントエンド(RPoem)。/ime で配る。
+open-runo-crossui = { path = "../../RPoem/crates/open-runo-crossui" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 sha2 = "0.10"
