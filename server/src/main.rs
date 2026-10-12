@@ -313,6 +313,14 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
     if path.starts_with("/ime/api/") {
         return ime_api(&method, &path, req).await;
     }
+    // インストーラーを選ぶページ(Windows / macOS / Linux / Android のスマホ・タブレット)
+    if method == Method::GET && (path == "/ime/download" || path == "/ime/download/") {
+        let html = format!(
+            "<!DOCTYPE html><html lang=\"ja\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>aruaru-IME ダウンロード</title><style>:root{{--bg:#111;--fg:#fff;--acc:#4a9eff}}@media (prefers-color-scheme:light){{:root{{--bg:#fff;--fg:#111}}}}body{{margin:0;background:var(--bg);color:var(--fg);font:18px system-ui,sans-serif;padding:16px;max-width:760px}}a{{color:var(--acc)}}li{{margin:10px 0}}</style></head><body><h2>aruaru-IME ダウンロード / Download</h2><p>お使いの OS を選んでください。 / Choose your OS.</p>{}<p><b>Android のスマホ・タブレット</b>: APK を入れたら、アプリを開き、案内に従って「aruaru-IME」キーボードを有効にしてください。 / On Android phones and tablets: install the APK, open the app and enable the aruaru-IME keyboard.</p><p><b>macOS / Linux</b>: ダウンロードしたファイルを展開して <code>sh install.sh</code> を実行します(管理者権限は不要)。 / Extract and run <code>sh install.sh</code> (no admin needed).</p><p><a href=\"/ime\">← オンライン画面 / Online screen</a></p></body></html>",
+            ime_installers_html()
+        );
+        return Response::builder().status(StatusCode::OK).header("content-type", "text/html; charset=utf-8").header("cache-control", "no-store").body(Full::new(Bytes::from(html))).expect("static headers");
+    }
     // aruaru-IME のインストーラーの配布(GitHub を経由せず、このサーバーから直接)。決まった4ファイルだけ。
     if let (&Method::GET, Some(name)) = (&method, path.strip_prefix("/ime/download/")) {
         const FILES: [&str; 5] = [
@@ -770,7 +778,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         // (入力内容はこのサーバーを通らない)。エンジン側は https://easy-web.tokyo からの接続だけを許可する。
         (&Method::GET, "/ime") => {
             let mut app = open_runo_crossui::ime_app("/ime/api", "0.2.0");
-            app.root = open_runo_crossui::ime_root_with(&app.bridge, "/ime/download/aruaru-ime-windows-x86_64-setup.exe", "http://127.0.0.1:4660/ui");
+            app.root = open_runo_crossui::ime_root_with(&app.bridge, "/ime/download", "http://127.0.0.1:4660/ui");
             Response::builder()
                 .status(StatusCode::OK)
                 .header("content-type", "text/html; charset=utf-8")
