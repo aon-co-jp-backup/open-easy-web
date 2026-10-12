@@ -280,6 +280,31 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
     if path.starts_with("/ime/api/") {
         return ime_api(&method, &path, req).await;
     }
+    // aruaru-IME のインストーラーの配布(GitHub を経由せず、このサーバーから直接)。決まった4ファイルだけ。
+    if let (&Method::GET, Some(name)) = (&method, path.strip_prefix("/ime/download/")) {
+        const FILES: [&str; 4] = [
+            "aruaru-ime-windows-x86_64-setup.exe",
+            "aruaru-ime-windows-x86_64-setup.exe.sha256",
+            "aruaru-ime-windows-x86_64.zip",
+            "aruaru-ime-windows-x86_64.zip.sha256",
+        ];
+        if !FILES.contains(&name) {
+            return error_response(StatusCode::NOT_FOUND, "not found");
+        }
+        return match std::fs::read(format!("/var/lib/aruaru-ime/downloads/{name}")) {
+            Ok(b) => {
+                let ct = if name.ends_with(".exe") { "application/vnd.microsoft.portable-executable" } else if name.ends_with(".zip") { "application/zip" } else { "text/plain; charset=utf-8" };
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header("content-type", ct)
+                    .header("content-disposition", format!("attachment; filename=\"{name}\""))
+                    .header("cache-control", "no-cache")
+                    .body(Full::new(Bytes::from(b)))
+                    .expect("static headers")
+            }
+            Err(_) => error_response(StatusCode::NOT_FOUND, "not found"),
+        };
+    }
 
     // `DELETE /api/sites/<name>` (アクション部分なし) はドメイン削除。
     if method == Method::DELETE {
@@ -710,7 +735,8 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         // aruaru-IME のオンライン画面。入力は利用者自身のPCで動く aruaru-IME のエンジン(127.0.0.1:4660)へ直接つなぐ
         // (入力内容はこのサーバーを通らない)。エンジン側は https://easy-web.tokyo からの接続だけを許可する。
         (&Method::GET, "/ime") => {
-            let app = open_runo_crossui::ime_app("/ime/api", "0.1.0");
+            let mut app = open_runo_crossui::ime_app("/ime/api", "0.2.0");
+            app.root = open_runo_crossui::ime_root_with(&app.bridge, "/ime/download/aruaru-ime-windows-x86_64-setup.exe", "http://127.0.0.1:4660/ui");
             Response::builder()
                 .status(StatusCode::OK)
                 .header("content-type", "text/html; charset=utf-8")
