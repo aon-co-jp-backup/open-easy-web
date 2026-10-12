@@ -231,6 +231,39 @@ fn require_session(state: &AppState, req: &Request<Incoming>) -> Result<String, 
     })
 }
 
+/// 配布中の版(VPS の `/var/lib/aruaru-ime/downloads/VERSION`。無ければ 0.2.1)。
+fn ime_version() -> String {
+    std::fs::read_to_string("/var/lib/aruaru-ime/downloads/VERSION").map(|v| v.trim().to_string()).ok().filter(|v| !v.is_empty() && v.chars().all(|c| c.is_ascii_digit() || c == '.')).unwrap_or_else(|| "0.2.1".to_string())
+}
+
+/// OS ごとのインストーラーへのリンク(Windows はこのサーバーから、ほかは GitHub Releases から)。
+fn ime_installers_html() -> String {
+    let v = ime_version();
+    let gh = format!("https://github.com/aon-co-jp/aruaru-IME/releases/download/v{v}");
+    format!(
+        "<ul class=\"ime-dl\">\
+<li data-os=\"windows\"><a href=\"/ime/download/aruaru-ime-windows-x86_64-setup.exe\">Windows (64bit) インストーラー / installer</a></li>\
+<li data-os=\"mac\"><a href=\"{gh}/aruaru-ime-macos-arm64.tar.gz\">macOS (Apple Silicon)</a> ・ <a href=\"{gh}/aruaru-ime-macos-x86_64.tar.gz\">macOS (Intel)</a></li>\
+<li data-os=\"linux\"><a href=\"{gh}/aruaru-ime-linux-x86_64.tar.gz\">Linux (x86_64)</a></li>\
+<li data-os=\"android\"><a href=\"{gh}/aruaru-ime-android.apk\">Android (APK)</a> ・ <a href=\"/ime\">スマホ・タブレットはオンライン画面でも使えます / or use the online screen</a></li>\
+</ul><p><small>v{v} ・ <a href=\"https://github.com/aon-co-jp/aruaru-IME/releases\">すべての版 / all releases</a> ・ 署名されていないため、警告が出ることがあります / unsigned: your OS may warn.</small></p>\
+<script>(function(){{var u=navigator.userAgent,o=/Android/.test(u)?'android':/Mac/.test(u)?'mac':/Linux/.test(u)?'linux':/Win/.test(u)?'windows':'';var l=document.querySelector('.ime-dl [data-os=\"'+o+'\"]');if(l){{l.style.fontWeight='bold';l.insertAdjacentText('afterbegin','▶ ');}}}})();</script>"
+    )
+}
+
+/// トップページ先頭の aruaru-IME の紹介。
+fn ime_banner_html() -> String {
+    format!(
+        "<section id=\"aruaru-ime-intro\" style=\"margin:12px auto;max-width:960px;padding:12px 16px;border:1px solid #888;border-radius:8px;font-family:system-ui,sans-serif\">\
+<h2 style=\"margin:0 0 6px\">aruaru-IME</h2>\
+<p style=\"margin:0 0 8px\">漢字に変換することを前提に、打つそばから変換結果を出す AI の日本語入力(IME)。日本語⇔英語の相互翻訳、中国語・世界の言語、用語辞書、季節用語などに対応。Windows / macOS / Linux / Android。<br>\
+An AI IME that shows the converted (kanji) result as you type, with Japanese⇔English translation, Chinese, many languages and term dictionaries.</p>\
+<p style=\"margin:0 0 6px\"><a href=\"/ime\"><b>ブラウザで試す(オンライン画面) / Try it in the browser</b></a></p>\
+<div><b>ダウンロード / Download</b>{}</div></section>",
+        ime_installers_html()
+    )
+}
+
 /// aruaru-IME のオンライン画面(/ime)の変換 API。VPS 上のサーバー運転の aruaru-IME エンジン(127.0.0.1:4660)へ中継する。
 /// 通すのは /health・/key・/session だけ、本文は4KBまで。**入力内容はこのサーバーを通る**(エンジン側は学習・保存をしない)。
 async fn ime_api(method: &Method, path: &str, req: Request<Incoming>) -> Response<BoxBody> {
@@ -282,7 +315,8 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
     }
     // aruaru-IME のインストーラーの配布(GitHub を経由せず、このサーバーから直接)。決まった4ファイルだけ。
     if let (&Method::GET, Some(name)) = (&method, path.strip_prefix("/ime/download/")) {
-        const FILES: [&str; 4] = [
+        const FILES: [&str; 5] = [
+            "dict.bin",
             "aruaru-ime-windows-x86_64-setup.exe",
             "aruaru-ime-windows-x86_64-setup.exe.sha256",
             "aruaru-ime-windows-x86_64.zip",
@@ -741,7 +775,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 .status(StatusCode::OK)
                 .header("content-type", "text/html; charset=utf-8")
                 .header("cache-control", "no-store")
-                .body(Full::new(Bytes::from(open_runo_crossui::page_html(&app, "/ime/api").replace("</main>", "<div id=\"notice\"><small><b>ご利用上の注意 / Notes</b><ul><li>この画面は、入力した内容をサーバー(easy-web.tokyo)で変換します。入力はサーバーに送られますが、保存・学習はしません。<br>This screen converts your input on the server (easy-web.tokyo). Your input is sent to the server but is not stored or learned.</li><li>自分のPCだけで変換したいときは、従来どおりインストールして「このPCの画面で開く」(http://127.0.0.1:4660/ui)を使ってください。<br>To convert only on your own PC, install the app as usual and use \"Open on this PC\" (http://127.0.0.1:4660/ui).</li><li>個人の学習や登録語は、オンライン画面には反映されません。<br>Your personal learning and registered words are not applied on this online screen.</li><li>中国語・季節用語・優先順位などの辞書は、サーバー側でも同じものが使われます。<br>The same dictionaries (Chinese, seasonal terms, candidate priorities, etc.) are used on the server.</li><li>短時間に大量の操作をすると、一時的に制限されることがあります。<br>Very rapid bursts of requests may be temporarily limited.</li></ul></small></div></main>"))))
+                .body(Full::new(Bytes::from(open_runo_crossui::page_html(&app, "/ime/api").replace("</main>", &("<div id=\"notice\"><small><b>ご利用上の注意 / Notes</b><ul><li>この画面は、入力した内容をサーバー(easy-web.tokyo)で変換します。入力はサーバーに送られますが、保存・学習はしません。<br>This screen converts your input on the server (easy-web.tokyo). Your input is sent to the server but is not stored or learned.</li><li>自分のPCだけで変換したいときは、従来どおりインストールして「このPCの画面で開く」(http://127.0.0.1:4660/ui)を使ってください。<br>To convert only on your own PC, install the app as usual and use \"Open on this PC\" (http://127.0.0.1:4660/ui).</li><li>個人の学習や登録語は、オンライン画面には反映されません。<br>Your personal learning and registered words are not applied on this online screen.</li><li>中国語・季節用語・優先順位などの辞書は、サーバー側でも同じものが使われます。<br>The same dictionaries (Chinese, seasonal terms, candidate priorities, etc.) are used on the server.</li><li>短時間に大量の操作をすると、一時的に制限されることがあります。<br>Very rapid bursts of requests may be temporarily limited.</li></ul></small></div>".to_string() + "<div id=\"installers\"><b>インストーラー(OSを選ぶ) / Installers</b>" + &ime_installers_html() + "</div></main>")))))
                 .expect("static response headers are always valid")
         }
         // 公開の新規登録は無効化済み(ユーザー指示、2026-07-15、セキュリティ
@@ -770,7 +804,19 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         (&Method::GET, p) if p.starts_with("/api/auth/confirm-email-change") => {
             confirm_email_change(&state, &req).await
         }
-        (&Method::GET, "/") => serve_static(&state, "index.html", "text/html; charset=utf-8").await,
+        (&Method::GET, "/") => {
+            // トップページの先頭に aruaru-IME の紹介とダウンロードを差し込む(SPA シェルは変更しない)
+            let mut r = serve_static(&state, "index.html", "text/html; charset=utf-8").await;
+            if r.status() == StatusCode::OK {
+                let (parts, body) = r.into_parts();
+                let bytes = body.collect().await.map(|c| c.to_bytes()).unwrap_or_default();
+                let html = String::from_utf8_lossy(&bytes).into_owned();
+                let html = html.replacen("<body>", &format!("<body>{}", ime_banner_html()), 1);
+                r = Response::from_parts(parts, Full::new(Bytes::from(html)));
+                r.headers_mut().remove("content-length");
+            }
+            r
+        }
         // QR確認ログインページ(2026-08-28新設)。スマホ/タブレット/WEBカメラ
         // 搭載端末で開き、開いた時点で自動的に確認が完了する単体完結ページ。
         (&Method::GET, "/qr-confirm.html") => serve_static(&state, "qr-confirm.html", "text/html; charset=utf-8").await,
