@@ -240,6 +240,21 @@ async fn ime_api(method: &Method, path: &str, req: Request<Incoming>) -> Respons
         (&Method::POST, "/ime/api/session") => "/session",
         _ => return error_response(StatusCode::NOT_FOUND, "not found"),
     };
+    // 回数制限: 1つの接続元あたり1秒に40回まで、全体で1秒に400回まで
+    {
+        static HITS: std::sync::OnceLock<Mutex<(std::time::Instant, u32, std::collections::HashMap<String, u32>)>> = std::sync::OnceLock::new();
+        let ip = req.headers().get("x-forwarded-for").and_then(|v| v.to_str().ok()).and_then(|v| v.split(',').next()).unwrap_or("unknown").trim().to_string();
+        let m = HITS.get_or_init(|| Mutex::new((std::time::Instant::now(), 0, Default::default())));
+        let mut g = m.lock().unwrap_or_else(|e| e.into_inner());
+        if g.0.elapsed() >= std::time::Duration::from_secs(1) {
+            *g = (std::time::Instant::now(), 0, Default::default());
+        }
+        g.1 += 1;
+        let n = { let e = g.2.entry(ip).or_insert(0); *e += 1; *e };
+        if n > 40 || g.1 > 400 {
+            return error_response(StatusCode::TOO_MANY_REQUESTS, "too many requests / リクエストが多すぎます");
+        }
+    }
     let body = match http_body_util::Limited::new(req.into_body(), 4096).collect().await {
         Ok(b) => b.to_bytes(),
         Err(_) => return error_response(StatusCode::PAYLOAD_TOO_LARGE, "too large"),
@@ -700,7 +715,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 .status(StatusCode::OK)
                 .header("content-type", "text/html; charset=utf-8")
                 .header("cache-control", "no-store")
-                .body(Full::new(Bytes::from(open_runo_crossui::page_html(&app, "/ime/api").replace("</main>", "<p><small>この画面は、入力した内容をサーバー(easy-web.tokyo)で変換します。入力はサーバーに送られますが、保存・学習はしません。自分のPCだけで変換したいときは、インストーラーで入れて「このPCの画面で開く」を使ってください。 / This screen converts your input on the server: it is sent to easy-web.tokyo but not stored or learned. For fully local conversion, install the app.</small></p></main>"))))
+                .body(Full::new(Bytes::from(open_runo_crossui::page_html(&app, "/ime/api").replace("</main>", "<div id=\"notice\"><small><b>ご利用上の注意 / Notes</b><ul><li>この画面は、入力した内容をサーバー(easy-web.tokyo)で変換します。入力はサーバーに送られますが、保存・学習はしません。<br>This screen converts your input on the server (easy-web.tokyo). Your input is sent to the server but is not stored or learned.</li><li>自分のPCだけで変換したいときは、従来どおりインストールして「このPCの画面で開く」(http://127.0.0.1:4660/ui)を使ってください。<br>To convert only on your own PC, install the app as usual and use \"Open on this PC\" (http://127.0.0.1:4660/ui).</li><li>個人の学習や登録語は、オンライン画面には反映されません。<br>Your personal learning and registered words are not applied on this online screen.</li><li>中国語・季節用語・優先順位などの辞書は、サーバー側でも同じものが使われます。<br>The same dictionaries (Chinese, seasonal terms, candidate priorities, etc.) are used on the server.</li><li>短時間に大量の操作をすると、一時的に制限されることがあります。<br>Very rapid bursts of requests may be temporarily limited.</li></ul></small></div></main>"))))
                 .expect("static response headers are always valid")
         }
         // 公開の新規登録は無効化済み(ユーザー指示、2026-07-15、セキュリティ
