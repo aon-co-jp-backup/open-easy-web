@@ -231,9 +231,40 @@ fn require_session(state: &AppState, req: &Request<Incoming>) -> Result<String, 
     })
 }
 
+/// aruaru-IME のオンライン画面(/ime)の変換 API。VPS 上のサーバー運転の aruaru-IME エンジン(127.0.0.1:4660)へ中継する。
+/// 通すのは /health・/key・/session だけ、本文は4KBまで。**入力内容はこのサーバーを通る**(エンジン側は学習・保存をしない)。
+async fn ime_api(method: &Method, path: &str, req: Request<Incoming>) -> Response<BoxBody> {
+    let target = match (method, path) {
+        (&Method::GET, "/ime/api/health") => "/health",
+        (&Method::POST, "/ime/api/key") => "/key",
+        (&Method::POST, "/ime/api/session") => "/session",
+        _ => return error_response(StatusCode::NOT_FOUND, "not found"),
+    };
+    let body = match http_body_util::Limited::new(req.into_body(), 4096).collect().await {
+        Ok(b) => b.to_bytes(),
+        Err(_) => return error_response(StatusCode::PAYLOAD_TOO_LARGE, "too large"),
+    };
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    let client = CLIENT.get_or_init(|| reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build().expect("client"));
+    let url = format!("http://127.0.0.1:4660{target}");
+    let r = if method == Method::GET { client.get(&url).send().await } else { client.post(&url).body(body.to_vec()).send().await };
+    match r {
+        Ok(resp) => {
+            let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+            let ct = resp.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("application/json").to_string();
+            let bytes = resp.bytes().await.unwrap_or_default();
+            Response::builder().status(status).header("content-type", ct).header("cache-control", "no-store").body(Full::new(bytes)).expect("static headers")
+        }
+        Err(_) => error_response(StatusCode::BAD_GATEWAY, "ime engine unavailable"),
+    }
+}
+
 async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxBody> {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
+    if path.starts_with("/ime/api/") {
+        return ime_api(&method, &path, req).await;
+    }
 
     // `DELETE /api/sites/<name>` (アクション部分なし) はドメイン削除。
     if method == Method::DELETE {
@@ -664,12 +695,12 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         // aruaru-IME のオンライン画面。入力は利用者自身のPCで動く aruaru-IME のエンジン(127.0.0.1:4660)へ直接つなぐ
         // (入力内容はこのサーバーを通らない)。エンジン側は https://easy-web.tokyo からの接続だけを許可する。
         (&Method::GET, "/ime") => {
-            let app = open_runo_crossui::ime_app("http://127.0.0.1:4660", "0.1.0");
+            let app = open_runo_crossui::ime_app("/ime/api", "0.1.0");
             Response::builder()
                 .status(StatusCode::OK)
                 .header("content-type", "text/html; charset=utf-8")
                 .header("cache-control", "no-store")
-                .body(Full::new(Bytes::from(open_runo_crossui::page_html(&app, "http://127.0.0.1:4660"))))
+                .body(Full::new(Bytes::from(open_runo_crossui::page_html(&app, "/ime/api").replace("</main>", "<p><small>この画面は、入力した内容をサーバー(easy-web.tokyo)で変換します。入力はサーバーに送られますが、保存・学習はしません。自分のPCだけで変換したいときは、インストーラーで入れて「このPCの画面で開く」を使ってください。 / This screen converts your input on the server: it is sent to easy-web.tokyo but not stored or learned. For fully local conversion, install the app.</small></p></main>"))))
                 .expect("static response headers are always valid")
         }
         // 公開の新規登録は無効化済み(ユーザー指示、2026-07-15、セキュリティ
