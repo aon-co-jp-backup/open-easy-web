@@ -552,3 +552,24 @@ Apache-2.0
 ロリポップ管理画面用のcron書式の書き出し、**サーバー停止中に過ぎた時刻の後追い実行**(既定ON・直近24時間・1回のみ)を実装。テスト7件合格、ローカルで再起動後の後追いも実測済み。
 実ロリポップ(`www.ion.tokyo`)へのGET 1回でHTTP 200を確認。**未確認**: ロリポップ上での長期の自動発火。
 **お引越し**: 設定は `OPEN_EASYWEB_LOLIPOP_CRON_FILE`(既定`/var/www/.open-easy-web-lolipop-cron.json`)のJSON1ファイル。新サーバーへはこのファイルをコピーし、環境変数`OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN`を設定すれば移せる。
+
+## JSON処理の使用方針: `parse_secure_sonic`(速い型+安全)と`sonic-rs`は使える所では全て使う(2026-10-14、ユーザー指示)
+正本は[`RS-JSON`](https://github.com/aon-co-jp/RS-JSON)(`README.md`・`PORTING.md`)。
+
+**方針**: JSONを読む所は、使える所では**全て** `rust-json`(RS-JSON)の `parse_secure_sonic`(`fast`機能、結果は`sonic_rs::Value`)を使う。
+`sonic-rs` を直接使える所(型付き構造体への読み込みなど)も同様。使えない所は `parse_secure`(結果は`serde_json::Value`)を使う。
+外部から来る信頼できない入力(HTTP本文・ネットワーク越しのファイル・アップロード)は、**必ずサイズ・深さ・重複キーの上限つき**で読む。
+
+**実測(7 MB・4万件)**: `serde_json` 200 ms / `parse_secure` 217 ms / **`parse_secure_sonic` 83 ms(約2.4倍速い、防御込み)** / `sonic-rs`そのまま 33 ms(約6倍、防御なし)。
+`serde_json::Value`に読む限りSIMDでもほぼ速くならない(188 ms)。**速さの源は、結果を連続した領域に詰め込む値の型**。
+
+**使える所 / 使えない所**
+- ✅ 読み取り中心で、JSONを大きく・頻繁に読む所(キャッシュJSON、設定、APIの応答、ログ、インデックス)。
+- ✅ 外部からの入力の入口(速さより防御が目的。`parse_secure`でも可)。
+- ⚠️ `serde_json::Value`を関数間で受け渡している既存コードは、型を`sonic_rs::Value`に直す書き換えが要る(`JsonValueTrait`/`JsonContainerTrait`のメソッド)。書き換えずに`serde_json::Value`へ読むと速くならない。
+- ❌ WASM(`rust_json::light`、依存ゼロ)、PHP/JavaScript側のJSON処理(Rustの部品は使えない)。
+- 注意: 依存先の`sonic-rs`は内部で`unsafe`を使う(自前コードに`unsafe`は無い)。小さなJSON(数KB)では体感差が出ない。速度目的の書き換えは、実測で効く所から。
+
+**導入**: `Cargo.toml`に `rust-json = { path = "../RS-JSON", features = ["fast"] }`。使用例は`RS-JSON/README.md`。
+
+**このリポジトリでの適用状況**: 未適用(方針のみ)。コードの切り替えは、JSONを大きく・頻繁に読む所から実測して順に行う。
