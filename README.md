@@ -546,3 +546,9 @@ open-easy-web/
 ## License
 
 Apache-2.0
+
+## ロリポップ!向け時間指定オートクロール(cron相当、2026-10-08)と後追い実行・設定画面
+指定した時刻・曜日にURLを自動でHTTP呼び出しする内蔵スケジューラ(`server/src/lolipop_cron.rs`)。管理API `/admin/lolipop-cron/jobs`、設定画面(WASM)、
+ロリポップ管理画面用のcron書式の書き出し、**サーバー停止中に過ぎた時刻の後追い実行**(既定ON・直近24時間・1回のみ)を実装。テスト7件合格、ローカルで再起動後の後追いも実測済み。
+実ロリポップ(`www.ion.tokyo`)へのGET 1回でHTTP 200を確認。**未確認**: ロリポップ上での長期の自動発火。
+**お引越し**: 設定は `OPEN_EASYWEB_LOLIPOP_CRON_FILE`(既定`/var/www/.open-easy-web-lolipop-cron.json`)のJSON1ファイル。新サーバーへはこのファイルをコピーし、環境変数`OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN`を設定すれば移せる。

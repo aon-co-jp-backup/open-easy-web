@@ -278,3 +278,9 @@ full honest verification status.
 ## License
 
 Apache-2.0
+
+## Timed auto-crawl for Lolipop (cron-like, 2026-10-08), catch-up runs and the settings screen
+A built-in scheduler (`server/src/lolipop_cron.rs`) that calls URLs over HTTP at chosen times/weekdays. Includes the admin API `/admin/lolipop-cron/jobs`, a WASM settings screen,
+export in the Lolipop control-panel cron format, and **catch-up runs for slots missed while the server was down** (on by default, last 24 h, once only). 7 tests pass; catch-up after a restart was measured locally.
+One GET to a real Lolipop site (`www.ion.tokyo`) returned HTTP 200. **Unverified**: long-term automatic firing on Lolipop.
+**Moving servers**: the settings are one JSON file, `OPEN_EASYWEB_LOLIPOP_CRON_FILE` (default `/var/www/.open-easy-web-lolipop-cron.json`). Copy it and set `OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN` on the new server.
