@@ -85,7 +85,7 @@ async fn read_json_body<T: serde::de::DeserializeOwned>(
             ))
         }
     };
-    serde_json::from_slice(&bytes).map_err(|e| {
+    sonic_rs::from_slice(&bytes).map_err(|e| {
         json_response(
             StatusCode::BAD_REQUEST,
             &serde_json::json!({"ok": false, "error": format!("invalid JSON: {e}")}),

@@ -179,7 +179,7 @@ fn migrate_stale_self_seed(profiles: &mut Vec<SiteProfile>) -> bool {
 pub fn load_profiles() -> Vec<SiteProfile> {
     if let Some(storage) = local_storage() {
         if let Ok(Some(raw)) = storage.get_item(STORAGE_KEY) {
-            if let Ok(mut profiles) = serde_json::from_str::<Vec<SiteProfile>>(&raw) {
+            if let Ok(mut profiles) = sonic_rs::from_str::<Vec<SiteProfile>>(&raw) {
                 if !profiles.is_empty() {
                     if migrate_stale_self_seed(&mut profiles) {
                         save_profiles(&profiles);
@@ -787,7 +787,7 @@ pub fn import_profiles_from_file(file: web_sys::File) {
 }
 
 fn apply_imported_json(text: &str) {
-    match serde_json::from_str::<Vec<SiteProfile>>(text) {
+    match sonic_rs::from_str::<Vec<SiteProfile>>(text) {
         Ok(profiles) if !profiles.is_empty() => {
             let confirmed = crate::dom::window()
                 .confirm_with_message(&format!(

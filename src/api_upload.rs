@@ -13,7 +13,7 @@ fn json_to_value(js: &JsValue) -> Value {
     js_sys::JSON::stringify(js)
         .ok()
         .and_then(|s| s.as_string())
-        .and_then(|s| serde_json::from_str(&s).ok())
+        .and_then(|s| sonic_rs::from_str(&s).ok())
         .unwrap_or(Value::Null)
 }
 

@@ -154,7 +154,7 @@ pub fn correct(
 pub fn load_weights(state_path: &Path) -> PhpSignalWeights {
     std::fs::read_to_string(state_path)
         .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
+        .and_then(|s| sonic_rs::from_str(&s).ok())
         .unwrap_or_default()
 }
 

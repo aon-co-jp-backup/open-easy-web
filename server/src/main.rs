@@ -526,7 +526,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 struct Payload {
                     login_mode: String,
                 }
-                let payload: Payload = match serde_json::from_slice(&bytes) {
+                let payload: Payload = match sonic_rs::from_slice(&bytes) {
                     Ok(p) => p,
                     Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
                 };
@@ -578,7 +578,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 struct Payload {
                     profiles: Vec<String>,
                 }
-                let payload: Payload = match serde_json::from_slice(&bytes) {
+                let payload: Payload = match sonic_rs::from_slice(&bytes) {
                     Ok(p) => p,
                     Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
                 };
@@ -635,7 +635,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                         Ok(c) => c.to_bytes(),
                         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
                     };
-                    let new: lolipop_cron::NewJob = match serde_json::from_slice(&bytes) {
+                    let new: lolipop_cron::NewJob = match sonic_rs::from_slice(&bytes) {
                         Ok(p) => p,
                         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
                     };
@@ -669,7 +669,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 struct Payload {
                     enabled: bool,
                 }
-                let payload: Payload = match serde_json::from_slice(&bytes) {
+                let payload: Payload = match sonic_rs::from_slice(&bytes) {
                     Ok(p) => p,
                     Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
                 };
@@ -717,7 +717,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 struct Payload {
                     enabled: bool,
                 }
-                let payload: Payload = match serde_json::from_slice(&bytes) {
+                let payload: Payload = match sonic_rs::from_slice(&bytes) {
                     Ok(p) => p,
                     Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
                 };
@@ -1082,7 +1082,7 @@ async fn correct_detection(state: &AppState, site: &str, req: Request<Incoming>)
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: CorrectRequest = match serde_json::from_slice(&bytes) {
+    let payload: CorrectRequest = match sonic_rs::from_slice(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1116,7 +1116,7 @@ async fn register_appserver(site: &str, req: Request<Incoming>) -> Response<BoxB
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: appserver_registration::RegisterAppserverRequest = match serde_json::from_slice(&bytes) {
+    let payload: appserver_registration::RegisterAppserverRequest = match sonic_rs::from_slice(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1149,7 +1149,7 @@ async fn request_otp(state: &AppState, req: Request<Incoming>) -> Response<BoxBo
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: ContactRequest = match serde_json::from_slice(&bytes) {
+    let payload: ContactRequest = match sonic_rs::from_slice(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1219,7 +1219,7 @@ async fn totp_login(state: &AppState, req: Request<Incoming>) -> Response<BoxBod
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: TotpLoginRequest = match serde_json::from_slice(&bytes) {
+    let payload: TotpLoginRequest = match sonic_rs::from_slice(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1305,7 +1305,7 @@ async fn qr_login_start(state: &AppState, req: Request<Incoming>) -> Response<Bo
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: QrLoginStartRequest = match serde_json::from_slice(&bytes) {
+    let payload: QrLoginStartRequest = match sonic_rs::from_slice(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1333,7 +1333,7 @@ async fn qr_login_confirm(state: &AppState, req: Request<Incoming>) -> Response<
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: QrLoginIdRequest = match serde_json::from_slice(&bytes) {
+    let payload: QrLoginIdRequest = match sonic_rs::from_slice(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1365,7 +1365,7 @@ async fn qr_login_finish(state: &AppState, req: Request<Incoming>) -> Response<B
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: QrLoginIdRequest = match serde_json::from_slice(&bytes) {
+    let payload: QrLoginIdRequest = match sonic_rs::from_slice(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1405,7 +1405,7 @@ async fn verify_otp(state: &AppState, req: Request<Incoming>) -> Response<BoxBod
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: VerifyOtpRequest = match serde_json::from_slice(&bytes) {
+    let payload: VerifyOtpRequest = match sonic_rs::from_slice(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1521,7 +1521,7 @@ async fn totp_enable(state: &AppState, req: Request<Incoming>) -> Response<BoxBo
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: TotpCodeRequest = match serde_json::from_slice(&bytes) {
+    let payload: TotpCodeRequest = match sonic_rs::from_slice(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1594,7 +1594,7 @@ async fn request_email_change(state: &AppState, req: Request<Incoming>) -> Respo
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: RequestEmailChangeRequest = match serde_json::from_slice(&bytes) {
+    let payload: RequestEmailChangeRequest = match sonic_rs::from_slice(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1684,7 +1684,7 @@ async fn logout(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: TokenRequest = match serde_json::from_slice(&bytes) {
+    let payload: TokenRequest = match sonic_rs::from_slice(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };

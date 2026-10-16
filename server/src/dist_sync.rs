@@ -407,7 +407,7 @@ pub async fn register_target(
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: RegisterTargetRequest = match serde_json::from_slice(&bytes) {
+    let payload: RegisterTargetRequest = match sonic_rs::from_slice(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -452,7 +452,7 @@ pub async fn set_disaster_fallback(
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: DisasterFallbackRequest = match serde_json::from_slice(&bytes) {
+    let payload: DisasterFallbackRequest = match sonic_rs::from_slice(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };

@@ -86,7 +86,7 @@ impl AutoUpdateState {
     /// `OPEN_EASYWEB_AUTO_UPDATE`環境変数(既定`false`)を初期値とする。
     pub fn load(settings_path: PathBuf) -> Self {
         let enabled = match std::fs::read(&settings_path) {
-            Ok(bytes) => serde_json::from_slice::<PersistedSettings>(&bytes).map(|s| s.enabled).unwrap_or(false),
+            Ok(bytes) => sonic_rs::from_slice::<PersistedSettings>(&bytes).map(|s| s.enabled).unwrap_or(false),
             Err(_) => std::env::var("OPEN_EASYWEB_AUTO_UPDATE").map(|v| v == "true" || v == "1").unwrap_or(false),
         };
         Self { settings_path, enabled: std::sync::RwLock::new(enabled), last_cycle_started_at: std::sync::RwLock::new(std::time::Instant::now()) }

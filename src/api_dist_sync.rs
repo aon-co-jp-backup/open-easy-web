@@ -51,7 +51,7 @@ async fn call<T: Serialize>(
     let parsed: Value = js_sys::JSON::stringify(&json_value)
         .ok()
         .and_then(|s| s.as_string())
-        .and_then(|s| serde_json::from_str(&s).ok())
+        .and_then(|s| sonic_rs::from_str(&s).ok())
         .unwrap_or(Value::Null);
 
     if (200..300).contains(&status) {

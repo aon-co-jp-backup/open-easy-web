@@ -88,13 +88,13 @@ async fn post_json(path: &str, token: Option<&str>, body: &impl Serialize) -> Re
 }
 
 /// `js_sys`/`serde_json`橋渡し。`serde-wasm-bindgen`crateを新規追加せず、
-/// `JSON.stringify`→`serde_json::from_str`で素朴に変換する
+/// `JSON.stringify`→`sonic_rs::from_str`で素朴に変換する
 /// (このリポジトリの「薄い依存のみ」方針に合わせた)。
 fn serde_wasm_bindgen_lite(value: &JsValue) -> Value {
     js_sys::JSON::stringify(value)
         .ok()
         .and_then(|s| s.as_string())
-        .and_then(|s| serde_json::from_str(&s).ok())
+        .and_then(|s| sonic_rs::from_str(&s).ok())
         .unwrap_or(Value::Null)
 }
 

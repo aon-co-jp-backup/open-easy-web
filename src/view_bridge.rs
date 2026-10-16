@@ -79,7 +79,7 @@ fn read_hydration_state() -> StatusPanelState {
                 js_sys::JSON::stringify(&v).ok().and_then(|s| s.as_string())
             }
         })
-        .and_then(|json| serde_json::from_str(&json).ok())
+        .and_then(|json| sonic_rs::from_str(&json).ok())
         .unwrap_or_default()
 }
 
