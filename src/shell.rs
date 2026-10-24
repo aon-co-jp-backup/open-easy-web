@@ -73,6 +73,14 @@ pub const SHELL_HTML: &str = r#"
   </div>
 
   <div class="project-card">
+    <h3>maid-cafe-english (LINE app version / LINEアプリ版)</h3>
+    <p class="muted">open-englishの後継名。LINEで友だちになると、同じ英会話レッスンをLINEのトークで使えます。マウスの代わりに数字で選び、文字でも音声メッセージでも話しかけられ、返事は選んだ先生(メイドちゃん/執事)の声でも届きます。 / The renamed open-english, also available as a LINE bot: pick menu items by number, talk by text or voice message, and hear the reply in the voice of the maid or butler teacher you choose.</p>
+    <a href="https://easy-web.tokyo/maid-cafe-english/">Web (本番)</a> ・
+    <a href="https://easy-web.tokyo/maid-cafe-english/#line-friend-link">LINE app version (LINEアプリ版・友だち追加)</a> ・
+    <a href="https://github.com/aon-co-jp/maid-cafe-english">GitHub</a>
+  </div>
+
+  <div class="project-card">
     <h3>Ecosystem Projects (エコシステム関連プロジェクト一覧)</h3>
     <p class="muted">Every related repository under the aon-co-jp organization, with a one-line summary taken from its own README, plus links to whichever demos are actually hosted / aon-co-jp organization配下の関連リポジトリを一覧で紹介するページ。説明は各リポジトリのREADMEに基づき、実際にホストされているデモへのリンクを掲載しています</p>
     <a href="/projects">Project directory (プロジェクト一覧)</a> ・
@@ -1342,6 +1350,7 @@ schtasks /create /tn "Daily Backup" /tr "C:\path\to\backup.bat" /sc daily /st 03
     <p class="muted">PC・タブレット・スマホ向けの英会話学習Webアプリ。魔法少女メイドのキャラクターが、保育園児〜高3の13学年+社会人までを学年制限なしに指導します。 / Browser-based English-conversation learning app covering 13 school years with no age restriction.</p>
     <p class="muted">⚠️ このWEB版はデモです。フル機能はインストーラー付きアプリをダウンロードしてご利用ください。 / This WEB version is a demo — please download and install the app for the full experience.</p>
     <a href="https://easy-web.tokyo/open-english/demo" target="_blank" rel="noopener noreferrer">Demo (デモ)</a> ・ <a href="https://github.com/aon-co-jp/open-english/releases/latest" target="_blank" rel="noopener noreferrer">Download installer (インストーラーをダウンロード)</a> ・ <a href="https://github.com/aon-co-jp/open-english" target="_blank" rel="noopener noreferrer">GitHub (詳細を見る)</a>
+      <p class="muted">📱 LINEアプリ版あり(数字で選択・音声入力・声で返事): <a href="https://easy-web.tokyo/maid-cafe-english/" target="_blank" rel="noopener noreferrer">maid-cafe-english</a> / A LINE app version is available.</p>
   </div>
 
   <div class="project-card">
