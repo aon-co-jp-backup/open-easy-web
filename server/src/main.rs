@@ -264,6 +264,11 @@ An AI IME that shows the converted (kanji) result as you type, with Japanese⇔E
     )
 }
 
+/// トップページの open-mirror の紹介(ページ本体は /open-mirror、デモは /open-mirror/demo)。
+fn mirror_banner_html() -> String {
+    "<section id=\"open-mirror-intro\" style=\"margin:12px auto;max-width:960px;padding:12px 16px;border:1px solid #888;border-radius:8px;font-family:system-ui,sans-serif\"><h2 style=\"margin:0 0 6px\">open-mirror</h2><p style=\"margin:0 0 8px\">必要なものだけを選んで、バックアップ・ミラーするツール。いまは GitHub の公開リポジトリを毎日 GitLab へ一方向でミラーしています。PC・スマホ・タブレット(ネットに繋がったら自動で開始)、VPS、レンタルサーバー、ブログなどを、厳選リストで選んで保存できるようにする予定です(予定の部分はまだ動きません)。<br>A tool that backs up and mirrors only what you choose. Today it mirrors the public GitHub repositories to GitLab every day; selecting PCs, phones, tablets (auto-start when online), VPS, rental servers and blogs from a curation list is planned and does not run yet.</p><p style=\"margin:0\"><a href=\"/open-mirror\"><b>紹介 / About</b></a> ・ <a href=\"/open-mirror/demo\"><b>デモを試す / Try the demo</b></a> ・ <a href=\"https://github.com/aon-co-jp/open-mirror\">GitHub</a></p></section>".to_string()
+}
+
 /// aruaru-IME のオンライン画面(/ime)の変換 API。VPS 上のサーバー運転の aruaru-IME エンジン(127.0.0.1:4660)へ中継する。
 /// 通すのは /health・/key・/session だけ、本文は4KBまで。**入力内容はこのサーバーを通る**(エンジン側は学習・保存をしない)。
 async fn ime_api(method: &Method, path: &str, req: Request<Incoming>) -> Response<BoxBody> {
@@ -819,7 +824,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 let (parts, body) = r.into_parts();
                 let bytes = body.collect().await.map(|c| c.to_bytes()).unwrap_or_default();
                 let html = String::from_utf8_lossy(&bytes).into_owned();
-                let html = html.replacen("<body>", &format!("<body>{}", ime_banner_html()), 1);
+                let html = html.replacen("<body>", &format!("<body>{}{}", ime_banner_html(), mirror_banner_html()), 1);
                 r = Response::from_parts(parts, Full::new(Bytes::from(html)));
                 r.headers_mut().remove("content-length");
             }
