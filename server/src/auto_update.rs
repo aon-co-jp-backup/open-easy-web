@@ -235,7 +235,7 @@ fn extract_zip_binary(bytes: &[u8], dest_dir: &Path) -> Result<PathBuf> {
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).context("failed to open zip archive")?;
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).context("failed to read zip entry")?;
-        if file.name().ends_with(BINARY_NAME_WINDOWS) {
+        if file.name().is_ok_and(|n| n.ends_with(BINARY_NAME_WINDOWS)) {
             let dest = dest_dir.join(BINARY_NAME_WINDOWS);
             let mut buf = Vec::new();
             file.read_to_end(&mut buf).context("failed to read binary from zip")?;
