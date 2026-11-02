@@ -114,6 +114,19 @@ Nginx/Apache設定生成という形ではなく、**`open-runo`/RPoem(旧poem-c
   Webフレームワーク(Yew/Leptos/Dioxus等)も、強い理由がない限り採用しない。
   https://webassembly.org/ | https://rustwasm.github.io/
 
+## ストレージのメンテナンス(標準機能、2026-11-03追加、ユーザー指示)
+
+HDD/SSD の「健康チェック(SMART)」「無駄なデータの整理」「TRIM/最適化」を、標準機能として持つ。実体は姉妹リポジトリ **`vps-tidy`**(`../vps-tidy`、Rust、Linux/Windows)で、このリポジトリには、サーバーへの組み込みだけを置く:
+`server/src/storage_maintenance.rs`(設定・直近の結果の保存、毎日の定期実行、`/admin/storage/...` の処理)、`src/api_storage.rs`・`src/storage_ui.rs`・`src/shell.rs` のパネル(画面)。
+
+**守ること**
+- **消す対象は、固定の規則だけで決める(AIは使わない)**。既定は安全側(整理=試し実行、最適化=無効)。「実際に実行」は、`apply: true` を明示したときだけ。画面からは、確認ダイアログを必ず出す。
+- JSON は **RS-JSON** で扱う(状態ファイルとリクエスト本文は `from_str_secure`、書き出しは `rust_json::fast`)。**ただし画面(WASM)側は、`sonic-rs` を使わない**(32ビット WASM でビルドできない。`serde_json` を使う)。
+- 2026-11-03: 10/16 の「`sonic-rs` への置き換え」(99cf994)が、画面(WASM)側にも入っていて、`cargo build --target wasm32-unknown-unknown` が通らなくなっていた(`pkg/` の再生成ができなかった)。画面側の `sonic_rs::from_str` を `serde_json::from_str` に戻して直した。**WASM に `sonic-rs` を戻さないこと**。
+
+**確認したこと(2026-11-03)**: サーバーのテスト127件、WASM のビルド、ローカルで実サーバーを起動して、管理API(認証なし=401、不正な値・重複キー=400、健康チェック=3台、最適化=計画だけ)と、ブラウザの画面(健康チェック、整理の試し実行、「実際に実行」の確認ダイアログ、実際の削除=`node_modules` だけ消えて、隣のファイルと保護パスは無事)を確認した。
+**未確認**: 本番(VPS)への反映、Linux での SMART(`smartctl`)の実機、Windows の管理者権限での最適化の実行。
+
 ## ビルド手順(このリポジトリ固有)
 
 ```bash

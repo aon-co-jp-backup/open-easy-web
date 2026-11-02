@@ -16,6 +16,7 @@ mod disk_breakdown;
 mod dist_sync;
 mod local_proxy;
 mod lolipop_cron;
+mod storage_maintenance;
 mod memory_breakdown;
 mod memory_governor;
 mod mail;
@@ -73,6 +74,8 @@ struct AppState {
     auto_update: Arc<auto_update::AutoUpdateState>,
     /// ロリポップ!向け時間指定オートクロール(`lolipop_cron.rs`参照)。
     lolipop_cron: Arc<lolipop_cron::LolipopCron>,
+    /// ストレージ(HDD/SSD)のメンテナンス: 健康チェック・無駄なデータの整理・TRIM/最適化(`storage_maintenance.rs`参照)。
+    storage_maintenance: Arc<storage_maintenance::StorageMaintenance>,
     /// 自分自身のリスンアドレス(`auto_update`のヘルスチェック・
     /// 「今すぐ確認」機能が新プロセスへ問い合わせる先として使う)。
     server_bind_addr: std::net::SocketAddr,
@@ -155,6 +158,10 @@ impl AppState {
                 "OPEN_EASYWEB_LOLIPOP_CRON_FILE",
                 "/var/www/.open-easy-web-lolipop-cron.json",
             ))),
+            storage_maintenance: Arc::new(storage_maintenance::StorageMaintenance::load(
+                env_path("OPEN_EASYWEB_STORAGE_MAINTENANCE_FILE", "/var/www/.open-easy-web-storage-maintenance.json"),
+                std::env::var("OPEN_EASYWEB_STORAGE_TIDY_CONFIG").map(PathBuf::from).unwrap_or_else(|_| vps_tidy::config::default_config_path()),
+            )),
             server_bind_addr: std::env::var("OPEN_EASYWEB_SERVER_BIND")
                 .unwrap_or_else(|_| "0.0.0.0:8090".into())
                 .parse()
@@ -612,6 +619,56 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 }
             }
             _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string()),
+        };
+    }
+
+    // `/admin/storage/...` — ストレージ(HDD/SSD)のメンテナンス(健康チェック・無駄なデータの整理・TRIM/最適化、
+    // `storage_maintenance.rs`参照、`x-admin-token`必須)。実際に消す/実行するのは、リクエストで `apply: true` を
+    // 明示したときだけ(既定は試し実行・計画だけ)。
+    if let Some(rest) = path.strip_prefix("/admin/storage/") {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        let sm = Arc::clone(&state.storage_maintenance);
+        let rest = rest.trim_matches('/').to_string();
+        return match (method.clone(), rest.as_str()) {
+            (Method::GET, "maintenance") => json_response(StatusCode::OK, &sm.view()),
+            (Method::PUT, "maintenance/settings") => {
+                let bytes = match http_body_util::Limited::new(req.into_body(), 4096).collect().await {
+                    Ok(c) => c.to_bytes(),
+                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
+                };
+                let new: storage_maintenance::Settings = match storage_maintenance::parse_body(&bytes) {
+                    Ok(v) => v,
+                    Err(e) => return error_response(StatusCode::BAD_REQUEST, e),
+                };
+                match sm.set_settings(new) {
+                    Ok(s) => json_response(StatusCode::OK, &s),
+                    Err(e) => error_response(StatusCode::BAD_REQUEST, e),
+                }
+            }
+            (Method::POST, "health") => {
+                let v = tokio::task::spawn_blocking(move || sm.run_health()).await.unwrap_or_else(|_| serde_json::json!({"error": "task failed"}));
+                json_response(StatusCode::OK, &v)
+            }
+            (Method::POST, "tidy") | (Method::POST, "optimize") => {
+                #[derive(serde::Deserialize, Default)]
+                struct ApplyBody {
+                    #[serde(default)]
+                    apply: bool,
+                }
+                let bytes = match http_body_util::Limited::new(req.into_body(), 4096).collect().await {
+                    Ok(c) => c.to_bytes(),
+                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
+                };
+                let apply = if bytes.is_empty() { false } else { storage_maintenance::parse_body::<ApplyBody>(&bytes).map(|b| b.apply).unwrap_or(false) };
+                let is_tidy = rest == "tidy";
+                let v = tokio::task::spawn_blocking(move || if is_tidy { sm.run_tidy(apply) } else { sm.run_optimize(apply) })
+                    .await
+                    .unwrap_or_else(|_| serde_json::json!({"error": "task failed"}));
+                json_response(StatusCode::OK, &v)
+            }
+            _ => error_response(StatusCode::NOT_FOUND, "unknown storage endpoint"),
         };
     }
 
@@ -1806,6 +1863,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(%bind_addr, auto_update_enabled = state.auto_update.is_enabled(), "open-easy-web-server listening");
 
     tokio::spawn(lolipop_cron::run_scheduler(Arc::clone(&state.lolipop_cron)));
+    tokio::spawn(storage_maintenance::run_scheduler(Arc::clone(&state.storage_maintenance)));
 
     {
         let auto_update_state = Arc::clone(&state.auto_update);
@@ -1890,6 +1948,7 @@ mod tests {
             dist_sync: Arc::new(dist_sync::DistSyncRegistry::new(dir.path().join("dist-sync-journal"))),
             auto_update: Arc::new(auto_update::AutoUpdateState::load(dir.path().join("auto-update.json"))),
             lolipop_cron: Arc::new(lolipop_cron::LolipopCron::load(dir.path().join("lolipop-cron.json"))),
+            storage_maintenance: Arc::new(storage_maintenance::StorageMaintenance::load(dir.path().join("storage-maintenance.json"), dir.path().join("storage-tidy.toml"))),
             server_bind_addr: ([127, 0, 0, 1], 0).into(),
             stop_accepting: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             power_profile: Arc::new(power_profile::PowerProfileRegistry::new()),
@@ -2493,6 +2552,7 @@ mod tests {
             dist_sync: Arc::new(dist_sync::DistSyncRegistry::new(dir.path().join("dist-sync-journal"))),
             auto_update: Arc::new(auto_update::AutoUpdateState::load(dir.path().join("auto-update.json"))),
             lolipop_cron: Arc::new(lolipop_cron::LolipopCron::load(dir.path().join("lolipop-cron.json"))),
+            storage_maintenance: Arc::new(storage_maintenance::StorageMaintenance::load(dir.path().join("storage-maintenance.json"), dir.path().join("storage-tidy.toml"))),
             server_bind_addr: ([127, 0, 0, 1], 0).into(),
             stop_accepting: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             power_profile: Arc::new(power_profile::PowerProfileRegistry::new()),

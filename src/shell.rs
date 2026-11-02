@@ -408,6 +408,44 @@ Windows: .\uninstall.ps1 (as Administrator / 管理者権限で)</pre>
   <p id="auto-update-status" class="muted" aria-live="polite"></p>
 </section>
 
+<section id="storage-maintenance-section">
+  <h3>ストレージ(HDD/SSD)のメンテナンス (Storage maintenance)</h3>
+  <p class="muted">ディスクの<strong>健康チェック</strong>(SMART など)、<strong>無駄なデータの整理</strong>、SSD の <strong>TRIM</strong> / HDD の<strong>最適化</strong>を、決まった規則で安全に行います(AIは使いません)。整理と最適化は、<strong>「試し実行」「計画」が既定</strong>で、実際に実行するのは、下の「実際に実行」を押したときだけです。</p>
+  <label>Admin token (管理トークン)<input type="password" id="storage-admin-token" placeholder="OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN の値"></label>
+  <p id="storage-info" class="muted"></p>
+
+  <h4>1. 健康チェック (Health check)</h4>
+  <div class="buttons"><button id="storage-health-btn">今すぐ健康チェック (Check now)</button></div>
+  <div id="storage-health-result"></div>
+
+  <h4>2. 無駄なデータの整理 (Tidy)</h4>
+  <div class="buttons">
+    <button id="storage-tidy-dry-btn">試し実行(何も消さない) (Dry run)</button>
+    <button id="storage-tidy-apply-btn">実際に実行(削除する) (Run for real)</button>
+  </div>
+  <div id="storage-tidy-result"></div>
+
+  <h4>3. 最適化 (SSD の TRIM / HDD の最適化)</h4>
+  <div class="buttons">
+    <button id="storage-optimize-dry-btn">計画だけ (Plan only)</button>
+    <button id="storage-optimize-apply-btn">実際に実行 (Run for real)</button>
+  </div>
+  <div id="storage-optimize-result"></div>
+
+  <h4>4. 自動実行の設定 (Schedule)</h4>
+  <label class="toggle-row"><input type="checkbox" id="storage-health-enabled" checked>健康チェックを毎日実行する(読み取りだけ)</label>
+  <label class="toggle-row"><input type="checkbox" id="storage-tidy-enabled" checked>無駄なデータの整理を毎日実行する</label>
+  <label class="toggle-row"><input type="checkbox" id="storage-tidy-apply">└ 自動でも、<strong>実際に削除する</strong>(オフ=試し実行だけ。報告だけ残る)</label>
+  <label class="toggle-row"><input type="checkbox" id="storage-optimize-enabled">最適化(TRIM/最適化)を毎週日曜に実行する</label>
+  <label class="toggle-row"><input type="checkbox" id="storage-optimize-apply">└ 自動でも、<strong>実際に実行する</strong>(オフ=計画だけ)</label>
+  <label>実行する時刻(0〜23 時、サーバーの現地時間)<input type="number" id="storage-hour" min="0" max="23" value="4"></label>
+  <div class="buttons">
+    <button id="storage-save-btn">設定を保存 (Save)</button>
+    <button id="storage-refresh-btn">最新の状態を取得 (Refresh)</button>
+  </div>
+  <p id="storage-status" class="muted" aria-live="polite"></p>
+</section>
+
 <section id="lolipop-cron-section">
   <h3>ロリポップ!時間指定オートクロール (Lolipop timed auto-crawl / cron)</h3>
   <p class="muted">

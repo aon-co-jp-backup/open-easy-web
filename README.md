@@ -402,6 +402,20 @@ HTTPSで公開したい場合は、ご自身で証明書を用意し、別のTLS
 [GitHub Releases](https://github.com/aon-co-jp/open-easy-web/releases/latest))
 リンクを追加。詳細は[PORTING.md §15](PORTING.md#15-android版の外付けhdd対応--リリースワークフローのsibling依存漏れ2026-08-04)参照。
 
+## ストレージ(HDD/SSD)のメンテナンス(標準機能、2026-11-03追加)
+
+サーバーが動いているマシンの HDD/SSD を、**決まった規則だけで、安全に、定期的に**メンテナンスする標準機能です(AIは使いません)。中身は、姉妹リポジトリ [`vps-tidy`](https://github.com/aon-co-jp/vps-tidy)(Rust 製、Linux と Windows)で、ここは「サーバーへの組み込み」(設定の保存・定期実行・管理API・画面)です。
+
+- **健康チェック**(SMART など、読み取りだけ): Linux は `smartctl`(smartmontools)、Windows は `Get-PhysicalDisk` と `Get-StorageReliabilityCounter`(追加のソフト不要)。「正常 / 不明 / 注意 / 危険」と、その理由(代替処理セクター・保留セクター・SSD の消耗・温度・Windows の総合判定 など)を出す。取得できなかったもの(仮想ディスク・ツール無し)は「不明」で、「正常」とは言わない。
+- **無駄なデータの整理**: 古い実行ファイルの控え、古いログ、キャッシュ、cargo の `target`、`node_modules`、`.gradle`、`__pycache__` などを、**設定ファイル(`vps-tidy` の規則)の通りにだけ**消す。「保護パス」「使用中は消さない」「1回の削除の上限」「再生成できる目印の確認」「最近使ったものは消さない」を、すべての削除に適用する。
+- **最適化**: SSD は TRIM(Linux `fstrim`、Windows `Optimize-Volume -ReTrim`)、HDD は最適化(Windows `Optimize-Volume -Defrag`)。Windows では管理者権限が要る。
+- **既定は安全側**: 整理は**試し実行**(報告だけ)、最適化は**無効**。**自動でも実際に消す/実行する**には、画面で明示的に有効にして、確認ダイアログに答える。手動の「実際に実行」も、確認ダイアログが出る。
+- **画面**: ログイン後のメインページ「ストレージ(HDD/SSD)のメンテナンス」。健康チェック・整理の試し実行/実行・最適化の計画/実行・自動実行の設定(時刻・各項目の有効/無効)。
+- **管理API**(`x-admin-token` 必須): `GET /admin/storage/maintenance`(設定と直近の結果)、`PUT /admin/storage/maintenance/settings`、`POST /admin/storage/health`、`POST /admin/storage/tidy`、`POST /admin/storage/optimize`(後の2つは、本文 `{"apply": true}` のときだけ実際に実行。省くと試し実行・計画だけ)。リクエスト本文は、RS-JSON の `from_str_secure`(サイズ4KiB・深さ・重複キーの上限つき)で読む。
+- **自動実行**: 毎日、設定した時刻(既定 4 時、`OPEN_EASYWEB_STORAGE_TZ_OFFSET_HOURS` で時差、既定 9)に、健康チェックと整理を実行(最適化は、有効なら毎週日曜)。同じ日に二度は実行しない。結果は、画面と、状態ファイルに残る。
+- **設定**: 状態の保存先 `OPEN_EASYWEB_STORAGE_MAINTENANCE_FILE`(既定 `/var/www/.open-easy-web-storage-maintenance.json`)。整理の規則 `OPEN_EASYWEB_STORAGE_TIDY_CONFIG`(既定: Linux `/etc/vps-tidy/tidy.toml`、Windows `%LOCALAPPDATA%\\vps-tidy\\tidy.toml`)。規則の書き方は、`vps-tidy` の `tidy.example.toml` と、`tidy.example.windows.toml`。
+- **正直な限界**: 整理の規則ファイルが無いと、整理は何もせずに「規則を読めません」と報告する。SMART は、仮想ディスク(VPS など)では、取得できないことが多い。最適化は、Windows で管理者権限が無いと失敗する(失敗として報告する)。`vps-tidy` は、姉妹リポジトリとして、`../vps-tidy`(と、その依存の `../RS-JSON`)が、横に置いてあることを前提にしたパス依存(他の姉妹リポジトリと同じ運用)。
+
 ## ロリポップ!向け時間指定オートクロール(cron相当、2026-10-08追加)
 
 指定した時刻・曜日に、ロリポップ!上のPHP等のURLを自動でHTTP呼び出しする機能です。

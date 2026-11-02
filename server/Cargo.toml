@@ -22,6 +22,10 @@ bytes = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
+# ストレージ(HDD/SSD)のメンテナンス(健康チェック・無駄なデータの整理・TRIM/最適化)。姉妹リポジトリ `vps-tidy`。
+vps-tidy = { path = "../../vps-tidy" }
+# JSON は RS-JSON(上限つきで読む・速く書く)で扱う。方針の正本は RS-JSON の README。
+rust-json = { path = "../../RS-JSON", features = ["fast"] }
 # aruaru-IME の共有フロントエンド(RPoem)。/ime で配る。
 open-runo-crossui = { path = "../../RPoem/crates/open-runo-crossui" }
 tracing = "0.1"
