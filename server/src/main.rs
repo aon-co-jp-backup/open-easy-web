@@ -338,7 +338,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
     // ここから先は、本文を**上限つきで先に読み込んで**から各ハンドラへ渡す(以前はハンドラごとに無制限に読んでいた)。
     // 通常の本文は 64 KiB まで。ファイル送信(`Sites/Upload`)だけ 128 MiB まで。
     let req = {
-        let limit = if path.starts_with(connect::PREFIX) && path.ends_with("/Sites/Upload") { connect::UPLOAD_MAX } else { json_in::DEFAULT_MAX };
+        let limit = if path.starts_with(connect::PREFIX) && path.ends_with(".Sites/Upload") { connect::UPLOAD_MAX } else { json_in::DEFAULT_MAX };
         let (parts, body) = req.into_parts();
         match http_body_util::Limited::new(body, limit).collect().await {
             Ok(c) => Request::from_parts(parts, Full::new(c.to_bytes())),
@@ -1504,6 +1504,29 @@ mod tests {
         let root = state.site_dir("up.example.tokyo").unwrap();
         assert_eq!(std::fs::read(root.join("index.php")).unwrap(), b"<?php echo 1; ?>");
         assert_eq!(std::fs::read(root.join("sub/dir/style.css")).unwrap(), b"body{}");
+
+        // 64 KiB を超える本文(通常の上限より大きいが、アップロードでは許可される)も通る。
+        {
+            use base64::Engine as _;
+            let big = base64::engine::general_purpose::STANDARD.encode(vec![b'A'; 300_000]);
+            let res = client
+                .post(&url)
+                .bearer_auth(&token)
+                .json(&serde_json::json!({"site": "up.example.tokyo", "files": [{"path": "big.bin", "data_base64": big}]}))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), reqwest::StatusCode::OK);
+            assert_eq!(std::fs::metadata(root.join("big.bin")).unwrap().len(), 300_000);
+            // 一方、Connect の通常のメソッドは 64 KiB を超えると 413。
+            let res = client
+                .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/RequestOtp"))
+                .json(&serde_json::json!({"contact": "x".repeat(70_000)}))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), reqwest::StatusCode::PAYLOAD_TOO_LARGE);
+        }
 
         // パストラバーサル・絶対パスは 400(何も書かない)。
         for bad in ["../evil.php", "/etc/passwd", "a/../../b"] {
