@@ -1,6 +1,5 @@
-//! `/admin/auto-update`(このサーバー自身の深夜バックグラウンド自動
-//! アップデート設定API、`server/src/auto_update.rs`参照)への薄い
-//! `fetch()`ラッパー。`api_dist_sync.rs`と同じパターン。
+//! 管理API(自動アップデート・システム状況・電源プロファイルなど)への薄い`fetch()`ラッパー。方式は Connect の単純呼び出し
+//! (`POST /open_easy_web.admin.v1.<Service>/<Method>`、JSON)で、REST ではない。共通の`call`/`rpc`は、ほかの`api_*.rs`も再利用する。
 
 use serde::Serialize;
 use serde_json::Value;
@@ -43,13 +42,27 @@ pub(crate) async fn call<T: Serialize>(base_url: &str, path: &str, method: &str,
     if (200..300).contains(&status) {
         Ok(parsed)
     } else {
-        Err(format!("HTTP {status}: {parsed}"))
+        // Connect のエラー形式 `{"code","message"}` の message を優先して見せる。
+        let msg = parsed.get("message").and_then(|m| m.as_str()).map(|m| m.to_string()).unwrap_or_else(|| parsed.to_string());
+        Err(format!("HTTP {status}: {msg}"))
     }
 }
 
-/// `GET /admin/auto-update` — 現在の有効/無効設定と実行中バージョンを取得。
+/// Connect の単純呼び出し: `POST /open_easy_web.admin.v1.<Service>/<Method>`、本文は JSON(引数なしなら `{}`)。
+/// REST は使わない(2026-11-04 方針: REST 全廃、`CLAUDE.md`「API 方針」参照)。
+const NS: &str = "/open_easy_web.admin.v1.";
+
+pub(crate) async fn rpc<T: Serialize>(base_url: &str, service_method: &str, admin_token: &str, body: &T) -> Result<Value, String> {
+    call(base_url, &format!("{NS}{service_method}"), "POST", admin_token, Some(body)).await
+}
+
+pub(crate) async fn rpc_empty(base_url: &str, service_method: &str, admin_token: &str) -> Result<Value, String> {
+    rpc(base_url, service_method, admin_token, &serde_json::json!({})).await
+}
+
+/// `AutoUpdate/Get` — 現在の有効/無効設定と実行中バージョンを取得。
 pub async fn get_status(base_url: &str, admin_token: &str) -> Result<Value, String> {
-    call::<()>(base_url, "/admin/auto-update", "GET", admin_token, None).await
+    rpc_empty(base_url, "AutoUpdate/Get", admin_token).await
 }
 
 #[derive(Serialize)]
@@ -57,36 +70,29 @@ struct SetEnabledBody {
     enabled: bool,
 }
 
-/// `POST /admin/auto-update` — 深夜バックグラウンド自動アップデートの
-/// 有効/無効を切り替える(GUIのトグルスイッチから呼ぶ想定)。
+/// `AutoUpdate/Set` — 深夜バックグラウンド自動アップデートの有効/無効を切り替える(GUIのトグルスイッチから呼ぶ想定)。
 pub async fn set_enabled(base_url: &str, admin_token: &str, enabled: bool) -> Result<Value, String> {
-    call(base_url, "/admin/auto-update", "POST", admin_token, Some(&SetEnabledBody { enabled })).await
+    rpc(base_url, "AutoUpdate/Set", admin_token, &SetEnabledBody { enabled }).await
 }
 
-/// `GET /admin/system/memory` — 現在のシステムメモリ使用状況
-/// (総メモリ・使用中・空き容量・使用率)を取得する(2026-07-31追加)。
+/// `System/GetMemory` — 現在のシステムメモリ使用状況(総メモリ・使用中・空き容量・使用率)を取得する。
 pub async fn get_memory_snapshot(base_url: &str, admin_token: &str) -> Result<Value, String> {
-    call::<()>(base_url, "/admin/system/memory", "GET", admin_token, None).await
+    rpc_empty(base_url, "System/GetMemory", admin_token).await
 }
 
-/// `GET /admin/system/disk` — 現在の実ディスク(HDD/SSD)使用状況
-/// (総容量・使用中・使用率、個別ディスクの内訳)を取得する(2026-08-04追加)。
+/// `System/GetDisk` — 現在の実ディスク(HDD/SSD)使用状況(総容量・使用中・使用率、個別ディスクの内訳)を取得する。
 pub async fn get_disk_snapshot(base_url: &str, admin_token: &str) -> Result<Value, String> {
-    call::<()>(base_url, "/admin/system/disk", "GET", admin_token, None).await
+    rpc_empty(base_url, "System/GetDisk", admin_token).await
 }
 
-/// `GET /admin/easyweb-system-memory-breakdown` — メモリ使用状況を
-/// アプリ(サービス)別+その他(aruaru-llmのAIでカテゴリ分類)の2枚の
-/// 円グラフ用データへ分解して取得する(2026-09-07追加)。
+/// `System/GetMemoryBreakdown` — メモリ使用状況をアプリ(サービス)別+その他(aruaru-llmのAIでカテゴリ分類)の2枚の円グラフ用データへ分解して取得する。
 pub async fn get_memory_breakdown(base_url: &str, admin_token: &str) -> Result<Value, String> {
-    call::<()>(base_url, "/admin/easyweb-system-memory-breakdown", "GET", admin_token, None).await
+    rpc_empty(base_url, "System/GetMemoryBreakdown", admin_token).await
 }
 
-/// `GET /admin/easyweb-system-disk-breakdown` — ディスク使用状況を
-/// アプリ別+拡張子別+カテゴリ別(aruaru-llmのAI分類)の3枚の円グラフ用
-/// データへ分解して取得する(2026-09-07追加)。
+/// `System/GetDiskBreakdown` — ディスク使用状況をアプリ別+拡張子別+カテゴリ別(aruaru-llmのAI分類)の3枚の円グラフ用データへ分解して取得する。
 pub async fn get_disk_breakdown(base_url: &str, admin_token: &str) -> Result<Value, String> {
-    call::<()>(base_url, "/admin/easyweb-system-disk-breakdown", "GET", admin_token, None).await
+    rpc_empty(base_url, "System/GetDiskBreakdown", admin_token).await
 }
 
 #[derive(Serialize)]
@@ -94,23 +100,15 @@ struct SetPowerProfileBody {
     profiles: Vec<String>,
 }
 
-/// `POST /admin/easyweb-power-profile` — 電源プロファイルを設定する
-/// (2026-07-31追加、メモリ使用状況セクションの「省メモリ版に変更」
-/// ボタンから呼ぶ想定)。**正直な開示**: パス名に`easyweb-`を含むのは、
-/// `open-web-server`(このアプリのリバースプロキシ)自身が同名の
-/// `/admin/power-profile`管理APIを既に持っており、素の`/admin/
-/// power-profile`だとそちらに横取りされ、このアプリのバックエンドまで
-/// 到達しない実バグが本番環境で発覚したため(詳細は`server/src/
-/// main.rs`のコメント参照)。
+/// `Settings/SetPowerProfile` — 電源プロファイルを設定する(メモリ使用状況セクションの「省メモリ版に変更」ボタンから呼ぶ想定)。
+/// 以前の REST では、`open-web-server`(リバースプロキシ)自身の同名の `/admin/power-profile` に横取りされる実バグがあり
+/// `easyweb-` 接頭辞を付けていた。Connect の経路 `/open_easy_web.admin.v1.…` はその衝突の心配がない。
 pub async fn set_power_profile(base_url: &str, admin_token: &str, profiles: &[&str]) -> Result<Value, String> {
     let body = SetPowerProfileBody { profiles: profiles.iter().map(|s| s.to_string()).collect() };
-    call(base_url, "/admin/easyweb-power-profile", "POST", admin_token, Some(&body)).await
+    rpc(base_url, "Settings/SetPowerProfile", admin_token, &body).await
 }
 
-/// `GET /admin/easyweb-power-profile` — 現在有効な電源プロファイルの
-/// 組み合わせ(`profiles: ["power_save", ...]`)を取得する(2026-08-01
-/// 追加、チェックボックスUIをページ読み込み時にサーバー側の実際の状態
-/// へ同期するため)。
+/// `Settings/GetPowerProfile` — 現在有効な電源プロファイルの組み合わせ(`profiles: ["power_save", ...]`)を取得する。
 pub async fn get_power_profile(base_url: &str, admin_token: &str) -> Result<Value, String> {
-    call::<()>(base_url, "/admin/easyweb-power-profile", "GET", admin_token, None).await
+    rpc_empty(base_url, "Settings/GetPowerProfile", admin_token).await
 }

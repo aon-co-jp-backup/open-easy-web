@@ -78,8 +78,10 @@ async fn post_json(path: &str, token: Option<&str>, body: &impl Serialize) -> Re
     if (200..300).contains(&status) {
         Ok(parsed)
     } else {
+        // Connect のエラー形式 `{"code","message"}` の message を優先し、旧形式の `error` も読む。
         let msg = parsed
-            .get("error")
+            .get("message")
+            .or_else(|| parsed.get("error"))
             .and_then(|v| v.as_str())
             .unwrap_or("unknown error")
             .to_string();
@@ -104,7 +106,7 @@ struct ContactBody {
 }
 
 pub async fn request_otp(contact: &str) -> Result<Value, String> {
-    post_json("/api/auth/request-otp", None, &ContactBody { contact: contact.to_string() }).await
+    post_json("/open_easy_web.admin.v1.Auth/RequestOtp", None, &ContactBody { contact: contact.to_string() }).await
 }
 
 #[derive(Serialize)]
@@ -125,7 +127,7 @@ pub enum VerifyOtpOutcome {
 
 pub async fn verify_otp(contact: &str, code: &str, totp_code: Option<&str>) -> Result<VerifyOtpOutcome, String> {
     let value = post_json(
-        "/api/auth/verify-otp",
+        "/open_easy_web.admin.v1.Auth/VerifyOtp",
         None,
         &VerifyOtpBody {
             contact: contact.to_string(),
@@ -149,12 +151,12 @@ struct TotpLoginBody {
     totp_code: String,
 }
 
-/// `POST /api/auth/totp-login` — メールOTPを一切経由せず、認証アプリの
+/// `Auth/TotpLogin` — メールOTPを一切経由せず、認証アプリの
 /// コードだけでログインする(サーバー側`server/src/main.rs`の
 /// `totp_login`ハンドラに対応、2026-07-17)。
 pub async fn totp_login(account_email: &str, totp_code: &str) -> Result<String, String> {
     let value = post_json(
-        "/api/auth/totp-login",
+        "/open_easy_web.admin.v1.Auth/TotpLogin",
         None,
         &TotpLoginBody { account_email: account_email.to_string(), totp_code: totp_code.to_string() },
     )
@@ -172,7 +174,7 @@ struct TokenBody {
 
 pub async fn logout() -> Result<(), String> {
     if let Some(token) = saved_token() {
-        let _ = post_json("/api/auth/logout", None, &TokenBody { token }).await;
+        let _ = post_json("/open_easy_web.admin.v1.Auth/Logout", None, &TokenBody { token }).await;
     }
     clear_session();
     Ok(())
@@ -188,7 +190,7 @@ struct RequestEmailChangeBody {
 pub async fn request_contact_change(field: &str, new_value: &str) -> Result<Value, String> {
     let token = saved_token().ok_or("not logged in")?;
     post_json(
-        "/api/auth/request-email-change",
+        "/open_easy_web.admin.v1.Auth/RequestEmailChange",
         Some(&token),
         &RequestEmailChangeBody { field: field.to_string(), new_value: new_value.to_string() },
     )
@@ -199,7 +201,7 @@ pub async fn request_contact_change(field: &str, new_value: &str) -> Result<Valu
 /// provisioning URIとシークレットを返す(まだ有効化はされない)。
 pub async fn totp_setup() -> Result<Value, String> {
     let token = saved_token().ok_or("not logged in")?;
-    post_json("/api/auth/totp/setup", Some(&token), &serde_json::json!({})).await
+    post_json("/open_easy_web.admin.v1.Auth/TotpSetup", Some(&token), &serde_json::json!({})).await
 }
 
 #[derive(Serialize)]
@@ -210,11 +212,11 @@ struct TotpCodeBody {
 /// セットアップ中のTOTPを、認証アプリの確認コードで有効化する。
 pub async fn totp_enable(code: &str) -> Result<Value, String> {
     let token = saved_token().ok_or("not logged in")?;
-    post_json("/api/auth/totp/enable", Some(&token), &TotpCodeBody { code: code.to_string() }).await
+    post_json("/open_easy_web.admin.v1.Auth/TotpEnable", Some(&token), &TotpCodeBody { code: code.to_string() }).await
 }
 
 /// TOTP2FAを無効化する。
 pub async fn totp_disable() -> Result<Value, String> {
     let token = saved_token().ok_or("not logged in")?;
-    post_json("/api/auth/totp/disable", Some(&token), &serde_json::json!({})).await
+    post_json("/open_easy_web.admin.v1.Auth/TotpDisable", Some(&token), &serde_json::json!({})).await
 }

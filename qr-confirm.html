@@ -79,7 +79,7 @@
     btn.classList.add("hidden");
     statusEl.className = "status";
     statusEl.textContent = "Confirming... / 確認中...";
-    fetch("/api/auth/qr-login/confirm", {
+    fetch("/open_easy_web.admin.v1.Auth/QrLoginConfirm", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id: id }),
@@ -91,7 +91,7 @@
           statusEl.textContent = "✅ Confirmed! You can close this page now. / 確認しました！このページは閉じて構いません。";
         } else {
           statusEl.className = "status err";
-          statusEl.textContent = "⚠ " + ((res.body && res.body.error) || "Failed to confirm. / 確認に失敗しました。");
+          statusEl.textContent = "⚠ " + ((res.body && (res.body.message || res.body.error)) || "Failed to confirm. / 確認に失敗しました。");
           btn.classList.remove("hidden");
         }
       })
@@ -102,7 +102,11 @@
       });
   }
 
-  fetch("/api/auth/qr-login/whoami?id=" + encodeURIComponent(id))
+  fetch("/open_easy_web.admin.v1.Auth/QrLoginWhoami", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: id }),
+  })
     .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
     .then(function (res) {
       if (res.ok && res.body && res.body.masked_email) {

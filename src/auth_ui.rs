@@ -191,7 +191,7 @@ fn on_verify_otp() {
 }
 
 /// メールOTPを一切経由せず、認証アプリのコードだけでログインする
-/// (`/api/auth/totp-login`、2026-07-17)。
+/// (`Auth/TotpLogin`、2026-07-17)。
 fn on_totp_login() {
     let account_email = input_value("totp-login-email");
     let totp_code = input_value("totp-login-code");

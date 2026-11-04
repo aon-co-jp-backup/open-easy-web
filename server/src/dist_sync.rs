@@ -41,8 +41,7 @@ use std::sync::{Arc, RwLock};
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use hyper::body::Incoming;
-use hyper::{Request, Response, StatusCode};
+use hyper::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -368,40 +367,10 @@ fn error_response(status: StatusCode, message: impl Into<String>) -> Response<Bo
     json_response(status, &serde_json::json!({ "error": message.into() }))
 }
 
-/// `x-admin-token`ヘッダによる簡易認証(`appserver_registration.rs`が
-/// 呼び出し先へ送るのと同じヘッダ名——このサーバー自身が受け取る側になる
-/// 場合も同じ慣習に揃える)。`OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN`が
-/// 未設定の場合、この管理APIは無効化する(意図せず無認証で公開しない
-/// ための安全側デフォルト)。
-///
-/// **2026-08-01追記(実バグ修正)**: この関数は分散同期(dist-sync)専用
-/// ではなく、システムメモリ・電源プロファイル・自動アップデート等
-/// 全ての`/admin/*`管理APIで共有されている単一のゲートだが、無効時の
-/// エラー文言が「dist-sync admin API is disabled」と分散同期専用の
-/// 表現に固定されていたため、メモリ使用状況の「更新」ボタンのような
-/// 無関係な機能を押しただけのユーザーにも紛らわしい分散同期関連の
-/// エラーが表示されてしまっていた(ユーザー報告で発覚)。全管理API
-/// 共通の汎用的な文言に変更。
-pub fn require_admin_token(req: &Request<Incoming>) -> Result<(), Response<BoxBody>> {
-    let Ok(expected) = std::env::var("OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN") else {
-        return Err(error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "admin API is disabled on this server (OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN not set) / \
-             このサーバーでは管理API機能が無効です(OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN未設定)",
-        ));
-    };
-    let provided = req.headers().get("x-admin-token").and_then(|v| v.to_str().ok());
-    if provided == Some(expected.as_str()) {
-        Ok(())
-    } else {
-        Err(error_response(StatusCode::UNAUTHORIZED, "invalid or missing x-admin-token"))
-    }
-}
-
 /// `POST /admin/dist-sync/targets`
 pub async fn register_target(
     registry: &Arc<DistSyncRegistry>,
-    req: Request<Incoming>,
+    req: crate::Req,
 ) -> Response<BoxBody> {
     let bytes = match req.into_body().collect().await {
         Ok(c) => c.to_bytes(),
@@ -446,7 +415,7 @@ pub async fn delete_target(registry: &Arc<DistSyncRegistry>, id: &str) -> Respon
 /// (Email/Googleドライブ/どちらもスキップ)を設定する。
 pub async fn set_disaster_fallback(
     registry: &Arc<DistSyncRegistry>,
-    req: Request<Incoming>,
+    req: crate::Req,
 ) -> Response<BoxBody> {
     let bytes = match req.into_body().collect().await {
         Ok(c) => c.to_bytes(),

@@ -431,7 +431,7 @@ fn apply_minimal_ui_from_storage() {
 /// 排他的な3ボタン方式〈直前まで〉から独立チェックボックス方式へ変更。
 /// `open-redmine`/`open-gitea`の同日実装、`open-raid-z/CLAUDE.md`の
 /// 改定済みエコシステム標準と揃える)。現在チェックされている3つの状態を
-/// まとめて`POST /admin/easyweb-power-profile`へ送るだけで、
+/// まとめて`Settings/SetPowerProfile`(Connect)へ送るだけで、
 /// バックエンド側の`PowerProfileFlags`(独立フラグの組み合わせ)は
 /// 元々このAPI呼び出し1回で表現できる設計だったため、フロントエンド側の
 /// 変更のみで対応できた。
@@ -708,7 +708,7 @@ fn html_escape(s: &str) -> String {
 }
 
 /// メモリ使用状況の内訳(アプリ別+その他AIカテゴリ別)を取得・描画する
-/// (2026-09-07新設、`GET /admin/easyweb-system-memory-breakdown`)。
+/// (2026-09-07新設、`System/GetMemoryBreakdown`)。
 fn on_refresh_memory_breakdown() {
     let admin_token = input_value("memory-admin-token");
     let base_url = same_origin_base_url();
@@ -752,7 +752,7 @@ fn on_refresh_memory_breakdown() {
 }
 
 /// ディスク使用状況の内訳(アプリ別+拡張子別+AIカテゴリ別)を取得・描画
-/// する(2026-09-07新設、`GET /admin/easyweb-system-disk-breakdown`)。
+/// する(2026-09-07新設、`System/GetDiskBreakdown`)。
 fn on_refresh_disk_breakdown() {
     let admin_token = input_value("disk-admin-token");
     let base_url = same_origin_base_url();

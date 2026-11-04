@@ -45,6 +45,8 @@ use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
 
 type BoxBody = Full<Bytes>;
+/// 本文を読み込み済みのリクエスト(`dispatch` の入口で、上限つきで読んでから各ハンドラへ渡す)。
+type Req = Request<Full<Bytes>>;
 
 struct AppState {
     /// サイトのwebroot群を格納する親ディレクトリ(例: `/var/www`)。
@@ -197,6 +199,12 @@ fn env_path(key: &str, default: &str) -> PathBuf {
     std::env::var(key).map(PathBuf::from).unwrap_or_else(|_| PathBuf::from(default))
 }
 
+/// 移行期限つきの互換経路の応答に `Deprecation: true` を付ける(`/api/auth/request-otp`・`verify-otp`)。
+fn deprecated(mut resp: Response<BoxBody>) -> Response<BoxBody> {
+    resp.headers_mut().insert("deprecation", hyper::header::HeaderValue::from_static("true"));
+    resp
+}
+
 fn json_response(status: StatusCode, value: &impl serde::Serialize) -> Response<BoxBody> {
     let body = serde_json::to_vec(value).unwrap_or_else(|_| b"{}".to_vec());
     Response::builder()
@@ -223,7 +231,7 @@ fn parse_site_path(path: &str) -> Option<(String, String)> {
 /// `Authorization: Bearer <token>` を検証する。open-easy-web全体で唯一の
 /// 認証方式(固定パスワードを廃したメールOTPログイン)に統一されている
 /// ため、サイト操作系エンドポイントは全てこれを通す。
-fn require_session(state: &AppState, req: &Request<Incoming>) -> Result<String, Response<BoxBody>> {
+fn require_session(state: &AppState, req: &Req) -> Result<String, Response<BoxBody>> {
     let token = req
         .headers()
         .get(hyper::header::AUTHORIZATION)
@@ -330,6 +338,22 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
     if path.starts_with("/ime/api/") {
         return ime_api(&method, &path, req).await;
     }
+    // ここから先は、本文を**上限つきで先に読み込んで**から各ハンドラへ渡す(以前はハンドラごとに無制限に読んでいた)。
+    // 通常の本文は 64 KiB まで。`multipart/form-data` のファイル送信(サイトの upload)だけ 256 MiB まで。
+    let req = {
+        let limit = if path.starts_with("/api/sites/") && path.ends_with("/upload") { 256 * 1024 * 1024 } else { 64 * 1024 };
+        let (parts, body) = req.into_parts();
+        match http_body_util::Limited::new(body, limit).collect().await {
+            Ok(c) => Request::from_parts(parts, Full::new(c.to_bytes())),
+            Err(_) => {
+                return if path.starts_with(connect::PREFIX) {
+                    connect::payload_too_large()
+                } else {
+                    error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large / 本文が大きすぎます")
+                };
+            }
+        }
+    };
     // インストーラーを選ぶページ(Windows / macOS / Linux / Android のスマホ・タブレット)
     if method == Method::GET && (path == "/ime/download" || path == "/ime/download/") {
         let html = format!(
@@ -365,429 +389,21 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         };
     }
 
-    // `DELETE /api/sites/<name>` (アクション部分なし) はドメイン削除。
-    if method == Method::DELETE {
-        if let Some(site) = path.strip_prefix("/api/sites/").filter(|s| !s.is_empty() && !s.contains('/')) {
+    // `POST /api/sites/<name>/upload` — `multipart/form-data` のファイル送信。バイナリを JSON に載せると大きくなるため、
+    // REST 全廃の方針(2026-11-04)の**例外**として、このまま残す(サイト操作のほかのメソッドは Connect の `Sites/*`)。
+    if method == Method::POST {
+        if let Some((site, _)) = parse_site_path(&path).filter(|(_, action)| action == "/upload") {
             if let Err(unauthorized) = require_session(&state, &req) {
                 return unauthorized;
             }
-            return delete_site(&state, site).await;
+            return upload_files(&state, &site, req).await;
         }
-    }
-
-    if let Some((site, action)) = parse_site_path(&path) {
-        if let Err(unauthorized) = require_session(&state, &req) {
-            return unauthorized;
-        }
-        return match (&method, action.as_str()) {
-            (&Method::POST, "/folder") => create_folder(&state, &site).await,
-            (&Method::POST, "/upload") => upload_files(&state, &site, req).await,
-            (&Method::POST, "/detect-and-configure") => detect_and_configure(&state, &site).await,
-            (&Method::POST, "/correct") => correct_detection(&state, &site, req).await,
-            (&Method::POST, "/register-appserver") => register_appserver(&site, req).await,
-            _ => error_response(StatusCode::NOT_FOUND, "unknown site action"),
-        };
-    }
-
-    // `/admin/dist-sync/*` — 分散同期先・ディザスタ用退避先の管理API
-    // (`dist_sync.rs`参照)。`x-admin-token`ヘッダによる認証必須。
-    if path == "/admin/dist-sync/targets" {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        return match method {
-            Method::POST => dist_sync::register_target(&state.dist_sync, req).await,
-            Method::GET => dist_sync::list_targets(&state.dist_sync).await,
-            _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "unsupported method"),
-        };
-    }
-    if let Some(id) = path.strip_prefix("/admin/dist-sync/targets/").filter(|s| !s.is_empty()) {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        return match method {
-            Method::DELETE => dist_sync::delete_target(&state.dist_sync, id).await,
-            _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "unsupported method"),
-        };
-    }
-    if path == "/admin/dist-sync/disaster-fallback" && method == Method::POST {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        return dist_sync::set_disaster_fallback(&state.dist_sync, req).await;
-    }
-    if path == "/admin/dist-sync/first-time-setup" && method == Method::POST {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        return dist_sync::run_first_time_setup(&state.dist_sync).await;
-    }
-
-    // `/admin/system/memory` — 現在のシステムメモリ使用状況(総メモリ・
-    // 使用中・空き容量・使用率)を返す(2026-07-31追加、GUIの円グラフ
-    // 表示用)。`x-admin-token`ヘッダによる認証必須。
-    if path == "/admin/system/memory" {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        if method != Method::GET {
-            return error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string());
-        }
-        let snap = system_memory::snapshot();
-        return json_response(StatusCode::OK, &snap);
-    }
-
-    // `/admin/system/disk` — 現在の実ディスク(HDD/SSD)使用状況(総容量・
-    // 使用中・使用率、マウントされている各ディスクの内訳)を返す
-    // (2026-08-04追加、GUIの円グラフ表示用、`/admin/system/memory`と同じ
-    // 設計)。`x-admin-token`ヘッダによる認証必須。
-    if path == "/admin/system/disk" {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        if method != Method::GET {
-            return error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string());
-        }
-        let snap = system_disk::snapshot();
-        return json_response(StatusCode::OK, &snap);
-    }
-
-    // `/admin/easyweb-system-memory-breakdown` — メモリ円グラフを
-    // 「アプリ(サービス)別」+「その他をaruaru-llmのAIでカテゴリ分類」の
-    // 2枚へ分解する(2026-09-07新設、`memory_breakdown.rs`参照)。
-    if path == "/admin/easyweb-system-memory-breakdown" {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        if method != Method::GET {
-            return error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string());
-        }
-        let mem_snapshot = system_memory::snapshot();
-        let candidates = tokio::task::spawn_blocking(memory_breakdown::other_process_candidates).await.unwrap_or_default();
-        let items: Vec<String> = candidates.iter().map(|(comm, _)| comm.clone()).collect();
-        let categories = memory_breakdown::fixed_categories();
-        let classified = match aruaru_llm_client::classify_many(&items, &categories).await {
-            Ok(v) => v,
-            Err(err) => {
-                tracing::warn!("aruaru-llm classify failed, marking as unclassified: {err}");
-                Vec::new()
-            }
-        };
-        let category_of: std::collections::HashMap<&str, &str> =
-            classified.iter().map(|(item, cat)| (item.as_str(), cat.as_str())).collect();
-        let other_process_categories: Vec<(String, String, u64)> = candidates
-            .into_iter()
-            .map(|(comm, bytes)| {
-                let category = category_of.get(comm.as_str()).map(|c| c.to_string()).unwrap_or_else(memory_breakdown::unclassified_label);
-                (comm, category, bytes)
-            })
-            .collect();
-        let used_bytes = mem_snapshot.used_bytes;
-        let breakdown = tokio::task::spawn_blocking(move || memory_breakdown::build(used_bytes, other_process_categories))
-            .await
-            .unwrap_or_else(|_| memory_breakdown::build(used_bytes, Vec::new()));
-        return json_response(StatusCode::OK, &breakdown);
-    }
-
-    // `/admin/easyweb-system-disk-breakdown` — ディスク使用状況円グラフを
-    // 「アプリ別」+「その他の拡張子別」+「その他をaruaru-llmのAIで
-    // カテゴリ分類」の3枚へ分解する(2026-09-07新設、
-    // `disk_breakdown.rs`参照)。
-    if path == "/admin/easyweb-system-disk-breakdown" {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        if method != Method::GET {
-            return error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string());
-        }
-        let (apps, extensions) =
-            tokio::task::spawn_blocking(|| (disk_breakdown::app_disk_usage(), disk_breakdown::other_extension_breakdown()))
-                .await
-                .unwrap_or((Vec::new(), Vec::new()));
-        let items: Vec<String> = extensions.iter().map(|e| e.extension.clone()).collect();
-        let categories: Vec<String> = disk_breakdown::DISK_CATEGORIES.iter().map(|s| s.to_string()).collect();
-        let classified = match aruaru_llm_client::classify_many(&items, &categories).await {
-            Ok(v) => v,
-            Err(err) => {
-                tracing::warn!("aruaru-llm classify failed, marking as unclassified: {err}");
-                Vec::new()
-            }
-        };
-        let categories_breakdown = disk_breakdown::build_category_breakdown(&extensions, &classified);
-        return json_response(
-            StatusCode::OK,
-            &serde_json::json!({
-                "apps": apps,
-                "extensions": extensions,
-                "categories": categories_breakdown,
-            }),
-        );
-    }
-
-    // `/admin/easyweb-login-mode` — ログイン方式(otp/qr/otp_qr)の取得・
-    // 変更(2026-08-28新設)。`open-web-server`との名前衝突を避けるため
-    // 最初からアプリ固有の名前(`easyweb-`接頭辞)にしてある
-    // (上記power-profileの実バグ教訓を踏まえた設計)。
-    if path == "/admin/easyweb-login-mode" {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        return match method {
-            Method::GET => json_response(StatusCode::OK, &serde_json::json!({"login_mode": state.auth.login_mode()})),
-            Method::POST => {
-                let bytes = match req.into_body().collect().await {
-                    Ok(c) => c.to_bytes(),
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
-                };
-                #[derive(serde::Deserialize)]
-                struct Payload {
-                    login_mode: String,
-                }
-                let payload: Payload = match sonic_rs::from_slice(&bytes) {
-                    Ok(p) => p,
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
-                };
-                if !auth::is_valid_login_mode(&payload.login_mode) {
-                    return error_response(StatusCode::BAD_REQUEST, "login_mode must be one of: otp, qr, otp_qr");
-                }
-                state.auth.set_login_mode(&payload.login_mode);
-                json_response(StatusCode::OK, &serde_json::json!({"ok": true, "login_mode": payload.login_mode}))
-            }
-            _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string()),
-        };
-    }
-
-    // `/admin/easyweb-power-profile` — 電源プロファイル(省メモリ/省電力/
-    // 常時電源接続、組み合わせ選択可能)の取得・変更。`x-admin-token`
-    // ヘッダによる認証必須(既存の`dist_sync`管理APIと同じ方式を再利用、
-    // `open-web-server`側`power_profile.rs`と同じ設計、2026-07-31追加)。
-    // **正直な開示・実バグ修正(2026-07-31発見)**: 当初`/admin/
-    // power-profile`という名前だったが、`open-web-server`自身
-    // (このアプリのリバースプロキシ/テナントルーター)が**同名の
-    // 独自管理API**を既に持っており、`easy-web.tokyo`経由のリクエストは
-    // `open-web-server`自身のハンドラに横取りされ、この
-    // `open-easy-web-server`バックエンドまで一切到達していなかった
-    // (実際に`curl https://easy-web.tokyo/admin/power-profile`で
-    // `open-web-server`側の`401`〈token不一致〉が返り、バックエンド直接
-    // 〈`127.0.0.1:8080`〉への同リクエストは`503`〈token未設定〉——挙動が
-    // 食い違うことで発覚)。パスをアプリ固有の名前へ変更して衝突を解消。
-    if path == "/admin/easyweb-power-profile" {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        return match method {
-            Method::GET => {
-                let flags = state.power_profile.get();
-                json_response(
-                    StatusCode::OK,
-                    &serde_json::json!({
-                        "profiles": flags.active_pref_values(),
-                        "labels": flags.active_labels(),
-                    }),
-                )
-            }
-            Method::POST => {
-                let bytes = match req.into_body().collect().await {
-                    Ok(c) => c.to_bytes(),
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
-                };
-                #[derive(serde::Deserialize)]
-                struct Payload {
-                    profiles: Vec<String>,
-                }
-                let payload: Payload = match sonic_rs::from_slice(&bytes) {
-                    Ok(p) => p,
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
-                };
-                match power_profile::PowerProfileFlags::from_pref_values(&payload.profiles) {
-                    Ok(flags) => {
-                        state.power_profile.set(flags);
-                        // AI省メモリ(2026-09-07追加): memory_saverフラグの
-                        // 実効果として、このVPS上の各サービス(systemdユニット)
-                        // へcgroup経由のMemoryHigh(ソフト上限、超過分はスワップへ
-                        // 退避)を適用する。ブロッキングI/O(systemctl起動)なので
-                        // spawn_blockingへ退避し、非同期ランタイムを塞がない。
-                        let governor_results =
-                            tokio::task::spawn_blocking(move || memory_governor::apply(flags.memory_saver))
-                                .await
-                                .unwrap_or_default();
-                        json_response(
-                            StatusCode::OK,
-                            &serde_json::json!({
-                                "profiles": flags.active_pref_values(),
-                                "labels": flags.active_labels(),
-                                "ai_memory_governor": governor_results,
-                            }),
-                        )
-                    }
-                    Err(bad) => error_response(StatusCode::BAD_REQUEST, format!("unknown power profile value: {bad}")),
-                }
-            }
-            _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string()),
-        };
     }
 
     // `/open_easy_web.admin.v1.<Service>/<Method>` — Connect の単純呼び出し(POST + JSON、`connect.rs`参照)。
     // 新しい管理APIは Connect のみ(REST は作らない。2026-11-04 方針: REST 全廃)。既存の REST 風 `/admin/...` は、触るときに順に移す。
     if let Some(rest) = path.strip_prefix(connect::PREFIX) {
         return connect::dispatch(&state, req, rest).await;
-    }
-
-    // `/admin/lolipop-cron/jobs[/{id}[/run|/enabled]]` — ロリポップ!向け
-    // 時間指定オートクロールの管理(`lolipop_cron.rs`参照、`x-admin-token`必須)。
-    if let Some(rest) = path.strip_prefix("/admin/lolipop-cron/jobs") {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        let rest = rest.trim_matches('/').to_string();
-        let mut parts = rest.splitn(2, '/');
-        let id = parts.next().unwrap_or("").to_string();
-        let action = parts.next().unwrap_or("").to_string();
-        let cron = Arc::clone(&state.lolipop_cron);
-        if id.is_empty() {
-            return match method {
-                Method::GET => json_response(
-                    StatusCode::OK,
-                    &serde_json::json!({
-                        "tz_offset_hours": cron.tz_offset_hours(),
-                        "jobs": cron.list().iter().map(lolipop_cron::job_view).collect::<Vec<_>>(),
-                    }),
-                ),
-                Method::POST => {
-                    let bytes = match req.into_body().collect().await {
-                        Ok(c) => c.to_bytes(),
-                        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
-                    };
-                    let new: lolipop_cron::NewJob = match sonic_rs::from_slice(&bytes) {
-                        Ok(p) => p,
-                        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
-                    };
-                    match cron.add(new) {
-                        Ok(job) => json_response(StatusCode::CREATED, &lolipop_cron::job_view(&job)),
-                        Err(e) => error_response(StatusCode::BAD_REQUEST, e.to_string()),
-                    }
-                }
-                _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "unsupported method"),
-            };
-        }
-        return match (method, action.as_str()) {
-            (Method::DELETE, "") => match cron.delete(&id) {
-                Ok(true) => json_response(StatusCode::OK, &serde_json::json!({"deleted": id})),
-                Ok(false) => error_response(StatusCode::NOT_FOUND, "job not found"),
-                Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-            },
-            (Method::POST, "run") => match cron.get(&id) {
-                Some(job) => {
-                    let result = cron.run_job(&job).await;
-                    json_response(StatusCode::OK, &serde_json::json!({"result": result}))
-                }
-                None => error_response(StatusCode::NOT_FOUND, "job not found"),
-            },
-            (Method::PUT, "enabled") => {
-                let bytes = match req.into_body().collect().await {
-                    Ok(c) => c.to_bytes(),
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
-                };
-                #[derive(serde::Deserialize)]
-                struct Payload {
-                    enabled: bool,
-                }
-                let payload: Payload = match sonic_rs::from_slice(&bytes) {
-                    Ok(p) => p,
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
-                };
-                match cron.set_enabled(&id, payload.enabled) {
-                    Ok(true) => json_response(StatusCode::OK, &serde_json::json!({"enabled": payload.enabled})),
-                    Ok(false) => error_response(StatusCode::NOT_FOUND, "job not found"),
-                    Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-                }
-            }
-            _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "unsupported method"),
-        };
-    }
-
-    // `/admin/auto-update` — 深夜バックグラウンド自動アップデートの
-    // 有効/無効を取得・変更する(`auto_update.rs`参照)。`x-admin-token`
-    // ヘッダによる認証必須(既存の`dist_sync`管理APIと同じ方式を再利用)。
-    if path == "/admin/auto-update" {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        return match method {
-            Method::GET => {
-                // 2026-07-29追記(ユーザー指示、RS-Sync側のスケジューラ
-                // 無言停止バグの横展開): `last_cycle_started_at`が25時間
-                // 以上更新されていなければ、深夜バックグラウンドループ
-                // 自体が停止している可能性があるとみなす。
-                let seconds_since = state.auto_update.seconds_since_last_cycle();
-                let healthy = seconds_since < 25 * 3600;
-                json_response(
-                    StatusCode::OK,
-                    &serde_json::json!({
-                        "enabled": state.auto_update.is_enabled(),
-                        "current_version": auto_update::current_version_display(),
-                        "scheduler_healthy": healthy,
-                        "scheduler_seconds_since_cycle": seconds_since,
-                    }),
-                )
-            }
-            Method::POST => {
-                let bytes = match req.into_body().collect().await {
-                    Ok(c) => c.to_bytes(),
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
-                };
-                #[derive(serde::Deserialize)]
-                struct Payload {
-                    enabled: bool,
-                }
-                let payload: Payload = match sonic_rs::from_slice(&bytes) {
-                    Ok(p) => p,
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
-                };
-                match state.auto_update.set_enabled(payload.enabled) {
-                    Ok(()) => json_response(
-                        StatusCode::OK,
-                        &serde_json::json!({
-                            "enabled": payload.enabled,
-                            "message_ja": if payload.enabled {
-                                "深夜バックグラウンド自動アップデートを有効にしました(次の深夜0時から確認を開始します)。"
-                            } else {
-                                "深夜バックグラウンド自動アップデートを無効にしました。"
-                            },
-                        }),
-                    ),
-                    Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, format!("failed to persist setting: {e}")),
-                }
-            }
-            _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "unsupported method"),
-        };
-    }
-
-    // `/admin/auto-update/check-now` — 深夜0時を待たず、今すぐ最新版を
-    // 確認・適用する(`auto_update::check_and_apply_update`)。ダウンロード・
-    // 検証・(新バージョンがあれば)切り替えには数秒〜数十秒かかりうる
-    // ため、`tokio::spawn`でバックグラウンド実行し、レスポンス自体は
-    // 「確認を開始しました」を即座に返す(呼び出し元のHTTP接続を長時間
-    // 保持しない設計)。`enabled`設定に関わらず、この「今すぐ確認」
-    // 操作自体はユーザーが能動的に押した結果として常に実行できる。
-    if path == "/admin/auto-update/check-now" && method == Method::POST {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        let bind_addr = state.server_bind_addr;
-        let stop_accepting = Arc::clone(&state.stop_accepting);
-        tokio::spawn(async move {
-            if let Err(e) = auto_update::check_and_apply_update(bind_addr, &stop_accepting).await {
-                tracing::warn!(error = %e, "auto_update: manual check-now failed");
-            }
-        });
-        return json_response(
-            StatusCode::OK,
-            &serde_json::json!({
-                "message_ja": "アップデート確認を開始しました。新しいバージョンがあれば自動的に切り替わります。",
-                "message_en": "Update check started. If a newer version is available, it will be applied automatically.",
-            }),
-        );
     }
 
     // DATABASE暗号化(`db_encryption.rs`)は常時自動で有効であり、ON/OFF
@@ -809,29 +425,13 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 .body(Full::new(Bytes::from(open_runo_crossui::page_html(&app, "/ime/api").replace("</main>", &("<div id=\"notice\"><small><b>ご利用上の注意 / Notes</b><ul><li>この画面は、入力した内容をサーバー(easy-web.tokyo)で変換します。入力はサーバーに送られますが、保存・学習はしません。<br>This screen converts your input on the server (easy-web.tokyo). Your input is sent to the server but is not stored or learned.</li><li>自分のPCだけで変換したいときは、従来どおりインストールして「このPCの画面で開く」(http://127.0.0.1:4660/ui)を使ってください。<br>To convert only on your own PC, install the app as usual and use \"Open on this PC\" (http://127.0.0.1:4660/ui).</li><li>個人の学習や登録語は、オンライン画面には反映されません。<br>Your personal learning and registered words are not applied on this online screen.</li><li>中国語・季節用語・優先順位などの辞書は、サーバー側でも同じものが使われます。<br>The same dictionaries (Chinese, seasonal terms, candidate priorities, etc.) are used on the server.</li><li>短時間に大量の操作をすると、一時的に制限されることがあります。<br>Very rapid bursts of requests may be temporarily limited.</li></ul></small></div>".to_string() + "<div id=\"installers\"><b>インストーラー(OSを選ぶ) / Installers</b>" + &ime_installers_html() + "</div></main>")))))
                 .expect("static response headers are always valid")
         }
-        // 公開の新規登録は無効化済み(ユーザー指示、2026-07-15、セキュリティ
-        // 上の理由)。ログイン可能なのは起動時にシードされる固定アカウント
-        // (FIXED_ACCOUNT_EMAIL)のみ——`/api/auth/register`自体を存在しない
-        // パスにすることで、登録経路があること自体を外部に見せない。
-        (&Method::POST, "/api/auth/request-otp") => request_otp(&state, req).await,
-        (&Method::POST, "/api/auth/verify-otp") => verify_otp(&state, req).await,
-        (&Method::POST, "/api/auth/totp-login") => totp_login(&state, req).await,
-        // QR確認ログイン(2026-08-28新設、ユーザー指示「email OTP+QR撮影・
-        // QR撮影のみ、いずれも自動送受信・自動承認・自動ログイン」への
-        // 対応)。`/api/auth/qr-login/start`はTOTP登録済みアカウントの
-        // メールアドレスを受け取りQRセッションを開始する(`qr`モード用、
-        // 事前のOTP検証は不要)。`otp_qr`モードでは`verify_otp`が
-        // (TOTPコードの代わりに)このQRセッションを開始して返す設計。
-        (&Method::POST, "/api/auth/qr-login/start") => qr_login_start(&state, req).await,
-        (&Method::POST, "/api/auth/qr-login/confirm") => qr_login_confirm(&state, req).await,
-        (&Method::GET, "/api/auth/qr-login/status") => qr_login_status(&state, &req).await,
-        (&Method::POST, "/api/auth/qr-login/finish") => qr_login_finish(&state, req).await,
-        (&Method::GET, "/api/auth/qr-login/whoami") => qr_login_whoami(&state, &req).await,
-        (&Method::POST, "/api/auth/logout") => logout(&state, req).await,
-        (&Method::POST, "/api/auth/totp/setup") => totp_setup(&state, &req).await,
-        (&Method::POST, "/api/auth/totp/enable") => totp_enable(&state, req).await,
-        (&Method::POST, "/api/auth/totp/disable") => totp_disable(&state, &req).await,
-        (&Method::POST, "/api/auth/request-email-change") => request_email_change(&state, req).await,
+        // ログイン関連の API は Connect(`Auth/*`、`connect.rs`)へ移した。REST のまま残すのは次の3つだけ:
+        // (1)(2) **互換のための期限つき**: `RS-Sync`・`open-upstream-watch` が `request-otp`・`verify-otp` を呼んでいる。
+        //     両者を Connect(`Auth/RequestOtp`・`Auth/VerifyOtp`)に更新して配備したら、この2本は削除する。
+        //     応答には `Deprecation: true` を付ける。
+        // (3) `GET /api/auth/confirm-email-change?token=`: メールに載るリンクをブラウザで直接開くので、GET のまま(例外)。
+        (&Method::POST, "/api/auth/request-otp") => deprecated(request_otp(&state, req).await),
+        (&Method::POST, "/api/auth/verify-otp") => deprecated(verify_otp(&state, req).await),
         (&Method::GET, p) if p.starts_with("/api/auth/confirm-email-change") => {
             confirm_email_change(&state, &req).await
         }
@@ -918,7 +518,7 @@ async fn create_folder(state: &AppState, site: &str) -> Response<BoxBody> {
 /// webrootへ書き込む。各パートの`filename`をサイトディレクトリからの
 /// 相対パスとして扱う(ブラウザの`webkitdirectory`が相対パス込みの
 /// ファイル名を送ってくることを利用)。
-async fn upload_files(state: &AppState, site: &str, req: Request<Incoming>) -> Response<BoxBody> {
+async fn upload_files(state: &AppState, site: &str, req: Req) -> Response<BoxBody> {
     let Some(dir) = state.site_dir(site) else {
         return error_response(StatusCode::BAD_REQUEST, "invalid site name");
     };
@@ -1097,7 +697,7 @@ struct CorrectRequest {
 
 /// `POST /api/sites/:name/correct` — 判定結果への手動訂正を受け、
 /// AIの重みをEWMA式で補正・永続化する(自己学習)。
-async fn correct_detection(state: &AppState, site: &str, req: Request<Incoming>) -> Response<BoxBody> {
+async fn correct_detection(state: &AppState, site: &str, req: Req) -> Response<BoxBody> {
     let Some(dir) = state.site_dir(site) else {
         return error_response(StatusCode::BAD_REQUEST, "invalid site name");
     };
@@ -1134,7 +734,7 @@ async fn correct_detection(state: &AppState, site: &str, req: Request<Incoming>)
 /// (`appserver_registration`モジュール参照)。WASM側の「🔗 共有バックエンド
 /// へ登録」ボタンはこのエンドポイントを呼ぶ想定で先に実装されていたが、
 /// サーバー側のルート配線自体が漏れていた——2026-07-17に発見・追加。
-async fn register_appserver(site: &str, req: Request<Incoming>) -> Response<BoxBody> {
+async fn register_appserver(site: &str, req: Req) -> Response<BoxBody> {
     let bytes = match req.into_body().collect().await {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
@@ -1167,7 +767,7 @@ struct ContactRequest {
 /// `POST /api/auth/request-otp` — 登録済みの連絡先(メール1・メール2・
 /// 電話番号のいずれか)をIDとしてOTPを発行し、同じ経路(メール宛なら
 /// SMTP、電話番号宛ならSMS)で送信する。固定パスワードは一切扱わない。
-async fn request_otp(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+async fn request_otp(state: &AppState, req: Req) -> Response<BoxBody> {
     let bytes = match req.into_body().collect().await {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
@@ -1237,7 +837,7 @@ struct TotpLoginRequest {
 /// 変更していない——このエンドポイントは「TOTPだけで完結する」もう
 /// 一方の代替経路として追加した。TOTPが有効化されていないアカウントでは
 /// 使用できない(そのアカウントにとっての2つ目の要素が存在しないため)。
-async fn totp_login(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+async fn totp_login(state: &AppState, req: Req) -> Response<BoxBody> {
     let bytes = match req.into_body().collect().await {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
@@ -1285,7 +885,7 @@ fn qr_confirm_url(req_host: &str, scheme: &str, id: &str) -> String {
     format!("{scheme}://{req_host}/qr-confirm.html?id={id}")
 }
 
-fn request_host_scheme(req: &Request<Incoming>) -> (String, &'static str) {
+fn request_host_scheme(req: &Req) -> (String, &'static str) {
     let host = req.headers().get(hyper::header::HOST).and_then(|v| v.to_str().ok()).unwrap_or("localhost").to_string();
     let scheme = if req.headers().get("x-forwarded-proto").and_then(|v| v.to_str().ok()) == Some("https") {
         "https"
@@ -1322,7 +922,7 @@ struct QrLoginStartRequest {
 /// あることが確認済みという前提を流用するため——TOTP登録済み=一度は
 /// セッション認証済みでセットアップを完了している、という既存の要件と
 /// 整合させた設計)。
-async fn qr_login_start(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+async fn qr_login_start(state: &AppState, req: Req) -> Response<BoxBody> {
     let (host, scheme) = request_host_scheme(&req);
     let bytes = match req.into_body().collect().await {
         Ok(c) => c.to_bytes(),
@@ -1351,7 +951,7 @@ struct QrLoginIdRequest {
 /// スマホ/タブレット/WEBカメラ搭載端末で開く)がページ読み込み時に
 /// 自動的に呼ぶ(ユーザー指示「撮影すると自動受信・自動承認」——ボタン
 /// 操作は不要)。
-async fn qr_login_confirm(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+async fn qr_login_confirm(state: &AppState, req: Req) -> Response<BoxBody> {
     let bytes = match req.into_body().collect().await {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
@@ -1368,7 +968,7 @@ async fn qr_login_confirm(state: &AppState, req: Request<Incoming>) -> Response<
 
 /// `GET /api/auth/qr-login/status?id=` — プライマリ端末が数秒おきに
 /// ポーリングし、別端末での確認が済んだかを見る。
-async fn qr_login_status(state: &AppState, req: &Request<Incoming>) -> Response<BoxBody> {
+async fn qr_login_status(state: &AppState, req: &Req) -> Response<BoxBody> {
     let query = req.uri().query().unwrap_or("");
     let id = query.split('&').find_map(|kv| kv.strip_prefix("id=")).unwrap_or("");
     if id.is_empty() {
@@ -1383,7 +983,7 @@ async fn qr_login_status(state: &AppState, req: &Request<Incoming>) -> Response<
 /// `POST /api/auth/qr-login/finish` — 別端末での確認が済んだことを
 /// ポーリングで確認したプライマリ端末が呼ぶ。ここで初めて実際の
 /// セッショントークンを発行する。
-async fn qr_login_finish(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+async fn qr_login_finish(state: &AppState, req: Req) -> Response<BoxBody> {
     let bytes = match req.into_body().collect().await {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
@@ -1401,7 +1001,7 @@ async fn qr_login_finish(state: &AppState, req: Request<Incoming>) -> Response<B
 /// `GET /api/auth/qr-login/whoami?id=` — QR確認ページが「どのアカウント
 /// のログインを確認しようとしているか」を、マスク済みメールアドレスで
 /// 表示するために使う。
-async fn qr_login_whoami(state: &AppState, req: &Request<Incoming>) -> Response<BoxBody> {
+async fn qr_login_whoami(state: &AppState, req: &Req) -> Response<BoxBody> {
     let query = req.uri().query().unwrap_or("");
     let id = query.split('&').find_map(|kv| kv.strip_prefix("id=")).unwrap_or("");
     match state.auth.qr_login_masked_email(id) {
@@ -1422,7 +1022,7 @@ struct VerifyOtpRequest {
 /// `POST /api/auth/verify-otp` — OTPを検証し、成功すればセッション
 /// トークンを返す。`contact`にどの登録済み連絡先を入力しても、同じ
 /// アカウント(主メール)に対するセッションが発行される。
-async fn verify_otp(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+async fn verify_otp(state: &AppState, req: Req) -> Response<BoxBody> {
     let (host, scheme) = request_host_scheme(&req);
     let bytes = match req.into_body().collect().await {
         Ok(c) => c.to_bytes(),
@@ -1494,7 +1094,7 @@ async fn verify_otp(state: &AppState, req: Request<Incoming>) -> Response<BoxBod
 /// (セッション必須)。新しいシークレットを生成しpending状態で保存、
 /// QRコード表示用のprovisioning URIを返す。まだ有効化はされない
 /// (`/enable`で確認コードを送るまでは既存のログインフローに影響しない)。
-async fn totp_setup(state: &AppState, req: &Request<Incoming>) -> Response<BoxBody> {
+async fn totp_setup(state: &AppState, req: &Req) -> Response<BoxBody> {
     let account_email = match require_session(state, req) {
         Ok(email) => email,
         Err(resp) => return resp,
@@ -1535,7 +1135,7 @@ struct TotpCodeRequest {
 
 /// `POST /api/auth/totp/enable` — セットアップ中のシークレットを、認証
 /// アプリで実際に生成された確認コードで検証し、有効化する。
-async fn totp_enable(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+async fn totp_enable(state: &AppState, req: Req) -> Response<BoxBody> {
     let account_email = match require_session(state, &req) {
         Ok(email) => email,
         Err(resp) => return resp,
@@ -1575,7 +1175,7 @@ async fn totp_enable(state: &AppState, req: Request<Incoming>) -> Response<BoxBo
 }
 
 /// `POST /api/auth/totp/disable` — 認証アプリ2FAを無効化する(セッション必須)。
-async fn totp_disable(state: &AppState, req: &Request<Incoming>) -> Response<BoxBody> {
+async fn totp_disable(state: &AppState, req: &Req) -> Response<BoxBody> {
     let account_email = match require_session(state, req) {
         Ok(email) => email,
         Err(resp) => return resp,
@@ -1608,7 +1208,7 @@ fn default_change_field() -> String {
 /// リクエストする。確認リンクは**新しい連絡先ではなく、現在登録済みの
 /// 主メールアドレスへ**送信する——アカウント乗っ取り防止のため、変更は
 /// 現在のメールアドレスの持ち主にしか完了できない。
-async fn request_email_change(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+async fn request_email_change(state: &AppState, req: Req) -> Response<BoxBody> {
     let current_email = match require_session(state, &req) {
         Ok(email) => email,
         Err(response) => return response,
@@ -1654,7 +1254,7 @@ async fn request_email_change(state: &AppState, req: Request<Incoming>) -> Respo
 /// 送られた確認リンクを踏んだ際のエンドポイント。`field`に応じて
 /// 主メール改名(`rename_email`)・電話/セカンドメール更新
 /// (`update_contact`)のどちらかを行う。
-async fn confirm_email_change(state: &AppState, req: &Request<Incoming>) -> Response<BoxBody> {
+async fn confirm_email_change(state: &AppState, req: &Req) -> Response<BoxBody> {
     let query = req.uri().query().unwrap_or("");
     let token = query
         .split('&')
@@ -1702,7 +1302,7 @@ struct TokenRequest {
 }
 
 /// `POST /api/auth/logout` — セッショントークンを失効させる。
-async fn logout(state: &AppState, req: Request<Incoming>) -> Response<BoxBody> {
+async fn logout(state: &AppState, req: Req) -> Response<BoxBody> {
     let bytes = match req.into_body().collect().await {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
@@ -1931,7 +1531,7 @@ mod tests {
 
         // 認証ヘッダ無し → 401。
         let res = client
-            .post(format!("http://{addr}/api/sites/example.tokyo/folder"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/CreateFolder")).json(&serde_json::json!({"site": "example.tokyo"}))
             .send()
             .await
             .unwrap();
@@ -1939,7 +1539,7 @@ mod tests {
 
         // 不正なトークン → 401。
         let res = client
-            .post(format!("http://{addr}/api/sites/example.tokyo/folder"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/CreateFolder")).json(&serde_json::json!({"site": "example.tokyo"}))
             .bearer_auth("not-a-real-token")
             .send()
             .await
@@ -1993,7 +1593,7 @@ mod tests {
         let token = body["token"].as_str().unwrap().to_string();
 
         let res = client
-            .post(format!("http://{addr}/api/sites/example.tokyo/folder"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/CreateFolder")).json(&serde_json::json!({"site": "example.tokyo"}))
             .bearer_auth(&token)
             .send()
             .await
@@ -2003,14 +1603,14 @@ mod tests {
         // DELETE /api/sites/:name — 未登録ドメイン(vhostファイルが無い)への
         // 削除リクエストは冪等にOKを返す。認証無しでは401。
         let res = client
-            .delete(format!("http://{addr}/api/sites/example.tokyo"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/Delete")).json(&serde_json::json!({"site": "example.tokyo"}))
             .send()
             .await
             .unwrap();
         assert_eq!(res.status(), reqwest::StatusCode::UNAUTHORIZED);
 
         let res = client
-            .delete(format!("http://{addr}/api/sites/example.tokyo"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/Delete")).json(&serde_json::json!({"site": "example.tokyo"}))
             .bearer_auth(&token)
             .send()
             .await
@@ -2027,8 +1627,8 @@ mod tests {
 
         // 認証無し → 401(他の/api/sites/*アクションと同じ扱い)。
         let res = client
-            .post(format!("http://{addr}/api/sites/example.tokyo/register-appserver"))
-            .json(&serde_json::json!({
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/RegisterAppserver"))
+            .json(&serde_json::json!({"site": "example.tokyo",
                 "shared_endpoint": "http://127.0.0.1:1",
                 "kind": "poem_cosmo_tauri",
                 "backend_addr": "127.0.0.1:9100",
@@ -2045,9 +1645,9 @@ mod tests {
         // 側のHTTPエラーがそのままBAD_GATEWAYとして返る(ルーティング・
         // 認証・ボディのデシリアライズ・呼び出しがすべて実際に動くことの確認)。
         let res = client
-            .post(format!("http://{addr}/api/sites/example.tokyo/register-appserver"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/RegisterAppserver"))
             .bearer_auth(&token)
-            .json(&serde_json::json!({
+            .json(&serde_json::json!({"site": "example.tokyo",
                 "shared_endpoint": "http://127.0.0.1:1",
                 "kind": "poem_cosmo_tauri",
                 "backend_addr": "127.0.0.1:9100",
@@ -2070,7 +1670,7 @@ mod tests {
         // (誤って無認証公開しない安全側デフォルト)。
         std::env::remove_var("OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN");
         let res = client
-            .get(format!("http://{addr}/admin/dist-sync/targets"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/ListTargets")).header("content-type", "application/json").body("{}")
             .send()
             .await
             .unwrap();
@@ -2082,7 +1682,7 @@ mod tests {
         // 環境変数を読むテストは本テストのみ(grepで確認済み)なので許容する。
         std::env::set_var("OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN", "test-dist-sync-token");
         let res = client
-            .get(format!("http://{addr}/admin/dist-sync/targets"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/ListTargets")).header("content-type", "application/json").body("{}")
             .header("x-admin-token", "wrong-token")
             .send()
             .await
@@ -2091,7 +1691,7 @@ mod tests {
 
         // 正しいトークンで登録。
         let res = client
-            .post(format!("http://{addr}/admin/dist-sync/targets"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/RegisterTarget"))
             .header("x-admin-token", "test-dist-sync-token")
             .json(&serde_json::json!({
                 "host": "vps1.example.tokyo",
@@ -2111,7 +1711,7 @@ mod tests {
 
         // 一覧に反映されている。
         let res = client
-            .get(format!("http://{addr}/admin/dist-sync/targets"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/ListTargets")).header("content-type", "application/json").body("{}")
             .header("x-admin-token", "test-dist-sync-token")
             .send()
             .await
@@ -2123,7 +1723,7 @@ mod tests {
         // ディザスタ用退避先(Email)の設定も通ること(実SMTP接続はしない、
         // 設定を受け付けるだけの経路)。
         let res = client
-            .post(format!("http://{addr}/admin/dist-sync/disaster-fallback"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/SetDisasterFallback"))
             .header("x-admin-token", "test-dist-sync-token")
             .json(&serde_json::json!({
                 "email": {
@@ -2142,7 +1742,7 @@ mod tests {
 
         // 削除。
         let res = client
-            .delete(format!("http://{addr}/admin/dist-sync/targets/{target_id}"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/DeleteTarget")).json(&serde_json::json!({"id": target_id}))
             .header("x-admin-token", "test-dist-sync-token")
             .send()
             .await
@@ -2150,7 +1750,7 @@ mod tests {
         assert_eq!(res.status(), reqwest::StatusCode::OK);
 
         let res = client
-            .get(format!("http://{addr}/admin/dist-sync/targets"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/ListTargets")).header("content-type", "application/json").body("{}")
             .header("x-admin-token", "test-dist-sync-token")
             .send()
             .await
@@ -2182,7 +1782,7 @@ mod tests {
 
         // セットアップ開始(セッション必須)。
         let res = client
-            .post(format!("http://{addr}/api/auth/totp/setup"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpSetup")).header("content-type", "application/json").body("{}")
             .bearer_auth(&token)
             .send()
             .await
@@ -2200,7 +1800,7 @@ mod tests {
 
         // 間違ったコードでは有効化できない。
         let res = client
-            .post(format!("http://{addr}/api/auth/totp/enable"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpEnable")).header("content-type", "application/json").body("{}")
             .bearer_auth(&token)
             .json(&serde_json::json!({"code": "000000"}))
             .send()
@@ -2225,7 +1825,7 @@ mod tests {
             .as_secs();
         let correct_code = totp::code_at(&secret_bytes, now);
         let res = client
-            .post(format!("http://{addr}/api/auth/totp/enable"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpEnable")).header("content-type", "application/json").body("{}")
             .bearer_auth(&token)
             .json(&serde_json::json!({"code": correct_code}))
             .send()
@@ -2256,7 +1856,7 @@ mod tests {
             .as_secs();
         let code_for_login = totp::code_at(&secret_bytes, now2);
         let res = client
-            .post(format!("http://{addr}/api/auth/totp-login"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpLogin")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"account_email": "totp-user@example.com", "totp_code": code_for_login}))
             .send()
             .await
@@ -2283,14 +1883,14 @@ mod tests {
         let body: serde_json::Value = res.json().await.unwrap();
         let token = body["token"].as_str().unwrap().to_string();
 
-        let res = client.post(format!("http://{addr}/api/auth/totp/setup")).bearer_auth(&token).send().await.unwrap();
+        let res = client.post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpSetup")).header("content-type", "application/json").body("{}").bearer_auth(&token).send().await.unwrap();
         let body: serde_json::Value = res.json().await.unwrap();
         let secret_b32 = body["secret"].as_str().unwrap().to_string();
         let secret_bytes = totp::base32_to_secret(&secret_b32).unwrap();
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
         let correct_code = totp::code_at(&secret_bytes, now);
         let res = client
-            .post(format!("http://{addr}/api/auth/totp/enable"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpEnable")).header("content-type", "application/json").body("{}")
             .bearer_auth(&token)
             .json(&serde_json::json!({"code": correct_code}))
             .send()
@@ -2310,7 +1910,7 @@ mod tests {
 
         // start: TOTP登録済みアカウントならQRセッションを開始できる。
         let res = client
-            .post(format!("http://{addr}/api/auth/qr-login/start"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginStart")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"account_email": "qr-user@example.com"}))
             .send()
             .await
@@ -2323,7 +1923,7 @@ mod tests {
 
         // whoami: マスク済みメールアドレスが取得できる(実メールアドレス
         // そのものは返さない)。
-        let res = client.get(format!("http://{addr}/api/auth/qr-login/whoami?id={id}")).send().await.unwrap();
+        let res = client.post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginWhoami")).json(&serde_json::json!({"id": id})).send().await.unwrap();
         assert_eq!(res.status(), reqwest::StatusCode::OK);
         let body: serde_json::Value = res.json().await.unwrap();
         let masked = body["masked_email"].as_str().unwrap();
@@ -2331,13 +1931,13 @@ mod tests {
         assert!(!masked.contains("qr-user@example.com"));
 
         // status: 確認前はfalse。
-        let res = client.get(format!("http://{addr}/api/auth/qr-login/status?id={id}")).send().await.unwrap();
+        let res = client.post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginStatus")).json(&serde_json::json!({"id": id})).send().await.unwrap();
         let body: serde_json::Value = res.json().await.unwrap();
         assert_eq!(body["confirmed"].as_bool(), Some(false));
 
         // confirm: 確認端末(qr-confirm.html)側のリクエストを模す。
         let res = client
-            .post(format!("http://{addr}/api/auth/qr-login/confirm"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginConfirm")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"id": id}))
             .send()
             .await
@@ -2345,13 +1945,13 @@ mod tests {
         assert_eq!(res.status(), reqwest::StatusCode::OK);
 
         // status: 確認後はtrue。
-        let res = client.get(format!("http://{addr}/api/auth/qr-login/status?id={id}")).send().await.unwrap();
+        let res = client.post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginStatus")).json(&serde_json::json!({"id": id})).send().await.unwrap();
         let body: serde_json::Value = res.json().await.unwrap();
         assert_eq!(body["confirmed"].as_bool(), Some(true));
 
         // finish: プライマリ端末がセッショントークンを受け取る。
         let res = client
-            .post(format!("http://{addr}/api/auth/qr-login/finish"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginFinish")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"id": id}))
             .send()
             .await
@@ -2363,7 +1963,7 @@ mod tests {
 
         // 使い捨て: 同じidで再度finishを呼ぶと失敗する。
         let res = client
-            .post(format!("http://{addr}/api/auth/qr-login/finish"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginFinish")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"id": id}))
             .send()
             .await
@@ -2378,7 +1978,7 @@ mod tests {
         state.users.register("no-totp-qr@example.com", None, Some("backup@example.com".into())).unwrap();
         let client = reqwest::Client::new();
         let res = client
-            .post(format!("http://{addr}/api/auth/qr-login/start"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginStart")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"account_email": "no-totp-qr@example.com"}))
             .send()
             .await
@@ -2399,7 +1999,7 @@ mod tests {
 
         // 管理APIでotp_qrモードへ切り替える。
         let res = client
-            .post(format!("http://{addr}/admin/easyweb-login-mode"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Settings/SetLoginMode"))
             .header("x-admin-token", "test-dist-sync-token")
             .json(&serde_json::json!({"login_mode": "otp_qr"}))
             .send()
@@ -2411,7 +2011,7 @@ mod tests {
 
         // GETでも反映が確認できる。
         let res = client
-            .get(format!("http://{addr}/admin/easyweb-login-mode"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Settings/GetLoginMode")).header("content-type", "application/json").body("{}")
             .header("x-admin-token", "test-dist-sync-token")
             .send()
             .await
@@ -2434,14 +2034,14 @@ mod tests {
 
         // QR確認→finishでセッション発行。
         let res = client
-            .post(format!("http://{addr}/api/auth/qr-login/confirm"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginConfirm")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"id": id}))
             .send()
             .await
             .unwrap();
         assert_eq!(res.status(), reqwest::StatusCode::OK);
         let res = client
-            .post(format!("http://{addr}/api/auth/qr-login/finish"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginFinish")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"id": id}))
             .send()
             .await
@@ -2453,7 +2053,7 @@ mod tests {
 
         // 後始末: 他テストへ影響しないよう既定のotpへ戻す。
         let _ = client
-            .post(format!("http://{addr}/admin/easyweb-login-mode"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Settings/SetLoginMode"))
             .header("x-admin-token", "test-dist-sync-token")
             .json(&serde_json::json!({"login_mode": "otp"}))
             .send()
@@ -2469,7 +2069,7 @@ mod tests {
         let (addr, _state) = spawn_test_server().await;
         let client = reqwest::Client::new();
         let res = client
-            .post(format!("http://{addr}/admin/easyweb-login-mode"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Settings/SetLoginMode"))
             .header("x-admin-token", "test-dist-sync-token")
             .json(&serde_json::json!({"login_mode": "bogus"}))
             .send()
@@ -2485,7 +2085,7 @@ mod tests {
         state.users.register("no-totp@example.com", None, Some("no-totp2@example.com".into())).unwrap();
         let client = reqwest::Client::new();
         let res = client
-            .post(format!("http://{addr}/api/auth/totp-login"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpLogin")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"account_email": "no-totp@example.com", "totp_code": "000000"}))
             .send()
             .await

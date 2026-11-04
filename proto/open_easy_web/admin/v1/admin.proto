@@ -1,7 +1,15 @@
-// open-easy-web 管理API(Connect の単純呼び出し: POST /open_easy_web.admin.v1.<Service>/<Method>、JSON)。
+// open-easy-web の API(Connect の単純呼び出し: POST /open_easy_web.admin.v1.<Service>/<Method>、JSON)。
 // 今は説明用のスキーマで、コード生成には使っていない(サーバーは RS-JSON で読み書きする、server/src/connect.rs)。
+// REST は全廃する方針(2026-11-04)。REST のまま残る例外: GET /api/auth/confirm-email-change(メールのリンク)、
+// POST /api/sites/<name>/upload(multipart)、/healthz、/ime/...、静的ファイル、
+// 移行期限つきの互換 POST /api/auth/request-otp・verify-otp(RS-Sync・open-upstream-watch が移行するまで)。
+// 認証: Notify/Storage/DistSync/System/Settings/LolipopCron/AutoUpdate は x-admin-token、Sites/* と TOTP 設定は Authorization: Bearer <セッション>。
 syntax = "proto3";
 package open_easy_web.admin.v1;
+
+message Empty {}
+// 実行結果・状態は、構造の決まった JSON(各サーバーモジュールを参照)。説明用に空のメッセージで示す。
+message Json {}
 
 service Notify {
   rpc Get(Empty) returns (NotifyView);
@@ -12,15 +20,76 @@ service Notify {
 }
 
 service Storage {
-  rpc GetMaintenance(Empty) returns (MaintenanceView);
+  rpc GetMaintenance(Empty) returns (Json);
   rpc SetSettings(StorageSettings) returns (StorageSettings);
-  rpc RunHealth(Empty) returns (Result);
+  rpc RunHealth(Empty) returns (Json);
   // apply=true のときだけ実際に実行する。省くと試し実行・計画だけ。
-  rpc RunTidy(ApplyRequest) returns (Result);
-  rpc RunOptimize(ApplyRequest) returns (Result);
+  rpc RunTidy(ApplyRequest) returns (Json);
+  rpc RunOptimize(ApplyRequest) returns (Json);
 }
 
-message Empty {}
+service DistSync {
+  rpc ListTargets(Empty) returns (Json);
+  rpc RegisterTarget(Json) returns (Json);   // host, port, username, password_env, remote_backup_dir, label
+  rpc DeleteTarget(IdRequest) returns (Json);
+  rpc SetDisasterFallback(Json) returns (Json); // email または google_drive
+  rpc FirstTimeSetup(Empty) returns (Json);
+}
+
+service System {
+  rpc GetMemory(Empty) returns (Json);
+  rpc GetDisk(Empty) returns (Json);
+  rpc GetMemoryBreakdown(Empty) returns (Json);
+  rpc GetDiskBreakdown(Empty) returns (Json);
+}
+
+service Settings {
+  rpc GetLoginMode(Empty) returns (Json);
+  rpc SetLoginMode(LoginModeRequest) returns (Json);   // login_mode: otp | qr | otp_qr
+  rpc GetPowerProfile(Empty) returns (Json);
+  rpc SetPowerProfile(PowerProfileRequest) returns (Json);
+}
+
+service LolipopCron {
+  rpc ListJobs(Empty) returns (Json);
+  rpc CreateJob(Json) returns (Json);   // name, url, method, schedule{times,weekdays}, timeout_secs, catch_up
+  rpc DeleteJob(IdRequest) returns (Json);
+  rpc RunJob(IdRequest) returns (Json);
+  rpc SetJobEnabled(JobEnabledRequest) returns (Json);
+}
+
+service AutoUpdate {
+  rpc Get(Empty) returns (Json);
+  rpc Set(EnabledRequest) returns (Json);
+  rpc CheckNow(Empty) returns (Json);
+}
+
+// ログイン前から呼ぶ。ログイン・OTP・QR・TOTP の検証はサーバーのハンドラ側。
+service Auth {
+  rpc RequestOtp(ContactRequest) returns (Json);
+  rpc VerifyOtp(VerifyOtpRequest) returns (Json);
+  rpc TotpLogin(Json) returns (Json);          // account_email, totp_code
+  rpc QrLoginStart(Json) returns (Json);
+  rpc QrLoginConfirm(IdRequest) returns (Json);
+  rpc QrLoginStatus(IdRequest) returns (Json);
+  rpc QrLoginFinish(IdRequest) returns (Json);
+  rpc QrLoginWhoami(IdRequest) returns (Json);
+  rpc Logout(Json) returns (Json);             // token
+  rpc TotpSetup(Empty) returns (Json);         // Authorization: Bearer
+  rpc TotpEnable(Json) returns (Json);         // code
+  rpc TotpDisable(Empty) returns (Json);
+  rpc RequestEmailChange(Json) returns (Json); // field, new_value
+}
+
+// サイト操作(Authorization: Bearer <セッション>)。本文の site でサイト名を渡す。
+service Sites {
+  rpc Delete(SiteRequest) returns (Json);
+  rpc CreateFolder(SiteRequest) returns (Json);
+  rpc DetectAndConfigure(SiteRequest) returns (Json);
+  rpc Correct(CorrectRequest) returns (Json);
+  rpc RegisterAppserver(Json) returns (Json);  // site, shared_endpoint, kind, backend_addr, admin_key, db_uri
+}
+
 message SetRecipientsRequest { repeated string emails = 1; }
 message SetRecipientsResponse { repeated string recipients = 1; }
 message SendRequest { string kind = 1; string subject = 2; string body = 3; }
@@ -32,6 +101,12 @@ message StorageSettings {
   bool optimize_enabled = 4; bool optimize_apply = 5; uint32 hour = 6;
 }
 message ApplyRequest { bool apply = 1; }
-// 実行結果は、状態(state)と人が読む文章(text)を持つ JSON(構造は storage_maintenance.rs を参照)。
-message Result {}
-message MaintenanceView {}
+message IdRequest { string id = 1; }
+message EnabledRequest { bool enabled = 1; }
+message JobEnabledRequest { string id = 1; bool enabled = 2; }
+message LoginModeRequest { string login_mode = 1; }
+message PowerProfileRequest { repeated string profiles = 1; }
+message ContactRequest { string contact = 1; }
+message VerifyOtpRequest { string contact = 1; string code = 2; string totp_code = 3; }
+message SiteRequest { string site = 1; }
+message CorrectRequest { string site = 1; bool is_php = 2; }

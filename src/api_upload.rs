@@ -1,6 +1,10 @@
-//! `open-easy-web-server`のサイト操作API(フォルダー作成・アップロード・
-//! AI判定・訂正)への薄い`fetch()`ラッパー。全て`Authorization: Bearer`
+//! `open-easy-web-server`のサイト操作API(フォルダー作成・AI判定・訂正は Connect の `Sites/*`、
+//! アップロードだけ `multipart/form-data`)への薄い`fetch()`ラッパー。全て`Authorization: Bearer`
 //! セッショントークンが必要(`api_auth::saved_token()`)。
+//!
+//! 方式は Connect の単純呼び出し(`POST /open_easy_web.admin.v1.<Service>/<Method>`、JSON)で、REST は使わない
+//! (2026-11-04 方針)。**例外**: ファイル送信の `upload` だけは、バイナリを JSON に載せると大きくなるため
+//! `multipart/form-data` の REST のまま(`CLAUDE.md`「API 方針」参照)。
 
 use serde::Serialize;
 use serde_json::Value;
@@ -8,6 +12,13 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{FileList, FormData, Headers, Request, RequestInit, RequestMode, Response};
+
+const NS: &str = "/open_easy_web.admin.v1.";
+
+#[derive(Serialize)]
+struct SiteBody<'a> {
+    site: &'a str,
+}
 
 fn json_to_value(js: &JsValue) -> Value {
     js_sys::JSON::stringify(js)
@@ -27,7 +38,8 @@ async fn read_response(resp_value: JsValue) -> Result<Value, String> {
     if (200..300).contains(&status) {
         Ok(parsed)
     } else {
-        let msg = parsed.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error").to_string();
+        // Connect のエラー形式 `{"code","message"}` の message を優先し、旧形式の `error` も読む。
+        let msg = parsed.get("message").or_else(|| parsed.get("error")).and_then(|v| v.as_str()).unwrap_or("unknown error").to_string();
         Err(format!("HTTP {status}: {msg}"))
     }
 }
@@ -54,37 +66,14 @@ async fn authed_post_json(path: &str, body: &impl Serialize) -> Result<Value, St
     read_response(resp_value).await
 }
 
-async fn authed_method_empty(method: &str, path: &str) -> Result<Value, String> {
-    let token = crate::api_auth::saved_token().ok_or("not logged in / ログインしてください")?;
-
-    let opts = RequestInit::new();
-    opts.set_method(method);
-    opts.set_mode(RequestMode::SameOrigin);
-
-    let headers = Headers::new().map_err(|e| format!("headers init failed: {e:?}"))?;
-    headers.set("Authorization", &format!("Bearer {token}")).ok();
-    opts.set_headers(&headers);
-
-    let request =
-        Request::new_with_str_and_init(path, &opts).map_err(|e| format!("request build failed: {e:?}"))?;
-    let resp_value = JsFuture::from(crate::dom::window().fetch_with_request(&request))
-        .await
-        .map_err(|e| format!("fetch failed: {e:?}"))?;
-    read_response(resp_value).await
-}
-
-async fn authed_post_empty(path: &str) -> Result<Value, String> {
-    authed_method_empty("POST", path).await
-}
-
-/// `DELETE /api/sites/:name` — ドメイン登録を取り消す(nginx vhostのみ削除、
+/// `Sites/Delete` — ドメイン登録を取り消す(nginx vhostのみ削除、
 /// アップロード済みファイル・証明書は保持される)。
 pub async fn delete_domain(site: &str) -> Result<Value, String> {
-    authed_method_empty("DELETE", &format!("/api/sites/{site}")).await
+    authed_post_json(&format!("{NS}Sites/Delete"), &SiteBody { site }).await
 }
 
 pub async fn create_folder(site: &str) -> Result<Value, String> {
-    authed_post_empty(&format!("/api/sites/{site}/folder")).await
+    authed_post_json(&format!("{NS}Sites/CreateFolder"), &SiteBody { site }).await
 }
 
 /// `<input type="file" multiple>` で選択されたファイル群をアップロードする。
@@ -119,14 +108,15 @@ pub async fn upload_files(site: &str, files: &FileList) -> Result<Value, String>
 }
 
 pub async fn detect_and_configure(site: &str) -> Result<Value, String> {
-    authed_post_empty(&format!("/api/sites/{site}/detect-and-configure")).await
+    authed_post_json(&format!("{NS}Sites/DetectAndConfigure"), &SiteBody { site }).await
 }
 
 #[derive(Serialize)]
-struct CorrectBody {
+struct CorrectBody<'a> {
+    site: &'a str,
     is_php: bool,
 }
 
 pub async fn correct_detection(site: &str, is_php: bool) -> Result<Value, String> {
-    authed_post_json(&format!("/api/sites/{site}/correct"), &CorrectBody { is_php }).await
+    authed_post_json(&format!("{NS}Sites/Correct"), &CorrectBody { site, is_php }).await
 }

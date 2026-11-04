@@ -373,7 +373,7 @@ async fn check_reachable(url: &str) -> Result<(), String> {
 
 /// カードの「🔗 共有バックエンドへ登録」ボタン(2026-07-16、「分身の術」
 /// 構想の仕上げ)。この`open-easy-web-server`自身の
-/// `POST /api/sites/:name/register-appserver`を呼び、既に稼働中の
+/// `Sites/RegisterAppserver`(Connect)を呼び、既に稼働中の
 /// 共有`open-web-server`/`poem-cosmo-tauri`インスタンスへこのサイトの
 /// ドメイン(`p.host`)を動的登録する——新しいバックエンドプロセスを
 /// 個別インストールする必要は無い。
@@ -425,7 +425,7 @@ fn appserver_kind_for(app_server: &str) -> Option<&'static str> {
     }
 }
 
-/// `POST /api/sites/{host}/register-appserver`を実際に叩く。相対パスで
+/// `Sites/RegisterAppserver`(Connect)を実際に叩く。相対パスで
 /// 送るため、このWASMバンドル自身を配信している`open-easy-web-server`
 /// (同一オリジン)が対象になる——共有バックエンドへは
 /// `open-easy-web-server`側がサーバー間で中継する
@@ -435,6 +435,7 @@ async fn register_appserver_request(profile: &SiteProfile, kind: &str) -> Result
     use web_sys::{Headers, Request, RequestInit, RequestMode};
 
     let body = serde_json::json!({
+        "site": profile.host,
         "shared_endpoint": profile.shared_appserver_endpoint,
         "kind": kind,
         "backend_addr": profile.app_server_upstream,
@@ -465,7 +466,8 @@ async fn register_appserver_request(profile: &SiteProfile, kind: &str) -> Result
     opts.set_headers(&headers);
     opts.set_body(&JsValue::from_str(&body_str));
 
-    let url = format!("/api/sites/{}/register-appserver", js_sys::encode_uri_component(&profile.host));
+    // Connect の単純呼び出し(REST は使わない。2026-11-04 方針)。サイト名は本文の `site` で渡す。
+    let url = "/open_easy_web.admin.v1.Sites/RegisterAppserver".to_string();
     let request = Request::new_with_str_and_init(&url, &opts).map_err(|e| format!("request build failed: {e:?}"))?;
 
     let resp_value = JsFuture::from(crate::dom::window().fetch_with_request(&request))
