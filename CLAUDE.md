@@ -3547,7 +3547,7 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 | `POST /api/auth/logout` | `Auth/Logout` | |
 | `POST /api/auth/totp/{setup,enable,disable}` | `Auth/Totp{Setup,Enable,Disable}` | Bearer |
 | `POST /api/auth/request-email-change` | `Auth/RequestEmailChange` | Bearer |
-| `POST /api/auth/{request-otp,verify-otp}` | `Auth/{RequestOtp,VerifyOtp}` | **旧 REST は期限つきの互換として残す**(応答に `Deprecation: true`)。利用者は `open-upstream-watch` だけで、Connect へ更新済み(b8517b6)。**配備したら旧 REST を削除する** |
+| `POST /api/auth/{request-otp,verify-otp}` | `Auth/{RequestOtp,VerifyOtp}` | 旧 REST は**削除した**(2026-11-04)。利用者の `open-upstream-watch` を Connect 版(b8517b6)にして VPS へ配備してから消した |
 | `DELETE /api/sites/:name` | `Sites/Delete`(`{"site":…}`) | Bearer |
 | `POST /api/sites/:name/{folder,detect-and-configure,correct,register-appserver}` | `Sites/{CreateFolder,DetectAndConfigure,Correct,RegisterAppserver}`(本文に `site`) | Bearer |
 | `POST /api/sites/:name/upload`(multipart) | `Sites/Upload`(本文 `{"site":…,"files":[{"path":…,"data_base64":…}]}`) | Bearer。**ファイルは base64 の JSON**。本文の上限 128 MiB(中身はおよそ 96 MiB まで)、1ファイルは 90 MiB まで。画面は合計 48 MiB ごとに分けて送る。手書きの multipart パーサーは削除 |
@@ -3560,7 +3560,7 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 | `GET/POST /admin/auto-update`、`POST …/check-now` | `AutoUpdate/{Get,Set,CheckNow}` | |
 | `/admin/notify…`、`/admin/storage/…` | `Notify/*`、`Storage/*` | 初めから Connect のみ |
 
-**REST のまま残すもの**(外部の規格や配布の都合が形を決めるものだけ): `GET /healthz`、`/ime/…`(aruaru-IME の中継と配布)、静的ファイル・`/pkg/…`・`/qr-confirm.html`、および**期限つきの互換**として `POST /api/auth/request-otp`・`verify-otp`(上記。`open-upstream-watch` を配備したら削除)。旧形式のメール確認リンク(`GET /api/auth/confirm-email-change`)は、案内ページ(410)を返すだけで、何も確定しない。
+**REST のまま残すもの**(外部の規格や配布の都合が形を決めるものだけ): `GET /healthz`、`/ime/…`(aruaru-IME の中継と配布)、静的ファイル・`/pkg/…`・`/qr-confirm.html`。旧形式のメール確認リンク(`GET /api/auth/confirm-email-change`)は、案内ページ(410)を返すだけで、何も確定しない。
 **このリポジトリの範囲外**: 画面の「無料ドメイン」パネルが呼ぶ `/admin/ddns/…`・`/admin/sftp/…` は `open-web-server` 本体の API で、同リポジトリ側で別途移行が要る(未対応)。
 **本文の上限**: 入口で読み込む本文は 64 KiB まで(以前はハンドラごとに無制限)。`Sites/Upload` だけ 128 MiB まで。超えると 413。
 **JSON の読み書き**: 外から入る JSON(リクエスト本文、他サービス〈GitHub・aruaru-llm〉の応答、ディスク上の状態ファイル)は、すべて RS-JSON の `from_str_secure`(サイズ・深さ・重複キーの上限つき、`server/src/json_in.rs`)で読む。書き出しは `rust_json::fast`。`serde_json::from_*` / `sonic_rs::from_*` を外部入力に直接使わない。

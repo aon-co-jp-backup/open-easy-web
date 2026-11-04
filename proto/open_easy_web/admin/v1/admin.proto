@@ -1,7 +1,7 @@
 // open-easy-web の API(Connect(POST、RS-JSON): POST /open_easy_web.admin.v1.<Service>/<Method>、本文は JSON)。
 // 今は説明用のスキーマで、コード生成には使っていない(サーバーは RS-JSON で読み書きする、server/src/connect.rs)。
 // REST は全廃する方針(2026-11-04)。REST のまま残るのは、外部の規格が形を決めるもの(/healthz、/ime/...、静的ファイル 等)と、
-// 移行期限つきの互換 POST /api/auth/request-otp・verify-otp(open-upstream-watch を配備するまで)だけ。
+// 以前あった互換の POST /api/auth/request-otp・verify-otp も、利用者の open-upstream-watch を Connect 版にして配備したので削除した。
 // メールの確認リンクは画面のURL(#/confirm-email-change?token=…)で、確認ボタンを押したときだけ Account/ConfirmEmailChange で確定する。
 // 認証: Notify/Storage/DistSync/System/Settings/LolipopCron/AutoUpdate は x-admin-token、Sites/* と TOTP 設定は Authorization: Bearer <セッション>。
 syntax = "proto3";

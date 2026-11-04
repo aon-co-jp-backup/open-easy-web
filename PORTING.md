@@ -506,7 +506,7 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 ## API 移行(REST → Connect)の記録 (2026-11-04)
 このリポジトリの REST 風 API(`/admin/...`・`/api/...`)は、**すべて Connect(POST、RS-JSON)(`POST /open_easy_web.admin.v1.<Service>/<Method>`、JSON、読み書きは RS-JSON)へ移し、旧 REST の経路を削除した**。対応表・例外とその理由は `CLAUDE.md`「旧 REST → Connect の対応表」、スキーマは `proto/open_easy_web/admin/v1/admin.proto`。
 - **引っ越し(移植)時の注意**: ヘルスチェックは `GET /healthz` のまま。外から呼ぶスクリプトを書くときは `curl -X POST -H 'content-type: application/json' -H "x-admin-token: …" -d '{}' https://…/open_easy_web.admin.v1.System/GetMemory` の形にする。
-- **期限つき互換**: `POST /api/auth/request-otp`・`verify-otp`(旧 REST)は、利用者の `open-upstream-watch` を Connect 版へ更新して配備するまで残している(応答に `Deprecation: true`)。配備後に削除すること。
+- **期限つき互換は終了**: 旧 `POST /api/auth/request-otp`・`verify-otp` は、利用者の `open-upstream-watch` を Connect 版にして配備したので削除した(2026-11-04)。
 - **本文の上限**: 入口で 64 KiB(`Sites/Upload` のみ 128 MiB)。以前はハンドラごとに無制限に読んでいた。外から入る JSON はすべて RS-JSON(`server/src/json_in.rs`)で読む。
 - **メールの確認リンク**: 画面のURL(`/#/confirm-email-change?token=…`)で、GET では何も確定しない。確認ボタンで `Account/ConfirmEmailChange`(POST、RS-JSON)を呼ぶ。旧形式のリンクは案内ページ(410)。
 - **ファイル送信**: `Sites/Upload`(base64 の JSON)。手書きの multipart パーサーは削除した。

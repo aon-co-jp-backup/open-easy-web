@@ -212,12 +212,6 @@ fn old_confirm_link_page() -> Response<BoxBody> {
         .expect("static response headers are always valid")
 }
 
-/// 移行期限つきの互換経路の応答に `Deprecation: true` を付ける(`/api/auth/request-otp`・`verify-otp`)。
-fn deprecated(mut resp: Response<BoxBody>) -> Response<BoxBody> {
-    resp.headers_mut().insert("deprecation", hyper::header::HeaderValue::from_static("true"));
-    resp
-}
-
 fn json_response(status: StatusCode, value: &impl serde::Serialize) -> Response<BoxBody> {
     let body = serde_json::to_vec(value).unwrap_or_else(|_| b"{}".to_vec());
     Response::builder()
@@ -417,11 +411,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 .body(Full::new(Bytes::from(open_runo_crossui::page_html(&app, "/ime/api").replace("</main>", &("<div id=\"notice\"><small><b>ご利用上の注意 / Notes</b><ul><li>この画面は、入力した内容をサーバー(easy-web.tokyo)で変換します。入力はサーバーに送られますが、保存・学習はしません。<br>This screen converts your input on the server (easy-web.tokyo). Your input is sent to the server but is not stored or learned.</li><li>自分のPCだけで変換したいときは、従来どおりインストールして「このPCの画面で開く」(http://127.0.0.1:4660/ui)を使ってください。<br>To convert only on your own PC, install the app as usual and use \"Open on this PC\" (http://127.0.0.1:4660/ui).</li><li>個人の学習や登録語は、オンライン画面には反映されません。<br>Your personal learning and registered words are not applied on this online screen.</li><li>中国語・季節用語・優先順位などの辞書は、サーバー側でも同じものが使われます。<br>The same dictionaries (Chinese, seasonal terms, candidate priorities, etc.) are used on the server.</li><li>短時間に大量の操作をすると、一時的に制限されることがあります。<br>Very rapid bursts of requests may be temporarily limited.</li></ul></small></div>".to_string() + "<div id=\"installers\"><b>インストーラー(OSを選ぶ) / Installers</b>" + &ime_installers_html() + "</div></main>")))))
                 .expect("static response headers are always valid")
         }
-        // ログイン関連の API は Connect(`Auth/*`・`Account/*`、`connect.rs`)へ移した。REST のまま残すのは次の2本だけ:
-        // **互換のための期限つき**: `open-upstream-watch` が `request-otp`・`verify-otp` を呼んでいる。
-        // Connect 版(`Auth/RequestOtp`・`Auth/VerifyOtp`)へ更新した版を配備したら、この2本は削除する。応答には `Deprecation: true` を付ける。
-        (&Method::POST, "/api/auth/request-otp") => deprecated(request_otp(&state, req).await),
-        (&Method::POST, "/api/auth/verify-otp") => deprecated(verify_otp(&state, req).await),
+        // ログイン関連の API は Connect(`Auth/*`・`Account/*`、`connect.rs`)へ移した。旧 REST の `request-otp`・`verify-otp` は削除した(2026-11-04)。
         // 旧形式のメール確認リンク(`GET /api/auth/confirm-email-change?token=…`)。**GET では何も確定しない**
         // (メールの先読みでトークンが消費されないように)。新しい形式の案内ページだけを返す。
         (&Method::GET, p) if p.starts_with("/api/auth/confirm-email-change") => old_confirm_link_page(),
@@ -1606,7 +1596,7 @@ mod tests {
 
         // 未登録の連絡先でOTPをリクエストすると404。
         let res = client
-            .post(format!("http://{addr}/api/auth/request-otp"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/RequestOtp"))
             .json(&serde_json::json!({"contact": "user@example.com"}))
             .send()
             .await
@@ -1621,7 +1611,7 @@ mod tests {
         // 登録済みでもSMTP未設定なので503(実メール送信はできないが、
         // OTP自体は内部で発行・保存されている)。
         let res = client
-            .post(format!("http://{addr}/api/auth/request-otp"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/RequestOtp"))
             .json(&serde_json::json!({"contact": "user@example.com"}))
             .send()
             .await
@@ -1634,7 +1624,7 @@ mod tests {
         // (user@example.com)のセッションが発行されることを確認する。
         let auth::RequestOtpOutcome::Issued(code) = state.auth.request_otp("user2@example.com");
         let res = client
-            .post(format!("http://{addr}/api/auth/verify-otp"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/VerifyOtp"))
             .json(&serde_json::json!({"contact": "user2@example.com", "code": code}))
             .send()
             .await
@@ -1822,7 +1812,7 @@ mod tests {
         // ログインしてセッションを得る(TOTP未設定の1回目はコード不要)。
         let auth::RequestOtpOutcome::Issued(code) = state.auth.request_otp("totp-user@example.com");
         let res = client
-            .post(format!("http://{addr}/api/auth/verify-otp"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/VerifyOtp"))
             .json(&serde_json::json!({"contact": "totp-user@example.com", "code": code}))
             .send()
             .await
@@ -1889,7 +1879,7 @@ mod tests {
         // トークンは発行されない)。
         let auth::RequestOtpOutcome::Issued(code2) = state.auth.request_otp("totp-user@example.com");
         let res = client
-            .post(format!("http://{addr}/api/auth/verify-otp"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/VerifyOtp"))
             .json(&serde_json::json!({"contact": "totp-user@example.com", "code": code2}))
             .send()
             .await
@@ -1927,7 +1917,7 @@ mod tests {
         state.users.register(email, None, Some(format!("backup-{email}"))).unwrap();
         let auth::RequestOtpOutcome::Issued(code) = state.auth.request_otp(email);
         let res = client
-            .post(format!("http://{addr}/api/auth/verify-otp"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/VerifyOtp"))
             .json(&serde_json::json!({"contact": email, "code": code}))
             .send()
             .await
@@ -2074,7 +2064,7 @@ mod tests {
         // メールOTPを検証すると、TOTPコードではなくQRセッションが返る。
         let auth::RequestOtpOutcome::Issued(code) = state.auth.request_otp("otpqr-user@example.com");
         let res = client
-            .post(format!("http://{addr}/api/auth/verify-otp"))
+            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/VerifyOtp"))
             .json(&serde_json::json!({"contact": "otpqr-user@example.com", "code": code}))
             .send()
             .await

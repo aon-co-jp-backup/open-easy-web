@@ -10,8 +10,8 @@
 //! ログイン前の `Auth/*`・`Account/*` は認証なし(レート制御や OTP の検証はハンドラ側)。
 //!
 //! **REST は全廃する方針**(2026-11-04)。REST のまま残すのは、外部の規格や配布の都合が形を決めるものだけ:
-//! `/healthz`、`/ime/...`(aruaru-IME の中継と配布)、静的ファイル、および **移行期限つきの互換**として
-//! `POST /api/auth/request-otp`・`/api/auth/verify-otp`(`open-upstream-watch` が使っている。Connect 版を配備したら削除する)。
+//! `/healthz`、`/ime/...`(aruaru-IME の中継と配布)、静的ファイル、旧形式のメール確認リンクの案内ページ(410、何も確定しない)。
+//! 以前あった互換の `POST /api/auth/request-otp`・`/api/auth/verify-otp` は、利用者の `open-upstream-watch` を Connect 版にして配備したので削除した。
 //! メールの確認リンクは API ではなく**画面のURL**(`#/confirm-email-change?token=…`)で、GET では何も確定せず、確認ボタンを押したときだけ
 //! `Account/ConfirmEmailChange`(POST、RS-JSON)で確定する。ファイル送信も `Sites/Upload`(base64 の JSON)。
 //! スキーマは `proto/open_easy_web/admin/v1/admin.proto`(説明用で、コード生成には使っていない)。
