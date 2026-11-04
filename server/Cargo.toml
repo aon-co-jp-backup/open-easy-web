@@ -82,3 +82,7 @@ russh-sftp = "2"
 # バージョンが異なる(russh 0.62のキー生成が要求するのは0.10系)ため、
 # 名前衝突を避けて`rand_for_test_keys`としてリネームして依存させる。
 rand_for_test_keys = { package = "rand", version = "0.10" }
+
+# RUSTSEC-2023-0071 (rsa Marvin Attack, 修正版なし) 回避: aon-co-jp/rsa-rs の互換実装へ差し替え。
+[patch.crates-io]
+rsa = { git = "https://github.com/aon-co-jp/rsa-rs", tag = "v0.1.0", version = "=0.10.0-rc.18" }
