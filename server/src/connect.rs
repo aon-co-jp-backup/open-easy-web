@@ -7,13 +7,13 @@
 //!
 //! 認証: 管理系(`Notify`・`Storage`・`DistSync`・`System`・`Settings`・`LolipopCron`・`AutoUpdate`)は `x-admin-token`。
 //! サイト操作(`Sites`)・TOTP 設定などは `Authorization: Bearer <セッション>`(各ハンドラの中で検査する)。
-//! ログイン前の `Auth/*` は認証なし(レート制御や OTP の検証はハンドラ側)。
+//! ログイン前の `Auth/*`・`Account/*` は認証なし(レート制御や OTP の検証はハンドラ側)。
 //!
-//! **REST は全廃する方針**(2026-11-04)。REST のまま残すのは、規格や利用形態の都合による例外だけ:
-//! `GET /api/auth/confirm-email-change?token=`(メールに載るリンクをブラウザで直接開く)、
-//! `POST /api/sites/<name>/upload`(`multipart/form-data` のファイル送信)、`/healthz`、`/ime/...`、静的ファイル、
-//! および **移行期限つきの互換**として `POST /api/auth/request-otp`・`/api/auth/verify-otp`(`RS-Sync`・`open-upstream-watch` が
-//! 使っているため。両者を Connect に更新して配備したら削除する)。
+//! **REST は全廃する方針**(2026-11-04)。REST のまま残すのは、外部の規格や配布の都合が形を決めるものだけ:
+//! `/healthz`、`/ime/...`(aruaru-IME の中継と配布)、静的ファイル、および **移行期限つきの互換**として
+//! `POST /api/auth/request-otp`・`/api/auth/verify-otp`(`open-upstream-watch` が使っている。Connect 版を配備したら削除する)。
+//! メールの確認リンクは API ではなく**画面のURL**(`#/confirm-email-change?token=…`)で、GET では何も確定せず、確認ボタンを押したときだけ
+//! `Account/ConfirmEmailChange`(POST、RS-JSON)で確定する。ファイル送信も `Sites/Upload`(base64 の JSON)。
 //! スキーマは `proto/open_easy_web/admin/v1/admin.proto`(説明用で、コード生成には使っていない)。
 
 use crate::{storage_maintenance, update_notify, AppState, BoxBody, Req};
@@ -24,6 +24,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub const PREFIX: &str = "/open_easy_web.admin.v1.";
+/// ファイル送信(`Sites/Upload`)の本文の上限(JSON + base64 なので、中身はおよそ 96 MiB まで)。ほかは 64 KiB。
+pub const UPLOAD_MAX: usize = 128 * 1024 * 1024;
 /// 本文の上限は `dispatch` の入口で掛けている(Connect は 64 KiB まで)。
 const ADMIN_SERVICES: [&str; 7] = ["Notify", "Storage", "DistSync", "System", "Settings", "LolipopCron", "AutoUpdate"];
 
@@ -99,7 +101,7 @@ async fn finish(resp: Response<BoxBody>) -> Response<BoxBody> {
         return Response::from_parts(parts, body);
     }
     let bytes = body.collect().await.map(|c| c.to_bytes()).unwrap_or_default();
-    if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+    if let Ok(v) = crate::json_in::parse_with_limit::<serde_json::Value>(&bytes, 1024 * 1024) {
         if v.get("code").is_some() {
             return reply(status, bytes.to_vec());
         }
@@ -183,6 +185,17 @@ struct SiteReq {
 }
 
 #[derive(Deserialize)]
+struct TokenReq {
+    token: String,
+}
+
+#[derive(Deserialize)]
+struct UploadReq {
+    site: String,
+    files: Vec<crate::UploadFile>,
+}
+
+#[derive(Deserialize)]
 struct EnabledReq {
     enabled: bool,
 }
@@ -233,8 +246,11 @@ pub async fn dispatch(state: &Arc<AppState>, mut req: Req, rest: &str) -> Respon
         }
     }
     let bytes = req.body().clone().collect().await.map(|c| c.to_bytes()).unwrap_or_default();
-    if let Err(e) = validate_object(&bytes) {
-        return fail("invalid_argument", e);
+    // `Sites/Upload` は本文が大きいので、ここでは検証せず、読み込み(RS-JSON、上限 UPLOAD_MAX)の中で検証する。
+    if !(service == "Sites" && method == "Upload") {
+        if let Err(e) = validate_object(&bytes) {
+            return fail("invalid_argument", e);
+        }
     }
     let resp = route(state, &mut req, &service, &method, &bytes).await;
     finish(resp).await
@@ -465,10 +481,24 @@ async fn route(state: &Arc<AppState>, req: &mut Req, service: &str, method: &str
         ("Auth", "TotpDisable") => crate::totp_disable(state_ref, req).await,
         ("Auth", "RequestEmailChange") => crate::request_email_change(state_ref, take_req(req)).await,
 
+        // ---- アカウント(ログイン前から。トークン自体が資格情報) ----
+        // メールの確認リンクは画面のURL。確認ボタンを押したときだけ、ここで確定する(GET では何も起きない)。
+        ("Account", "ConfirmEmailChange") => match typed::<TokenReq>(bytes) {
+            Ok(b) => crate::confirm_email_change(state_ref, &b.token).await,
+            Err(r) => r,
+        },
+
         // ---- サイト操作(セッション必須) ----
         ("Sites", m) => {
             if let Err(unauthorized) = crate::require_session(state_ref, req) {
                 return unauthorized;
+            }
+            if m == "Upload" {
+                // ファイル送信: { "site": "…", "files": [ { "path": "相対パス", "data_base64": "…" } ] }
+                return match crate::json_in::parse_with_limit::<UploadReq>(bytes, UPLOAD_MAX) {
+                    Ok(b) => crate::upload_files(state_ref, &b.site, b.files).await,
+                    Err(e) => fail("invalid_argument", e),
+                };
             }
             let site = match typed::<SiteReq>(bytes) {
                 Ok(b) => b.site,

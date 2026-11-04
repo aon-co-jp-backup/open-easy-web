@@ -23,6 +23,14 @@ pub const SHELL_HTML: &str = r#"
   </p>
 </header>
 
+<section id="confirm-email-change-section" class="hidden">
+  <h3>連絡先の変更の確認 (Confirm contact change)</h3>
+  <p>メールの確認リンクから開きました。この変更に心当たりがある場合のみ、下の「確認する」ボタンを押してください。リンクを開いただけでは変更されません。<br>
+  You opened this from a confirmation email. Press "Confirm" only if you requested this change. Just opening the link changes nothing.</p>
+  <div class="buttons"><button id="confirm-email-change-btn">確認する (Confirm)</button></div>
+  <p id="confirm-email-change-status" class="muted" aria-live="polite"></p>
+</section>
+
 <section id="completed-projects-section">
   <h2>Completed Projects (完成済みプロジェクト)</h2>
   <p class="muted">

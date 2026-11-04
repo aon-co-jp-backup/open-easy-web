@@ -3530,7 +3530,7 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 **確認した**: サーバーのテスト131件、WASMビルド、実サーバーで管理API(401・400・保存・SMTP未設定の断り)。**未確認**: 本番SMTPでの実送信、ブラウザ画面の目視。
 
 ## API 方針: REST 全廃・Connect(2026-11-04、ユーザー決定)
-- **REST は全廃する。新しい API は REST で作らない。** 方式は Connect の単純呼び出し(`POST /open_easy_web.admin.v1.<Service>/<Method>`、`content-type: application/json`、本文は JSON)。`curl` から呼べ、WASM は `fetch` のままで、`prost` を WASM に入れない(サイズが増えるため)。RPoem の管理API(`open_runo.admin.v1.Admin`、gRPC・gRPC-web・Connect)と呼び方をそろえる。
+- **REST は全廃する。新しい API は REST で作らない。** 方式は Connect(POST、RS-JSON)(`POST /open_easy_web.admin.v1.<Service>/<Method>`、`content-type: application/json`、本文は JSON)。`curl` から呼べ、WASM は `fetch` のままで、`prost` を WASM に入れない(サイズが増えるため)。RPoem の管理API(`open_runo.admin.v1.Admin`、gRPC・gRPC-web・Connect)と呼び方をそろえる。
 - **JSON は RS-JSON に統一**: 読み込みは `from_str_secure` / `parse_secure`(サイズ・深さ・重複キーの上限つき)、書き出しは `rust_json::fast`。エラーは Connect の形式 `{"code","message"}`(HTTP ステータスは Connect 仕様の対応表、`server/src/connect.rs`)。
 - **移行の状況(2026-11-04、ユーザー指示「今触って今移して」で完了)**: このリポジトリの REST 風 API は**すべて Connect へ移し、旧 REST の経路は削除した**。対応表は下の「旧 REST → Connect の対応表」。REST のまま残るのは**例外だけ**(下に理由つき)。
 - スキーマは `proto/open_easy_web/admin/v1/admin.proto`(説明用。コード生成には使っていない)。素の gRPC(ストリーミング)は、必要になってから。
@@ -3550,6 +3550,8 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 | `POST /api/auth/{request-otp,verify-otp}` | `Auth/{RequestOtp,VerifyOtp}` | **旧 REST は期限つきの互換として残す**(応答に `Deprecation: true`)。利用者は `open-upstream-watch` だけで、Connect へ更新済み(b8517b6)。**配備したら旧 REST を削除する** |
 | `DELETE /api/sites/:name` | `Sites/Delete`(`{"site":…}`) | Bearer |
 | `POST /api/sites/:name/{folder,detect-and-configure,correct,register-appserver}` | `Sites/{CreateFolder,DetectAndConfigure,Correct,RegisterAppserver}`(本文に `site`) | Bearer |
+| `POST /api/sites/:name/upload`(multipart) | `Sites/Upload`(本文 `{"site":…,"files":[{"path":…,"data_base64":…}]}`) | Bearer。**ファイルは base64 の JSON**。本文の上限 128 MiB(中身はおよそ 96 MiB まで)、1ファイルは 90 MiB まで。画面は合計 48 MiB ごとに分けて送る。手書きの multipart パーサーは削除 |
+| `GET /api/auth/confirm-email-change?token=`(メールのリンク) | `Account/ConfirmEmailChange`(`{"token":…}`) | メールのリンクは**画面のURL** `https://…/#/confirm-email-change?token=…`(トークンはフラグメントに載せ、サーバーのログに残らない)。**GET では何も確定せず**、画面の「確認する」ボタンを押したときだけ POST で確定する(メールの先読みでトークンが消費されない)。画面はトークンを読んだらアドレスバーから消す。旧形式のリンクは、案内ページ(HTTP 410)を返すだけ |
 | `GET/POST /admin/dist-sync/targets`、`DELETE …/:id`、`POST …/disaster-fallback`、`POST …/first-time-setup` | `DistSync/{ListTargets,RegisterTarget,DeleteTarget,SetDisasterFallback,FirstTimeSetup}` | |
 | `GET /admin/system/{memory,disk}`、`GET /admin/easyweb-system-{memory,disk}-breakdown` | `System/{GetMemory,GetDisk,GetMemoryBreakdown,GetDiskBreakdown}` | |
 | `GET/POST /admin/easyweb-login-mode` | `Settings/{GetLoginMode,SetLoginMode}` | |
@@ -3558,9 +3560,10 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 | `GET/POST /admin/auto-update`、`POST …/check-now` | `AutoUpdate/{Get,Set,CheckNow}` | |
 | `/admin/notify…`、`/admin/storage/…` | `Notify/*`、`Storage/*` | 初めから Connect のみ |
 
-**REST のまま残す例外**(理由): `GET /api/auth/confirm-email-change?token=`(メールに載るリンクをブラウザで直接開くため)、`POST /api/sites/:name/upload`(`multipart/form-data` のファイル送信。JSON にすると大きくなる)、`GET /healthz`、`/ime/…`(aruaru-IME の中継と配布)、静的ファイル・`/pkg/…`・`/qr-confirm.html` など、期限つき互換の `request-otp`・`verify-otp`(上記)。
+**REST のまま残すもの**(外部の規格や配布の都合が形を決めるものだけ): `GET /healthz`、`/ime/…`(aruaru-IME の中継と配布)、静的ファイル・`/pkg/…`・`/qr-confirm.html`、および**期限つきの互換**として `POST /api/auth/request-otp`・`verify-otp`(上記。`open-upstream-watch` を配備したら削除)。旧形式のメール確認リンク(`GET /api/auth/confirm-email-change`)は、案内ページ(410)を返すだけで、何も確定しない。
 **このリポジトリの範囲外**: 画面の「無料ドメイン」パネルが呼ぶ `/admin/ddns/…`・`/admin/sftp/…` は `open-web-server` 本体の API で、同リポジトリ側で別途移行が要る(未対応)。
-**本文の上限**: 入口で読み込む本文は 64 KiB まで(以前はハンドラごとに無制限)。アップロードだけ 256 MiB まで。超えると 413。
+**本文の上限**: 入口で読み込む本文は 64 KiB まで(以前はハンドラごとに無制限)。`Sites/Upload` だけ 128 MiB まで。超えると 413。
+**JSON の読み書き**: 外から入る JSON(リクエスト本文、他サービス〈GitHub・aruaru-llm〉の応答、ディスク上の状態ファイル)は、すべて RS-JSON の `from_str_secure`(サイズ・深さ・重複キーの上限つき、`server/src/json_in.rs`)で読む。書き出しは `rust_json::fast`。`serde_json::from_*` / `sonic_rs::from_*` を外部入力に直接使わない。
 
 ## API 方針: REST 全廃・gRPC / Connect へ (2026-11-04)
 

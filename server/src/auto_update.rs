@@ -86,7 +86,7 @@ impl AutoUpdateState {
     /// `OPEN_EASYWEB_AUTO_UPDATE`環境変数(既定`false`)を初期値とする。
     pub fn load(settings_path: PathBuf) -> Self {
         let enabled = match std::fs::read(&settings_path) {
-            Ok(bytes) => sonic_rs::from_slice::<PersistedSettings>(&bytes).map(|s| s.enabled).unwrap_or(false),
+            Ok(bytes) => crate::json_in::parse_with_limit::<PersistedSettings>(&bytes, 4096).map(|s| s.enabled).unwrap_or(false),
             Err(_) => std::env::var("OPEN_EASYWEB_AUTO_UPDATE").map(|v| v == "true" || v == "1").unwrap_or(false),
         };
         Self { settings_path, enabled: std::sync::RwLock::new(enabled), last_cycle_started_at: std::sync::RwLock::new(std::time::Instant::now()) }
@@ -138,7 +138,9 @@ pub async fn latest_release_tag_from(client: &reqwest::Client, base_url: &str, r
     if !resp.status().is_success() {
         anyhow::bail!("GitHub releases API returned HTTP {}", resp.status());
     }
-    let release: GithubRelease = resp.json().await.context("GitHub releases API response was not valid JSON")?;
+    let bytes = resp.bytes().await.context("GitHub releases API response could not be read")?;
+    // 他サービスの応答も、RS-JSON(サイズ・深さ・重複キーの上限つき)で読む。
+    let release: GithubRelease = crate::json_in::parse_with_limit(&bytes, 4 * 1024 * 1024).map_err(|e| anyhow::anyhow!("GitHub releases API response was not valid JSON: {e}"))?;
     Ok(release.tag_name.trim_start_matches('v').to_string())
 }
 

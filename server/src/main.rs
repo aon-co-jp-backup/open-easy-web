@@ -17,6 +17,7 @@ mod dist_sync;
 mod local_proxy;
 mod lolipop_cron;
 mod connect;
+mod json_in;
 mod storage_maintenance;
 mod update_notify;
 mod memory_breakdown;
@@ -199,6 +200,18 @@ fn env_path(key: &str, default: &str) -> PathBuf {
     std::env::var(key).map(PathBuf::from).unwrap_or_else(|_| PathBuf::from(default))
 }
 
+/// 旧形式のメール確認リンクに出す案内ページ(副作用なし)。新しい形式のリンクは、画面のURL(`/#/confirm-email-change?token=…`)で、
+/// 確認ボタンを押したときだけ Connect の POST で確定する。
+fn old_confirm_link_page() -> Response<BoxBody> {
+    let html = "<!DOCTYPE html><html lang=\"ja\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex\"><title>確認リンクの形式が変わりました</title></head><body style=\"font:18px system-ui,sans-serif;max-width:640px;margin:24px auto;padding:0 16px\"><h2>確認リンクの形式が変わりました / The confirmation link format has changed</h2><p>このリンクは古い形式のため、使えなくなりました。お手数ですが、<a href=\"/\">ログイン画面</a>からもう一度、連絡先の変更を申請し直してください(新しい形式の確認メールが届きます)。</p><p>This link uses an old format and no longer works. Please <a href=\"/\">log in</a> and request the contact change again; you will receive a new confirmation email.</p></body></html>";
+    Response::builder()
+        .status(StatusCode::GONE)
+        .header("content-type", "text/html; charset=utf-8")
+        .header("cache-control", "no-store")
+        .body(Full::new(Bytes::from(html)))
+        .expect("static response headers are always valid")
+}
+
 /// 移行期限つきの互換経路の応答に `Deprecation: true` を付ける(`/api/auth/request-otp`・`verify-otp`)。
 fn deprecated(mut resp: Response<BoxBody>) -> Response<BoxBody> {
     resp.headers_mut().insert("deprecation", hyper::header::HeaderValue::from_static("true"));
@@ -216,16 +229,6 @@ fn json_response(status: StatusCode, value: &impl serde::Serialize) -> Response<
 
 fn error_response(status: StatusCode, message: impl Into<String>) -> Response<BoxBody> {
     json_response(status, &serde_json::json!({ "error": message.into() }))
-}
-
-/// `/api/sites/<name>/<rest...>` の `<name>` と `<rest>` を取り出す。
-fn parse_site_path(path: &str) -> Option<(String, String)> {
-    let rest = path.strip_prefix("/api/sites/")?;
-    let (name, rest) = rest.split_once('/')?;
-    if name.is_empty() {
-        return None;
-    }
-    Some((name.to_string(), format!("/{rest}")))
 }
 
 /// `Authorization: Bearer <token>` を検証する。open-easy-web全体で唯一の
@@ -339,9 +342,9 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         return ime_api(&method, &path, req).await;
     }
     // ここから先は、本文を**上限つきで先に読み込んで**から各ハンドラへ渡す(以前はハンドラごとに無制限に読んでいた)。
-    // 通常の本文は 64 KiB まで。`multipart/form-data` のファイル送信(サイトの upload)だけ 256 MiB まで。
+    // 通常の本文は 64 KiB まで。ファイル送信(`Sites/Upload`)だけ 128 MiB まで。
     let req = {
-        let limit = if path.starts_with("/api/sites/") && path.ends_with("/upload") { 256 * 1024 * 1024 } else { 64 * 1024 };
+        let limit = if path.starts_with(connect::PREFIX) && path.ends_with("/Sites/Upload") { connect::UPLOAD_MAX } else { json_in::DEFAULT_MAX };
         let (parts, body) = req.into_parts();
         match http_body_util::Limited::new(body, limit).collect().await {
             Ok(c) => Request::from_parts(parts, Full::new(c.to_bytes())),
@@ -389,18 +392,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         };
     }
 
-    // `POST /api/sites/<name>/upload` — `multipart/form-data` のファイル送信。バイナリを JSON に載せると大きくなるため、
-    // REST 全廃の方針(2026-11-04)の**例外**として、このまま残す(サイト操作のほかのメソッドは Connect の `Sites/*`)。
-    if method == Method::POST {
-        if let Some((site, _)) = parse_site_path(&path).filter(|(_, action)| action == "/upload") {
-            if let Err(unauthorized) = require_session(&state, &req) {
-                return unauthorized;
-            }
-            return upload_files(&state, &site, req).await;
-        }
-    }
-
-    // `/open_easy_web.admin.v1.<Service>/<Method>` — Connect の単純呼び出し(POST + JSON、`connect.rs`参照)。
+    // `/open_easy_web.admin.v1.<Service>/<Method>` — Connect(POST、RS-JSON)(POST、RS-JSON、`connect.rs`参照)。
     // 新しい管理APIは Connect のみ(REST は作らない。2026-11-04 方針: REST 全廃)。既存の REST 風 `/admin/...` は、触るときに順に移す。
     if let Some(rest) = path.strip_prefix(connect::PREFIX) {
         return connect::dispatch(&state, req, rest).await;
@@ -425,16 +417,14 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 .body(Full::new(Bytes::from(open_runo_crossui::page_html(&app, "/ime/api").replace("</main>", &("<div id=\"notice\"><small><b>ご利用上の注意 / Notes</b><ul><li>この画面は、入力した内容をサーバー(easy-web.tokyo)で変換します。入力はサーバーに送られますが、保存・学習はしません。<br>This screen converts your input on the server (easy-web.tokyo). Your input is sent to the server but is not stored or learned.</li><li>自分のPCだけで変換したいときは、従来どおりインストールして「このPCの画面で開く」(http://127.0.0.1:4660/ui)を使ってください。<br>To convert only on your own PC, install the app as usual and use \"Open on this PC\" (http://127.0.0.1:4660/ui).</li><li>個人の学習や登録語は、オンライン画面には反映されません。<br>Your personal learning and registered words are not applied on this online screen.</li><li>中国語・季節用語・優先順位などの辞書は、サーバー側でも同じものが使われます。<br>The same dictionaries (Chinese, seasonal terms, candidate priorities, etc.) are used on the server.</li><li>短時間に大量の操作をすると、一時的に制限されることがあります。<br>Very rapid bursts of requests may be temporarily limited.</li></ul></small></div>".to_string() + "<div id=\"installers\"><b>インストーラー(OSを選ぶ) / Installers</b>" + &ime_installers_html() + "</div></main>")))))
                 .expect("static response headers are always valid")
         }
-        // ログイン関連の API は Connect(`Auth/*`、`connect.rs`)へ移した。REST のまま残すのは次の3つだけ:
-        // (1)(2) **互換のための期限つき**: `RS-Sync`・`open-upstream-watch` が `request-otp`・`verify-otp` を呼んでいる。
-        //     両者を Connect(`Auth/RequestOtp`・`Auth/VerifyOtp`)に更新して配備したら、この2本は削除する。
-        //     応答には `Deprecation: true` を付ける。
-        // (3) `GET /api/auth/confirm-email-change?token=`: メールに載るリンクをブラウザで直接開くので、GET のまま(例外)。
+        // ログイン関連の API は Connect(`Auth/*`・`Account/*`、`connect.rs`)へ移した。REST のまま残すのは次の2本だけ:
+        // **互換のための期限つき**: `open-upstream-watch` が `request-otp`・`verify-otp` を呼んでいる。
+        // Connect 版(`Auth/RequestOtp`・`Auth/VerifyOtp`)へ更新した版を配備したら、この2本は削除する。応答には `Deprecation: true` を付ける。
         (&Method::POST, "/api/auth/request-otp") => deprecated(request_otp(&state, req).await),
         (&Method::POST, "/api/auth/verify-otp") => deprecated(verify_otp(&state, req).await),
-        (&Method::GET, p) if p.starts_with("/api/auth/confirm-email-change") => {
-            confirm_email_change(&state, &req).await
-        }
+        // 旧形式のメール確認リンク(`GET /api/auth/confirm-email-change?token=…`)。**GET では何も確定しない**
+        // (メールの先読みでトークンが消費されないように)。新しい形式の案内ページだけを返す。
+        (&Method::GET, p) if p.starts_with("/api/auth/confirm-email-change") => old_confirm_link_page(),
         (&Method::GET, "/") => {
             // トップページの先頭に aruaru-IME の紹介とダウンロードを差し込む(SPA シェルは変更しない)
             let mut r = serve_static(&state, "index.html", "text/html; charset=utf-8").await;
@@ -514,36 +504,19 @@ async fn create_folder(state: &AppState, site: &str) -> Response<BoxBody> {
     }
 }
 
-/// `POST /api/sites/:name/upload` — `multipart/form-data`でファイル群を
-/// webrootへ書き込む。各パートの`filename`をサイトディレクトリからの
-/// 相対パスとして扱う(ブラウザの`webkitdirectory`が相対パス込みの
-/// ファイル名を送ってくることを利用)。
-async fn upload_files(state: &AppState, site: &str, req: Req) -> Response<BoxBody> {
+/// アップロードする1ファイル(`Sites/Upload` の本文)。`path` はサイトディレクトリからの相対パス
+/// (ブラウザの `webkitdirectory` が相対パス込みのファイル名を送ってくることを利用)、`data_base64` は中身。
+#[derive(serde::Deserialize)]
+pub(crate) struct UploadFile {
+    pub(crate) path: String,
+    pub(crate) data_base64: String,
+}
+
+/// `Sites/Upload`(Connect、POST、RS-JSON)— ファイル群を webroot へ書き込む。
+pub(crate) async fn upload_files(state: &AppState, site: &str, files: Vec<UploadFile>) -> Response<BoxBody> {
+    use base64::Engine as _;
     let Some(dir) = state.site_dir(site) else {
         return error_response(StatusCode::BAD_REQUEST, "invalid site name");
-    };
-
-    let content_type = req
-        .headers()
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
-    if !content_type.starts_with("multipart/form-data") {
-        return error_response(StatusCode::BAD_REQUEST, "expected multipart/form-data");
-    }
-    let Some(boundary) = upload::multipart_boundary(&content_type) else {
-        return error_response(StatusCode::BAD_REQUEST, "missing multipart boundary");
-    };
-
-    let bytes = match req.into_body().collect().await {
-        Ok(collected) => collected.to_bytes(),
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
-    };
-
-    let fields = match upload::parse(&bytes, &boundary) {
-        Ok(fields) => fields,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, e),
     };
 
     if tokio::fs::create_dir_all(&dir).await.is_err() {
@@ -551,8 +524,12 @@ async fn upload_files(state: &AppState, site: &str, req: Req) -> Response<BoxBod
     }
 
     let mut written = Vec::new();
-    for field in fields {
-        let Some(filename) = field.filename else { continue };
+    for file in files {
+        let filename = file.path;
+        let data = match base64::engine::general_purpose::STANDARD.decode(file.data_base64.as_bytes()) {
+            Ok(d) => d,
+            Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid base64 for {filename}: {e}")),
+        };
         let Some(rel) = upload::safe_relative_path(&filename) else {
             return error_response(
                 StatusCode::BAD_REQUEST,
@@ -572,7 +549,7 @@ async fn upload_files(state: &AppState, site: &str, req: Req) -> Response<BoxBod
         // ジャーナルは既に永続化済みなので、再接続後のリプレイで復旧できる。
         let dataset = format!("{site}/{}", rel.to_string_lossy());
         let registry = Arc::clone(&state.dist_sync);
-        let data_for_write = field.data.clone();
+        let data_for_write = data.clone();
         let dest_for_write = dest.clone();
         let write_result = tokio::task::spawn_blocking(move || {
             dist_sync::protect_site_write(&registry, &dataset, data_for_write, dest_for_write)
@@ -594,7 +571,7 @@ async fn upload_files(state: &AppState, site: &str, req: Req) -> Response<BoxBod
         // `tokio::spawn`でデタッチされるため、このアップロードリクエストの
         // レスポンスは複製の完了を一切待たない(遅い/到達不能なVPSが
         // あってもアップロードは遅延しない)。
-        dist_sync::spawn_replication(&state.dist_sync, format!("{site}/{}", rel.to_string_lossy()), Bytes::from(field.data));
+        dist_sync::spawn_replication(&state.dist_sync, format!("{site}/{}", rel.to_string_lossy()), Bytes::from(data));
         written.push(rel.to_string_lossy().to_string());
     }
 
@@ -705,7 +682,7 @@ async fn correct_detection(state: &AppState, site: &str, req: Req) -> Response<B
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: CorrectRequest = match sonic_rs::from_slice(&bytes) {
+    let payload: CorrectRequest = match json_in::parse(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -739,7 +716,7 @@ async fn register_appserver(site: &str, req: Req) -> Response<BoxBody> {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: appserver_registration::RegisterAppserverRequest = match sonic_rs::from_slice(&bytes) {
+    let payload: appserver_registration::RegisterAppserverRequest = match json_in::parse(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -772,7 +749,7 @@ async fn request_otp(state: &AppState, req: Req) -> Response<BoxBody> {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: ContactRequest = match sonic_rs::from_slice(&bytes) {
+    let payload: ContactRequest = match json_in::parse(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -842,7 +819,7 @@ async fn totp_login(state: &AppState, req: Req) -> Response<BoxBody> {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: TotpLoginRequest = match sonic_rs::from_slice(&bytes) {
+    let payload: TotpLoginRequest = match json_in::parse(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -928,7 +905,7 @@ async fn qr_login_start(state: &AppState, req: Req) -> Response<BoxBody> {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: QrLoginStartRequest = match sonic_rs::from_slice(&bytes) {
+    let payload: QrLoginStartRequest = match json_in::parse(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -956,7 +933,7 @@ async fn qr_login_confirm(state: &AppState, req: Req) -> Response<BoxBody> {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: QrLoginIdRequest = match sonic_rs::from_slice(&bytes) {
+    let payload: QrLoginIdRequest = match json_in::parse(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -988,7 +965,7 @@ async fn qr_login_finish(state: &AppState, req: Req) -> Response<BoxBody> {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: QrLoginIdRequest = match sonic_rs::from_slice(&bytes) {
+    let payload: QrLoginIdRequest = match json_in::parse(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1028,7 +1005,7 @@ async fn verify_otp(state: &AppState, req: Req) -> Response<BoxBody> {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: VerifyOtpRequest = match sonic_rs::from_slice(&bytes) {
+    let payload: VerifyOtpRequest = match json_in::parse(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1144,7 +1121,7 @@ async fn totp_enable(state: &AppState, req: Req) -> Response<BoxBody> {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: TotpCodeRequest = match sonic_rs::from_slice(&bytes) {
+    let payload: TotpCodeRequest = match json_in::parse(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1217,7 +1194,7 @@ async fn request_email_change(state: &AppState, req: Req) -> Response<BoxBody> {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: RequestEmailChangeRequest = match sonic_rs::from_slice(&bytes) {
+    let payload: RequestEmailChangeRequest = match json_in::parse(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1250,16 +1227,11 @@ async fn request_email_change(state: &AppState, req: Req) -> Response<BoxBody> {
     }
 }
 
-/// `GET /api/auth/confirm-email-change?token=...` — 現在のメール宛に
-/// 送られた確認リンクを踏んだ際のエンドポイント。`field`に応じて
-/// 主メール改名(`rename_email`)・電話/セカンドメール更新
-/// (`update_contact`)のどちらかを行う。
-async fn confirm_email_change(state: &AppState, req: &Req) -> Response<BoxBody> {
-    let query = req.uri().query().unwrap_or("");
-    let token = query
-        .split('&')
-        .find_map(|kv| kv.strip_prefix("token="))
-        .unwrap_or("");
+/// `Account/ConfirmEmailChange`(Connect、POST、RS-JSON、本文 `{"token":"…"}`)— 現在のメール宛に送られた確認リンク
+/// (画面のURL `…/#/confirm-email-change?token=…`)の確認ボタンを押したときに呼ばれる。`field`に応じて
+/// 主メール改名(`rename_email`)・電話/セカンドメール更新(`update_contact`)のどちらかを行う。
+/// **GET では何も起こさない**(メールの先読み・プレビューでトークンが消費されないよう、確定は POST だけ)。
+async fn confirm_email_change(state: &AppState, token: &str) -> Response<BoxBody> {
     if token.is_empty() {
         return error_response(StatusCode::BAD_REQUEST, "missing token");
     }
@@ -1307,7 +1279,7 @@ async fn logout(state: &AppState, req: Req) -> Response<BoxBody> {
         Ok(c) => c.to_bytes(),
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
     };
-    let payload: TokenRequest = match sonic_rs::from_slice(&bytes) {
+    let payload: TokenRequest = match json_in::parse(&bytes) {
         Ok(p) => p,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("invalid JSON: {e}")),
     };
@@ -1470,18 +1442,6 @@ async fn bind_listener(addr: std::net::SocketAddr, reuse_port: bool) -> anyhow::
 mod tests {
     use super::*;
 
-    #[test]
-    fn parse_site_path_splits_name_and_action() {
-        let (name, action) = parse_site_path("/api/sites/audiocafe.tokyo/folder").unwrap();
-        assert_eq!(name, "audiocafe.tokyo");
-        assert_eq!(action, "/folder");
-    }
-
-    #[test]
-    fn parse_site_path_rejects_missing_action() {
-        assert!(parse_site_path("/api/sites/").is_none());
-    }
-
     /// `OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN`を読み書きするテストが複数に
     /// 増えた(2026-08-28、`otp_qr`ログインモードの管理APIテスト追加)ため、
     /// 直列化する(Rustの既定テストランナーは並列実行するため、環境変数を
@@ -1524,6 +1484,98 @@ mod tests {
         (addr, state)
     }
 
+
+
+    /// `Sites/Upload`(Connect、POST、RS-JSON、ファイルは base64): セッション必須、パストラバーサル拒否、実際にディスクへ書かれる。
+    #[tokio::test]
+    async fn upload_over_connect_requires_session_rejects_traversal_and_writes_files() {
+        let (addr, state) = spawn_test_server().await;
+        let client = reqwest::Client::new();
+        let url = format!("http://{addr}/open_easy_web.admin.v1.Sites/Upload");
+        let body = serde_json::json!({
+            "site": "up.example.tokyo",
+            "files": [
+                {"path": "index.php", "data_base64": "PD9waHAgZWNobyAxOyA/Pg=="},
+                {"path": "sub/dir/style.css", "data_base64": "Ym9keXt9"},
+            ],
+        });
+
+        // 認証なし → 401(Connect の形式)。
+        let res = client.post(&url).json(&body).send().await.unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+        state.users.register("up@example.com", None, Some("up2@example.com".into())).unwrap();
+        let token = state.auth.create_session("up@example.com");
+
+        let res = client.post(&url).bearer_auth(&token).json(&body).send().await.unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+        let v: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(v["files"].as_array().unwrap().len(), 2);
+        let root = state.site_dir("up.example.tokyo").unwrap();
+        assert_eq!(std::fs::read(root.join("index.php")).unwrap(), b"<?php echo 1; ?>");
+        assert_eq!(std::fs::read(root.join("sub/dir/style.css")).unwrap(), b"body{}");
+
+        // パストラバーサル・絶対パスは 400(何も書かない)。
+        for bad in ["../evil.php", "/etc/passwd", "a/../../b"] {
+            let res = client
+                .post(&url)
+                .bearer_auth(&token)
+                .json(&serde_json::json!({"site": "up.example.tokyo", "files": [{"path": bad, "data_base64": "AA=="}]}))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), reqwest::StatusCode::BAD_REQUEST, "{bad}");
+        }
+        // 不正な base64 は 400。
+        let res = client
+            .post(&url)
+            .bearer_auth(&token)
+            .json(&serde_json::json!({"site": "up.example.tokyo", "files": [{"path": "x.txt", "data_base64": "!!!"}]}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::BAD_REQUEST);
+        // キー重複の本文は 400(RS-JSON)。
+        let res = client
+            .post(&url)
+            .bearer_auth(&token)
+            .header("content-type", "application/json")
+            .body(r#"{"site":"a.tokyo","site":"b.tokyo","files":[]}"#)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::BAD_REQUEST);
+    }
+    /// メールの確認リンク: GET では何も確定せず(古い形式の案内ページ=410)、Connect の `Account/ConfirmEmailChange`
+    /// (POST、RS-JSON)でだけ確定する。トークンは1回限り。
+    #[tokio::test]
+    async fn contact_change_is_confirmed_only_by_connect_post_not_by_get() {
+        let (addr, state) = spawn_test_server().await;
+        let client = reqwest::Client::new();
+        state.users.register("change@example.com", None, Some("change2@example.com".into())).unwrap();
+        let token = state.auth.request_contact_change("change@example.com", "email", "renamed@example.com");
+
+        // 旧形式のリンク(GET)は、何も確定せず、案内ページ(410)だけを返す。
+        let res = client.get(format!("http://{addr}/api/auth/confirm-email-change?token={token}")).send().await.unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::GONE);
+        assert!(res.text().await.unwrap().contains("確認リンクの形式が変わりました"));
+        assert!(state.users.exists("change@example.com"), "GET must not apply the change");
+
+        // 空のトークン・不正なトークンは 400。
+        let url = format!("http://{addr}/open_easy_web.admin.v1.Account/ConfirmEmailChange");
+        let res = client.post(&url).json(&serde_json::json!({"token": ""})).send().await.unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::BAD_REQUEST);
+        let res = client.post(&url).json(&serde_json::json!({"token": "nope"})).send().await.unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::BAD_REQUEST);
+
+        // POST で確定する。
+        let res = client.post(&url).json(&serde_json::json!({"token": token})).send().await.unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
+        assert!(state.users.exists("renamed@example.com"));
+        // 同じトークンは、もう使えない。
+        let res = client.post(&url).json(&serde_json::json!({"token": token})).send().await.unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::BAD_REQUEST);
+    }
     #[tokio::test]
     async fn site_actions_require_a_valid_session_over_real_http() {
         let (addr, _state) = spawn_test_server().await;

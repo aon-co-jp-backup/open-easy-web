@@ -1,5 +1,5 @@
 //! ロリポップ!向け時間指定オートクロールの管理API(`LolipopCron/*`、`server/src/lolipop_cron.rs`参照)への薄い呼び出し。
-//! 方式は Connect の単純呼び出し(`POST /open_easy_web.admin.v1.LolipopCron/<Method>`、JSON)で、REST ではない。
+//! 方式は Connect(POST、RS-JSON)(`POST /open_easy_web.admin.v1.LolipopCron/<Method>`、JSON)で、REST ではない。
 //! 共通の`rpc`は`api_auto_update.rs`のものを再利用する。
 
 use serde::Serialize;

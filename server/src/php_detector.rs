@@ -154,7 +154,7 @@ pub fn correct(
 pub fn load_weights(state_path: &Path) -> PhpSignalWeights {
     std::fs::read_to_string(state_path)
         .ok()
-        .and_then(|s| sonic_rs::from_str(&s).ok())
+        .and_then(|s| crate::json_in::parse_with_limit(s.as_bytes(), 1024 * 1024).ok())
         .unwrap_or_default()
 }
 

@@ -50,7 +50,9 @@ pub async fn classify_many(items: &[String], categories: &[String]) -> Result<Ve
     if !resp.status().is_success() {
         return Err(format!("aruaru-llm returned HTTP {}", resp.status()));
     }
-    let body: ClassifyResponse = resp.json().await.map_err(|e| format!("invalid response JSON: {e}"))?;
+    let bytes = resp.bytes().await.map_err(|e| format!("invalid response body: {e}"))?;
+    // 他サービスの応答も、RS-JSON(サイズ・深さ・重複キーの上限つき)で読む。
+    let body: ClassifyResponse = crate::json_in::parse_with_limit(&bytes, 1024 * 1024)?;
     Ok(body.results.into_iter().map(|r| (r.item, r.category)).collect())
 }
 

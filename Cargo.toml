@@ -36,8 +36,9 @@ features = [
     "File",
     "FileList",
     "FileReader",
-    "FormData",
+    
     "Headers",
+    "History",
     "HtmlAnchorElement",
     "HtmlButtonElement",
     "HtmlElement",

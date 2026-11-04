@@ -1,5 +1,5 @@
 //! ストレージ(HDD/SSD)のメンテナンス(健康チェック・無駄なデータの整理・TRIM/最適化、`server/src/storage_maintenance.rs`)への
-//! 薄い`fetch()`ラッパー。方式は Connect の単純呼び出し(`POST /open_easy_web.admin.v1.Storage/<Method>`、本文は JSON)。
+//! 薄い`fetch()`ラッパー。方式は Connect(POST、RS-JSON)(`POST /open_easy_web.admin.v1.Storage/<Method>`、本文は JSON)。
 //! REST は使わない(2026-11-04 方針: REST 全廃、`CLAUDE.md`「API 方針」参照)。共通の`call`は`api_auto_update.rs`のものを再利用する。
 
 use serde::Serialize;

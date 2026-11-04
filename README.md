@@ -409,7 +409,7 @@ HTTPSで公開したい場合は、ご自身で証明書を用意し、別のTLS
 - **宛先の登録**: ログイン後のメインページ「更新のお知らせメール」で、1行1件(20件まで)。登録は管理者(`x-admin-token`)だけ。**公開の自己登録にはしていません**(確認メールの無い登録は、他人のアドレスへの迷惑メールの踏み台になるため)。メールアドレスは `lettre` の解析 + 改行・空白・カンマ等の拒否で検証し、ヘッダー注入を防ぎます。
 - **お知らせの送信**: 外部の仕組み(`version-control`、`rsa-rs` の毎晩・毎朝の更新、自動保守など)が `POST /open_easy_web.admin.v1.Notify/Send`(`content-type: application/json`、`x-admin-token` 必須、本文 `{"kind","subject","body"}`)を呼びます。`kind` は `update-needed`(更新が必要)/ `needs-claude`(Claudeへの依頼が必要)/ `heavy-test`(重い試験を手元で)/ `info`。
 - **連投の抑制**: 同じ件名は6時間以内に再送しません(毎晩の実行で同じ知らせが溜まらないように)。履歴は直近50件を状態ファイルに残して画面に出します。
-- **管理API**(Connect の単純呼び出し、`POST /open_easy_web.admin.v1.Notify/<Method>`、`x-admin-token` 必須): `Get`(宛先・履歴・SMTP設定の有無)、`SetRecipients`(`{"emails":[...]}`)、`Send`、`SendTest`。本文は RS-JSON の `from_str_secure`(16KiB・重複キー拒否)で読み、応答は `rust_json::fast` で書く。REST は使わない。
+- **管理API**(Connect(POST、RS-JSON)、`POST /open_easy_web.admin.v1.Notify/<Method>`、`x-admin-token` 必須): `Get`(宛先・履歴・SMTP設定の有無)、`SetRecipients`(`{"emails":[...]}`)、`Send`、`SendTest`。本文は RS-JSON の `from_str_secure`(16KiB・重複キー拒否)で読み、応答は `rust_json::fast` で書く。REST は使わない。
 - **設定**: SMTP は既存の `OPEN_EASYWEB_SMTP_*`(OTP メールと共通)。状態の保存先は `OPEN_EASYWEB_UPDATE_NOTIFY_FILE`(既定 `/var/www/.open-easy-web-update-notify.json`)。
 - **正直な限界**: SMTP 実送信は、本番の SMTP でしか確認できません(ローカルでは、認証・入力検証・保存・SMTP 未設定の断りまでを確認)。SMTP が未設定だと、送信は理由つきで断ります。
 
@@ -422,7 +422,7 @@ HTTPSで公開したい場合は、ご自身で証明書を用意し、別のTLS
 - **最適化**: SSD は TRIM(Linux `fstrim`、Windows `Optimize-Volume -ReTrim`)、HDD は最適化(Windows `Optimize-Volume -Defrag`)。Windows では管理者権限が要る。
 - **既定は安全側**: 整理は**試し実行**(報告だけ)、最適化は**無効**。**自動でも実際に消す/実行する**には、画面で明示的に有効にして、確認ダイアログに答える。手動の「実際に実行」も、確認ダイアログが出る。
 - **画面**: ログイン後のメインページ「ストレージ(HDD/SSD)のメンテナンス」。健康チェック・整理の試し実行/実行・最適化の計画/実行・自動実行の設定(時刻・各項目の有効/無効)。
-- **管理API**(Connect の単純呼び出し、`POST /open_easy_web.admin.v1.Storage/<Method>`、本文は JSON、`x-admin-token` 必須): `GetMaintenance`(設定と直近の結果)、`SetSettings`、`RunHealth`、`RunTidy`、`RunOptimize`(後の2つは、本文 `{"apply": true}` のときだけ実際に実行。省くと試し実行・計画だけ)。リクエスト本文は、RS-JSON の `from_str_secure`(サイズ4KiB・深さ・重複キーの上限つき)で読む。REST は使わない。
+- **管理API**(Connect(POST、RS-JSON)、`POST /open_easy_web.admin.v1.Storage/<Method>`、本文は JSON、`x-admin-token` 必須): `GetMaintenance`(設定と直近の結果)、`SetSettings`、`RunHealth`、`RunTidy`、`RunOptimize`(後の2つは、本文 `{"apply": true}` のときだけ実際に実行。省くと試し実行・計画だけ)。リクエスト本文は、RS-JSON の `from_str_secure`(サイズ4KiB・深さ・重複キーの上限つき)で読む。REST は使わない。
 - **自動実行**: 毎日、設定した時刻(既定 4 時、`OPEN_EASYWEB_STORAGE_TZ_OFFSET_HOURS` で時差、既定 9)に、健康チェックと整理を実行(最適化は、有効なら毎週日曜)。同じ日に二度は実行しない。結果は、画面と、状態ファイルに残る。
 - **設定**: 状態の保存先 `OPEN_EASYWEB_STORAGE_MAINTENANCE_FILE`(既定 `/var/www/.open-easy-web-storage-maintenance.json`)。整理の規則 `OPEN_EASYWEB_STORAGE_TIDY_CONFIG`(既定: Linux `/etc/vps-tidy/tidy.toml`、Windows `%LOCALAPPDATA%\\vps-tidy\\tidy.toml`)。規則の書き方は、`vps-tidy` の `tidy.example.toml` と、`tidy.example.windows.toml`。
 - **正直な限界**: 整理の規則ファイルが無いと、整理は何もせずに「規則を読めません」と報告する。SMART は、仮想ディスク(VPS など)では、取得できないことが多い。最適化は、Windows で管理者権限が無いと失敗する(失敗として報告する)。`vps-tidy` は、姉妹リポジトリとして、`../vps-tidy`(と、その依存の `../RS-JSON`)が、横に置いてあることを前提にしたパス依存(他の姉妹リポジトリと同じ運用)。
@@ -604,7 +604,7 @@ Apache-2.0
 作者 / Author: 石 塚 正 浩（MASAHIRO ISHIZUKA） (https://github.com/aon-co-jp)
 
 ## API 方針: REST 全廃・Connect(2026-11-04)
-新しい管理APIは REST で作らず、Connect の単純呼び出し(`POST /open_easy_web.admin.v1.<Service>/<Method>`、JSON、読み書きは RS-JSON)にします。`curl` から呼べ、画面(WASM)は `fetch` のままです。旧 REST の経路は削除しました。ほかの既存の REST 風 API も、すべて Connect へ移しました(2026-11-04。例外と対応表は `CLAUDE.md`)。詳細は `CLAUDE.md`「API 方針」と `proto/open_easy_web/admin/v1/admin.proto`。
+新しい管理APIは REST で作らず、Connect(POST、RS-JSON)(`POST /open_easy_web.admin.v1.<Service>/<Method>`、JSON、読み書きは RS-JSON)にします。`curl` から呼べ、画面(WASM)は `fetch` のままです。旧 REST の経路は削除しました。ほかの既存の REST 風 API も、すべて Connect へ移しました(2026-11-04。例外と対応表は `CLAUDE.md`)。詳細は `CLAUDE.md`「API 方針」と `proto/open_easy_web/admin/v1/admin.proto`。
 
 ## API 方針: REST 全廃・gRPC / Connect へ (2026-11-04)
 

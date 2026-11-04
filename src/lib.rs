@@ -15,6 +15,7 @@
 //!   (`deploy/` の vhost テンプレート・`scripts/gen-vhost.sh` を参照)。
 //! - DB(aruaru-db等)への接続機能は持たない(意図的にスコープ外)。
 
+mod api_account;
 mod api_auth;
 mod api_auto_update;
 mod api_lolipop_cron;
@@ -28,6 +29,7 @@ mod dom;
 mod free_domain_ui;
 mod profiles;
 mod lolipop_cron_ui;
+mod confirm_ui;
 mod notify_ui;
 mod storage_ui;
 mod setup_wizard_ui;
@@ -113,6 +115,7 @@ pub fn start() -> Result<(), JsValue> {
     lolipop_cron_ui::wire()?;
     storage_ui::wire()?;
     notify_ui::wire()?;
+    confirm_ui::wire()?;
 
     set_status("準備完了。サイトを登録・選択・接続テストできます。");
     Ok(())

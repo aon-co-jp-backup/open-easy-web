@@ -132,7 +132,7 @@ impl UserStore {
                         // そのまま平文JSONとして再解釈するフォールバックを
                         // 用意する(次回`persist`で新フォーマットへ
                         // 自動的に書き直される、一度限りの移行パス)。
-                        if sonic_rs::from_slice::<HashMap<String, UserRecord>>(&bytes).is_ok() {
+                        if crate::json_in::parse_with_limit::<HashMap<String, UserRecord>>(&bytes, 64 * 1024 * 1024).is_ok() {
                             tracing::info!("persisted user registry was in the pre-encryption plain format; migrating to encrypted format on next write");
                             Some(bytes)
                         } else {
@@ -142,7 +142,7 @@ impl UserStore {
                     }
                 }
             })
-            .and_then(|plaintext| sonic_rs::from_slice::<HashMap<String, UserRecord>>(&plaintext).ok())
+            .and_then(|plaintext| crate::json_in::parse_with_limit::<HashMap<String, UserRecord>>(&plaintext, 64 * 1024 * 1024).ok())
             .unwrap_or_default();
         Self { state_path, users: Mutex::new(users), encryption }
     }

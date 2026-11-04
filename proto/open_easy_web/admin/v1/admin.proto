@@ -1,8 +1,8 @@
-// open-easy-web の API(Connect の単純呼び出し: POST /open_easy_web.admin.v1.<Service>/<Method>、JSON)。
+// open-easy-web の API(Connect(POST、RS-JSON): POST /open_easy_web.admin.v1.<Service>/<Method>、本文は JSON)。
 // 今は説明用のスキーマで、コード生成には使っていない(サーバーは RS-JSON で読み書きする、server/src/connect.rs)。
-// REST は全廃する方針(2026-11-04)。REST のまま残る例外: GET /api/auth/confirm-email-change(メールのリンク)、
-// POST /api/sites/<name>/upload(multipart)、/healthz、/ime/...、静的ファイル、
-// 移行期限つきの互換 POST /api/auth/request-otp・verify-otp(RS-Sync・open-upstream-watch が移行するまで)。
+// REST は全廃する方針(2026-11-04)。REST のまま残るのは、外部の規格が形を決めるもの(/healthz、/ime/...、静的ファイル 等)と、
+// 移行期限つきの互換 POST /api/auth/request-otp・verify-otp(open-upstream-watch を配備するまで)だけ。
+// メールの確認リンクは画面のURL(#/confirm-email-change?token=…)で、確認ボタンを押したときだけ Account/ConfirmEmailChange で確定する。
 // 認証: Notify/Storage/DistSync/System/Settings/LolipopCron/AutoUpdate は x-admin-token、Sites/* と TOTP 設定は Authorization: Bearer <セッション>。
 syntax = "proto3";
 package open_easy_web.admin.v1;
@@ -64,6 +64,11 @@ service AutoUpdate {
   rpc CheckNow(Empty) returns (Json);
 }
 
+// アカウント(ログイン前から。トークン自体が資格情報)。
+service Account {
+  rpc ConfirmEmailChange(TokenRequest) returns (Json);
+}
+
 // ログイン前から呼ぶ。ログイン・OTP・QR・TOTP の検証はサーバーのハンドラ側。
 service Auth {
   rpc RequestOtp(ContactRequest) returns (Json);
@@ -88,6 +93,7 @@ service Sites {
   rpc DetectAndConfigure(SiteRequest) returns (Json);
   rpc Correct(CorrectRequest) returns (Json);
   rpc RegisterAppserver(Json) returns (Json);  // site, shared_endpoint, kind, backend_addr, admin_key, db_uri
+  rpc Upload(UploadRequest) returns (Json);    // ファイル送信。本文の上限 128 MiB(中身はおよそ 96 MiB まで)
 }
 
 message SetRecipientsRequest { repeated string emails = 1; }
@@ -109,4 +115,7 @@ message PowerProfileRequest { repeated string profiles = 1; }
 message ContactRequest { string contact = 1; }
 message VerifyOtpRequest { string contact = 1; string code = 2; string totp_code = 3; }
 message SiteRequest { string site = 1; }
+message TokenRequest { string token = 1; }
+message UploadFile { string path = 1; string data_base64 = 2; }
+message UploadRequest { string site = 1; repeated UploadFile files = 2; }
 message CorrectRequest { string site = 1; bool is_php = 2; }

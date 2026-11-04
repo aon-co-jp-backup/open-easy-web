@@ -133,18 +133,20 @@ fn build_and_send_contact_change_confirmation(
     token: &str,
 ) -> Result<(), MailError> {
     let label = field_label(field);
-    let confirm_url = format!("{SITE_URL}api/auth/confirm-email-change?token={token}");
+    // 画面のURL。トークンはフラグメント(`#` 以降)に載せ、サーバーのログに残さない。確定は、画面の確認ボタン(Connect の POST)だけ。
+    let confirm_url = format!("{SITE_URL}#/confirm-email-change?token={token}");
     let body = format!(
         "{label} 変更の確認 / Confirm your {label} change\n\n\
          このメールアドレス({current_email})宛に、{label} を「{new_value}」へ変更する\
-         リクエストが届いています。この変更に心当たりがある場合のみ、以下のリンクに\
-         アクセスしてください。\n\n\
+         リクエストが届いています。この変更に心当たりがある場合のみ、以下のリンクを開き、\
+         表示された画面の「確認する」ボタンを押してください(リンクを開いただけでは変更されません)。\n\n\
          {confirm_url}\n\n\
          このリンクは30分間有効です。心当たりがない場合は無視してください\
          (変更は自動的には行われません)。\n\n\
          --\n\
          A request to change this account's {label} to \"{new_value}\" was received.\n\
-         If you initiated this, visit the link above to confirm. This link is valid for \
+         If you initiated this, open the link above and press the \"Confirm\" button on the page \
+         (just opening the link changes nothing). This link is valid for \
          30 minutes. If you did not request this, you can safely ignore this email — no \
          change will be made automatically."
     );

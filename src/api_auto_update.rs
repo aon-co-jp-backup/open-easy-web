@@ -1,4 +1,4 @@
-//! 管理API(自動アップデート・システム状況・電源プロファイルなど)への薄い`fetch()`ラッパー。方式は Connect の単純呼び出し
+//! 管理API(自動アップデート・システム状況・電源プロファイルなど)への薄い`fetch()`ラッパー。方式は Connect(POST、RS-JSON)
 //! (`POST /open_easy_web.admin.v1.<Service>/<Method>`、JSON)で、REST ではない。共通の`call`/`rpc`は、ほかの`api_*.rs`も再利用する。
 
 use serde::Serialize;
@@ -48,7 +48,7 @@ pub(crate) async fn call<T: Serialize>(base_url: &str, path: &str, method: &str,
     }
 }
 
-/// Connect の単純呼び出し: `POST /open_easy_web.admin.v1.<Service>/<Method>`、本文は JSON(引数なしなら `{}`)。
+/// Connect(POST、RS-JSON): `POST /open_easy_web.admin.v1.<Service>/<Method>`、本文は JSON(引数なしなら `{}`)。
 /// REST は使わない(2026-11-04 方針: REST 全廃、`CLAUDE.md`「API 方針」参照)。
 const NS: &str = "/open_easy_web.admin.v1.";
 

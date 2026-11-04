@@ -165,7 +165,7 @@ impl LolipopCron {
     pub fn load(path: PathBuf) -> Self {
         let jobs = std::fs::read(&path)
             .ok()
-            .and_then(|b| sonic_rs::from_slice::<Vec<Job>>(&b).ok())
+            .and_then(|b| crate::json_in::parse_with_limit::<Vec<Job>>(&b, 8 * 1024 * 1024).ok())
             .unwrap_or_default();
         let tz_offset_hours = std::env::var("OPEN_EASYWEB_LOLIPOP_TZ_OFFSET_HOURS")
             .ok()
