@@ -410,7 +410,7 @@ Windows: .\uninstall.ps1 (as Administrator / 管理者権限で)</pre>
 
 <section id="update-notify-section">
   <h3>更新のお知らせメール (Update notices by e-mail)</h3>
-  <p class="muted">バージョンアップが必要なとき、自動更新では対応できず<strong>Claudeへの依頼が必要</strong>なとき、<strong>重い試験をVPSでは走らせず手元(WSL)で行う必要</strong>があるときに、登録したアドレスへ日英併記でお知らせします。外部の仕組み(version-control、rsa-rs の毎晩の更新など)は <code>POST /admin/notify/send</code>(<code>kind</code>: <code>update-needed</code> / <code>needs-claude</code> / <code>heavy-test</code> / <code>info</code>)を呼びます。同じ件名は6時間以内に再送しません。</p>
+  <p class="muted">バージョンアップが必要なとき、自動更新では対応できず<strong>Claudeへの依頼が必要</strong>なとき、<strong>重い試験をVPSでは走らせず手元(WSL)で行う必要</strong>があるときに、登録したアドレスへ日英併記でお知らせします。外部の仕組み(version-control、rsa-rs の毎晩の更新など)は <code>POST /open_easy_web.admin.v1.Notify/Send</code>(Connect、JSON)(<code>kind</code>: <code>update-needed</code> / <code>needs-claude</code> / <code>heavy-test</code> / <code>info</code>)を呼びます。同じ件名は6時間以内に再送しません。</p>
   <label>Admin token (管理トークン)<input type="password" id="notify-admin-token" placeholder="OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN の値"></label>
   <p id="notify-info" class="muted"></p>
   <label>お知らせを受け取るメールアドレス(1行に1件、20件まで)<textarea id="notify-recipients" rows="4" placeholder="you@example.com"></textarea></label>

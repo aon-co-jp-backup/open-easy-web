@@ -16,6 +16,7 @@ mod disk_breakdown;
 mod dist_sync;
 mod local_proxy;
 mod lolipop_cron;
+mod connect;
 mod storage_maintenance;
 mod update_notify;
 mod memory_breakdown;
@@ -626,111 +627,10 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         };
     }
 
-    // `/admin/notify[/recipients|/send|/test]` — 更新のお知らせメール(宛先の登録・送信・履歴、`update_notify.rs`参照、
-    // `x-admin-token`必須)。`send` を外部の仕組み(version-control・rsa-rs の毎晩の更新など)が呼ぶ。
-    if let Some(rest) = path.strip_prefix("/admin/notify") {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        let un = Arc::clone(&state.update_notify);
-        let smtp = state.smtp.clone();
-        let rest = rest.trim_matches('/').to_string();
-        let bytes = match method {
-            Method::GET => Bytes::new(),
-            _ => match http_body_util::Limited::new(req.into_body(), 16 * 1024).collect().await {
-                Ok(c) => c.to_bytes(),
-                Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
-            },
-        };
-        return match (method.clone(), rest.as_str()) {
-            (Method::GET, "") => json_response(StatusCode::OK, &un.view(smtp.is_some())),
-            (Method::PUT, "recipients") => {
-                #[derive(serde::Deserialize)]
-                struct R {
-                    emails: Vec<String>,
-                }
-                let body: R = match update_notify::parse_body(&bytes) {
-                    Ok(v) => v,
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, e),
-                };
-                match un.set_recipients(body.emails) {
-                    Ok(list) => json_response(StatusCode::OK, &serde_json::json!({ "recipients": list })),
-                    Err(e) => error_response(StatusCode::BAD_REQUEST, e),
-                }
-            }
-            (Method::POST, "send") => {
-                let body: update_notify::SendRequest = match update_notify::parse_body(&bytes) {
-                    Ok(v) => v,
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, e),
-                };
-                match un.send(smtp, body, false).await {
-                    Ok(v) => json_response(StatusCode::OK, &v),
-                    Err(e) => error_response(StatusCode::BAD_REQUEST, e),
-                }
-            }
-            (Method::POST, "test") => {
-                let req = update_notify::SendRequest {
-                    kind: "info".to_string(),
-                    subject: "テスト送信 / Test notice".to_string(),
-                    body: "これは更新のお知らせ機能のテストです。 / This is a test of the update-notice feature.".to_string(),
-                };
-                match un.send(smtp, req, true).await {
-                    Ok(v) => json_response(StatusCode::OK, &v),
-                    Err(e) => error_response(StatusCode::BAD_REQUEST, e),
-                }
-            }
-            _ => error_response(StatusCode::NOT_FOUND, "unknown notify endpoint"),
-        };
-    }
-
-    // `/admin/storage/...` — ストレージ(HDD/SSD)のメンテナンス(健康チェック・無駄なデータの整理・TRIM/最適化、
-    // `storage_maintenance.rs`参照、`x-admin-token`必須)。実際に消す/実行するのは、リクエストで `apply: true` を
-    // 明示したときだけ(既定は試し実行・計画だけ)。
-    if let Some(rest) = path.strip_prefix("/admin/storage/") {
-        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
-            return unauthorized;
-        }
-        let sm = Arc::clone(&state.storage_maintenance);
-        let rest = rest.trim_matches('/').to_string();
-        return match (method.clone(), rest.as_str()) {
-            (Method::GET, "maintenance") => json_response(StatusCode::OK, &sm.view()),
-            (Method::PUT, "maintenance/settings") => {
-                let bytes = match http_body_util::Limited::new(req.into_body(), 4096).collect().await {
-                    Ok(c) => c.to_bytes(),
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
-                };
-                let new: storage_maintenance::Settings = match storage_maintenance::parse_body(&bytes) {
-                    Ok(v) => v,
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, e),
-                };
-                match sm.set_settings(new) {
-                    Ok(s) => json_response(StatusCode::OK, &s),
-                    Err(e) => error_response(StatusCode::BAD_REQUEST, e),
-                }
-            }
-            (Method::POST, "health") => {
-                let v = tokio::task::spawn_blocking(move || sm.run_health()).await.unwrap_or_else(|_| serde_json::json!({"error": "task failed"}));
-                json_response(StatusCode::OK, &v)
-            }
-            (Method::POST, "tidy") | (Method::POST, "optimize") => {
-                #[derive(serde::Deserialize, Default)]
-                struct ApplyBody {
-                    #[serde(default)]
-                    apply: bool,
-                }
-                let bytes = match http_body_util::Limited::new(req.into_body(), 4096).collect().await {
-                    Ok(c) => c.to_bytes(),
-                    Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
-                };
-                let apply = if bytes.is_empty() { false } else { storage_maintenance::parse_body::<ApplyBody>(&bytes).map(|b| b.apply).unwrap_or(false) };
-                let is_tidy = rest == "tidy";
-                let v = tokio::task::spawn_blocking(move || if is_tidy { sm.run_tidy(apply) } else { sm.run_optimize(apply) })
-                    .await
-                    .unwrap_or_else(|_| serde_json::json!({"error": "task failed"}));
-                json_response(StatusCode::OK, &v)
-            }
-            _ => error_response(StatusCode::NOT_FOUND, "unknown storage endpoint"),
-        };
+    // `/open_easy_web.admin.v1.<Service>/<Method>` — Connect の単純呼び出し(POST + JSON、`connect.rs`参照)。
+    // 新しい管理APIは Connect のみ(REST は作らない。2026-11-04 方針: REST 全廃)。既存の REST 風 `/admin/...` は、触るときに順に移す。
+    if let Some(rest) = path.strip_prefix(connect::PREFIX) {
+        return connect::dispatch(&state, req, rest).await;
     }
 
     // `/admin/lolipop-cron/jobs[/{id}[/run|/enabled]]` — ロリポップ!向け

@@ -117,7 +117,7 @@ Nginx/Apache設定生成という形ではなく、**`open-runo`/RPoem(旧poem-c
 ## ストレージのメンテナンス(標準機能、2026-11-03追加、ユーザー指示)
 
 HDD/SSD の「健康チェック(SMART)」「無駄なデータの整理」「TRIM/最適化」を、標準機能として持つ。実体は姉妹リポジトリ **`vps-tidy`**(`../vps-tidy`、Rust、Linux/Windows)で、このリポジトリには、サーバーへの組み込みだけを置く:
-`server/src/storage_maintenance.rs`(設定・直近の結果の保存、毎日の定期実行、`/admin/storage/...` の処理)、`src/api_storage.rs`・`src/storage_ui.rs`・`src/shell.rs` のパネル(画面)。
+`server/src/storage_maintenance.rs`(設定・直近の結果の保存、毎日の定期実行、`server/src/connect.rs` の `Storage/...`)、`src/api_storage.rs`・`src/storage_ui.rs`・`src/shell.rs` のパネル(画面)。
 
 **守ること**
 - **消す対象は、固定の規則だけで決める(AIは使わない)**。既定は安全側(整理=試し実行、最適化=無効)。「実際に実行」は、`apply: true` を明示したときだけ。画面からは、確認ダイアログを必ず出す。
@@ -3528,3 +3528,10 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 実体は `server/src/update_notify.rs`(宛先・履歴の保存、連投抑制、検証)、`mail.rs` の `send_notice`、画面は `src/api_notify.rs`・`src/notify_ui.rs`・`src/shell.rs` のパネル。詳細はREADME。
 **守ること**: 宛先の登録は管理者だけ(公開の自己登録にしない=迷惑メールの踏み台防止)。件名・本文・宛先は検証し、制御文字・改行は通さない。外部から来る本文は RS-JSON `from_str_secure`。画面(WASM)側は `sonic-rs` を使わない。
 **確認した**: サーバーのテスト131件、WASMビルド、実サーバーで管理API(401・400・保存・SMTP未設定の断り)。**未確認**: 本番SMTPでの実送信、ブラウザ画面の目視。
+
+## API 方針: REST 全廃・Connect(2026-11-04、ユーザー決定)
+- **REST は全廃する。新しい API は REST で作らない。** 方式は Connect の単純呼び出し(`POST /open_easy_web.admin.v1.<Service>/<Method>`、`content-type: application/json`、本文は JSON)。`curl` から呼べ、WASM は `fetch` のままで、`prost` を WASM に入れない(サイズが増えるため)。RPoem の管理API(`open_runo.admin.v1.Admin`、gRPC・gRPC-web・Connect)と呼び方をそろえる。
+- **JSON は RS-JSON に統一**: 読み込みは `from_str_secure` / `parse_secure`(サイズ・深さ・重複キーの上限つき)、書き出しは `rust_json::fast`。エラーは Connect の形式 `{"code","message"}`(HTTP ステータスは Connect 仕様の対応表、`server/src/connect.rs`)。
+- **移行の状況**: 更新のお知らせ(`Notify`)とストレージ(`Storage`)は、REST の経路を**持たない**(Connect のみ)。それ以外の既存の REST 風 `/admin/...` と `/api/...`(約40本)は、**実際に触るときに順に Connect へ移す**(その時に REST の経路は消す)。移行が終わるまで、既存の REST は残るが、**新規に追加しない**。
+- スキーマは `proto/open_easy_web/admin/v1/admin.proto`(説明用。コード生成には使っていない)。素の gRPC(ストリーミング)は、必要になってから。
+- **WASM を小さくする設計**: 画面側は `serde_json` + `fetch`。`profile.release` は `opt-level = "z"`・`lto`・`codegen-units = 1`・`panic = "abort"`・`strip`(2026-11-04: 753KB → 474KB、gzip 206KB → 163KB)。

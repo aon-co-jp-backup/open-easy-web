@@ -1,0 +1,37 @@
+// open-easy-web 管理API(Connect の単純呼び出し: POST /open_easy_web.admin.v1.<Service>/<Method>、JSON)。
+// 今は説明用のスキーマで、コード生成には使っていない(サーバーは RS-JSON で読み書きする、server/src/connect.rs)。
+syntax = "proto3";
+package open_easy_web.admin.v1;
+
+service Notify {
+  rpc Get(Empty) returns (NotifyView);
+  rpc SetRecipients(SetRecipientsRequest) returns (SetRecipientsResponse);
+  // kind: update-needed | needs-claude | heavy-test | info。同じ件名は6時間以内に再送しない。
+  rpc Send(SendRequest) returns (SendResponse);
+  rpc SendTest(Empty) returns (SendResponse);
+}
+
+service Storage {
+  rpc GetMaintenance(Empty) returns (MaintenanceView);
+  rpc SetSettings(StorageSettings) returns (StorageSettings);
+  rpc RunHealth(Empty) returns (Result);
+  // apply=true のときだけ実際に実行する。省くと試し実行・計画だけ。
+  rpc RunTidy(ApplyRequest) returns (Result);
+  rpc RunOptimize(ApplyRequest) returns (Result);
+}
+
+message Empty {}
+message SetRecipientsRequest { repeated string emails = 1; }
+message SetRecipientsResponse { repeated string recipients = 1; }
+message SendRequest { string kind = 1; string subject = 2; string body = 3; }
+message SendResponse { uint32 sent = 1; uint32 failed = 2; bool suppressed = 3; }
+message NotifyEvent { int64 at = 1; string kind = 2; string subject = 3; uint32 sent = 4; uint32 failed = 5; bool suppressed = 6; }
+message NotifyView { repeated string recipients = 1; repeated NotifyEvent history = 2; bool smtp_configured = 3; }
+message StorageSettings {
+  bool health_enabled = 1; bool tidy_enabled = 2; bool tidy_apply = 3;
+  bool optimize_enabled = 4; bool optimize_apply = 5; uint32 hour = 6;
+}
+message ApplyRequest { bool apply = 1; }
+// 実行結果は、状態(state)と人が読む文章(text)を持つ JSON(構造は storage_maintenance.rs を参照)。
+message Result {}
+message MaintenanceView {}
