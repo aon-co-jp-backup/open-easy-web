@@ -1,4 +1,4 @@
-//! `aruaru-llm`(`GET/POST /v1/classify`)への薄いHTTPクライアント。
+//! `aruaru-llm`(`POST /aruaru_llm.v1.Llm/Classify`(Connect))への薄いHTTPクライアント。
 //! システムメモリ/ディスク使用状況円グラフの「その他」カテゴリ分類に
 //! 使う(2026-09-07新設)。到達不能・タイムアウト時は`Err`を返すのみで
 //! パニックしない——呼び出し元は分類失敗時「分類不能」として扱う。
@@ -40,7 +40,7 @@ pub async fn classify_many(items: &[String], categories: &[String]) -> Result<Ve
         .timeout(REQUEST_TIMEOUT)
         .build()
         .map_err(|e| format!("client build failed: {e}"))?;
-    let url = format!("{}/v1/classify", base_url());
+    let url = format!("{}/aruaru_llm.v1.Llm/Classify", base_url());
     let resp = client
         .post(&url)
         .json(&ClassifyRequest { items, categories })
