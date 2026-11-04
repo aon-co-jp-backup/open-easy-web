@@ -89,6 +89,31 @@ pub async fn send_otp(config: SmtpConfig, to: String, code: String) -> Result<()
         .map_err(|e| MailError::Send(format!("task panicked: {e}")))?
 }
 
+fn build_and_send_notice(config: &SmtpConfig, to: &str, subject: &str, body: &str) -> Result<(), MailError> {
+    let email = Message::builder()
+        .from(config.from.parse().map_err(|e| MailError::Build(format!("{e}")))?)
+        .to(to.parse().map_err(|e| MailError::Build(format!("{e}")))?)
+        .subject(subject)
+        .header(ContentType::TEXT_PLAIN)
+        .body(body.to_string())
+        .map_err(|e| MailError::Build(format!("{e}")))?;
+    let creds = Credentials::new(config.username.clone(), config.password.clone());
+    let mailer = SmtpTransport::starttls_relay(&config.host)
+        .map_err(|e| MailError::Send(format!("{e}")))?
+        .port(config.port)
+        .credentials(creds)
+        .build();
+    mailer.send(&email).map_err(|e| MailError::Send(format!("{e}")))?;
+    Ok(())
+}
+
+/// 「更新のお知らせ」(`update_notify.rs`)用の一般的な通知メールを 1 宛先へ送る。
+pub async fn send_notice(config: SmtpConfig, to: String, subject: String, body: String) -> Result<(), MailError> {
+    tokio::task::spawn_blocking(move || build_and_send_notice(&config, &to, &subject, &body))
+        .await
+        .map_err(|e| MailError::Send(format!("task panicked: {e}")))?
+}
+
 /// `field`の表示名(日英併記)。「主メール」「セカンドメール」
 /// 「携帯電話番号」のどれについての変更確認メールかを本文に埋め込むため。
 fn field_label(field: &str) -> &'static str {

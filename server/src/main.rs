@@ -17,6 +17,7 @@ mod dist_sync;
 mod local_proxy;
 mod lolipop_cron;
 mod storage_maintenance;
+mod update_notify;
 mod memory_breakdown;
 mod memory_governor;
 mod mail;
@@ -76,6 +77,8 @@ struct AppState {
     lolipop_cron: Arc<lolipop_cron::LolipopCron>,
     /// ストレージ(HDD/SSD)のメンテナンス: 健康チェック・無駄なデータの整理・TRIM/最適化(`storage_maintenance.rs`参照)。
     storage_maintenance: Arc<storage_maintenance::StorageMaintenance>,
+    /// 更新のお知らせメール: 宛先の登録・送信・履歴(`update_notify.rs`参照)。
+    update_notify: Arc<update_notify::UpdateNotify>,
     /// 自分自身のリスンアドレス(`auto_update`のヘルスチェック・
     /// 「今すぐ確認」機能が新プロセスへ問い合わせる先として使う)。
     server_bind_addr: std::net::SocketAddr,
@@ -162,6 +165,7 @@ impl AppState {
                 env_path("OPEN_EASYWEB_STORAGE_MAINTENANCE_FILE", "/var/www/.open-easy-web-storage-maintenance.json"),
                 std::env::var("OPEN_EASYWEB_STORAGE_TIDY_CONFIG").map(PathBuf::from).unwrap_or_else(|_| vps_tidy::config::default_config_path()),
             )),
+            update_notify: Arc::new(update_notify::UpdateNotify::load(env_path("OPEN_EASYWEB_UPDATE_NOTIFY_FILE", "/var/www/.open-easy-web-update-notify.json"))),
             server_bind_addr: std::env::var("OPEN_EASYWEB_SERVER_BIND")
                 .unwrap_or_else(|_| "0.0.0.0:8090".into())
                 .parse()
@@ -619,6 +623,63 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 }
             }
             _ => error_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed".to_string()),
+        };
+    }
+
+    // `/admin/notify[/recipients|/send|/test]` — 更新のお知らせメール(宛先の登録・送信・履歴、`update_notify.rs`参照、
+    // `x-admin-token`必須)。`send` を外部の仕組み(version-control・rsa-rs の毎晩の更新など)が呼ぶ。
+    if let Some(rest) = path.strip_prefix("/admin/notify") {
+        if let Err(unauthorized) = dist_sync::require_admin_token(&req) {
+            return unauthorized;
+        }
+        let un = Arc::clone(&state.update_notify);
+        let smtp = state.smtp.clone();
+        let rest = rest.trim_matches('/').to_string();
+        let bytes = match method {
+            Method::GET => Bytes::new(),
+            _ => match http_body_util::Limited::new(req.into_body(), 16 * 1024).collect().await {
+                Ok(c) => c.to_bytes(),
+                Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("failed to read body: {e}")),
+            },
+        };
+        return match (method.clone(), rest.as_str()) {
+            (Method::GET, "") => json_response(StatusCode::OK, &un.view(smtp.is_some())),
+            (Method::PUT, "recipients") => {
+                #[derive(serde::Deserialize)]
+                struct R {
+                    emails: Vec<String>,
+                }
+                let body: R = match update_notify::parse_body(&bytes) {
+                    Ok(v) => v,
+                    Err(e) => return error_response(StatusCode::BAD_REQUEST, e),
+                };
+                match un.set_recipients(body.emails) {
+                    Ok(list) => json_response(StatusCode::OK, &serde_json::json!({ "recipients": list })),
+                    Err(e) => error_response(StatusCode::BAD_REQUEST, e),
+                }
+            }
+            (Method::POST, "send") => {
+                let body: update_notify::SendRequest = match update_notify::parse_body(&bytes) {
+                    Ok(v) => v,
+                    Err(e) => return error_response(StatusCode::BAD_REQUEST, e),
+                };
+                match un.send(smtp, body, false).await {
+                    Ok(v) => json_response(StatusCode::OK, &v),
+                    Err(e) => error_response(StatusCode::BAD_REQUEST, e),
+                }
+            }
+            (Method::POST, "test") => {
+                let req = update_notify::SendRequest {
+                    kind: "info".to_string(),
+                    subject: "テスト送信 / Test notice".to_string(),
+                    body: "これは更新のお知らせ機能のテストです。 / This is a test of the update-notice feature.".to_string(),
+                };
+                match un.send(smtp, req, true).await {
+                    Ok(v) => json_response(StatusCode::OK, &v),
+                    Err(e) => error_response(StatusCode::BAD_REQUEST, e),
+                }
+            }
+            _ => error_response(StatusCode::NOT_FOUND, "unknown notify endpoint"),
         };
     }
 
@@ -1949,6 +2010,7 @@ mod tests {
             auto_update: Arc::new(auto_update::AutoUpdateState::load(dir.path().join("auto-update.json"))),
             lolipop_cron: Arc::new(lolipop_cron::LolipopCron::load(dir.path().join("lolipop-cron.json"))),
             storage_maintenance: Arc::new(storage_maintenance::StorageMaintenance::load(dir.path().join("storage-maintenance.json"), dir.path().join("storage-tidy.toml"))),
+            update_notify: Arc::new(update_notify::UpdateNotify::load(dir.path().join("update-notify.json"))),
             server_bind_addr: ([127, 0, 0, 1], 0).into(),
             stop_accepting: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             power_profile: Arc::new(power_profile::PowerProfileRegistry::new()),
@@ -2553,6 +2615,7 @@ mod tests {
             auto_update: Arc::new(auto_update::AutoUpdateState::load(dir.path().join("auto-update.json"))),
             lolipop_cron: Arc::new(lolipop_cron::LolipopCron::load(dir.path().join("lolipop-cron.json"))),
             storage_maintenance: Arc::new(storage_maintenance::StorageMaintenance::load(dir.path().join("storage-maintenance.json"), dir.path().join("storage-tidy.toml"))),
+            update_notify: Arc::new(update_notify::UpdateNotify::load(dir.path().join("update-notify.json"))),
             server_bind_addr: ([127, 0, 0, 1], 0).into(),
             stop_accepting: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             power_profile: Arc::new(power_profile::PowerProfileRegistry::new()),

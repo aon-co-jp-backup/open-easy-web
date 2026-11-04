@@ -402,6 +402,17 @@ HTTPSで公開したい場合は、ご自身で証明書を用意し、別のTLS
 [GitHub Releases](https://github.com/aon-co-jp/open-easy-web/releases/latest))
 リンクを追加。詳細は[PORTING.md §15](PORTING.md#15-android版の外付けhdd対応--リリースワークフローのsibling依存漏れ2026-08-04)参照。
 
+## 更新のお知らせメール(標準機能、2026-11-04追加)
+
+バージョンアップが必要なとき、自動更新では対応できず**Claudeへの依頼が必要**なとき、**重い試験をVPSでは走らせず手元(WSL)で行う必要**があるときなどに、登録したメールアドレスへ**日英併記でお知らせ**する標準機能です(`server/src/update_notify.rs`)。
+
+- **宛先の登録**: ログイン後のメインページ「更新のお知らせメール」で、1行1件(20件まで)。登録は管理者(`x-admin-token`)だけ。**公開の自己登録にはしていません**(確認メールの無い登録は、他人のアドレスへの迷惑メールの踏み台になるため)。メールアドレスは `lettre` の解析 + 改行・空白・カンマ等の拒否で検証し、ヘッダー注入を防ぎます。
+- **お知らせの送信**: 外部の仕組み(`version-control`、`rsa-rs` の毎晩・毎朝の更新、自動保守など)が `POST /admin/notify/send`(`x-admin-token` 必須、本文 `{"kind","subject","body"}`)を呼びます。`kind` は `update-needed`(更新が必要)/ `needs-claude`(Claudeへの依頼が必要)/ `heavy-test`(重い試験を手元で)/ `info`。
+- **連投の抑制**: 同じ件名は6時間以内に再送しません(毎晩の実行で同じ知らせが溜まらないように)。履歴は直近50件を状態ファイルに残して画面に出します。
+- **管理API**: `GET /admin/notify`(宛先・履歴・SMTP設定の有無)、`PUT /admin/notify/recipients`(`{"emails":[...]}`)、`POST /admin/notify/send`、`POST /admin/notify/test`(テスト送信)。本文は RS-JSON の `from_str_secure`(16KiB・重複キー拒否)で読みます。
+- **設定**: SMTP は既存の `OPEN_EASYWEB_SMTP_*`(OTP メールと共通)。状態の保存先は `OPEN_EASYWEB_UPDATE_NOTIFY_FILE`(既定 `/var/www/.open-easy-web-update-notify.json`)。
+- **正直な限界**: SMTP 実送信は、本番の SMTP でしか確認できません(ローカルでは、認証・入力検証・保存・SMTP 未設定の断りまでを確認)。SMTP が未設定だと、送信は理由つきで断ります。
+
 ## ストレージ(HDD/SSD)のメンテナンス(標準機能、2026-11-03追加)
 
 サーバーが動いているマシンの HDD/SSD を、**決まった規則だけで、安全に、定期的に**メンテナンスする標準機能です(AIは使いません)。中身は、姉妹リポジトリ [`vps-tidy`](https://github.com/aon-co-jp/vps-tidy)(Rust 製、Linux と Windows)で、ここは「サーバーへの組み込み」(設定の保存・定期実行・管理API・画面)です。

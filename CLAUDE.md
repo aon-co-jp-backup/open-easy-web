@@ -3523,3 +3523,8 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 **Adoption**: in `Cargo.toml`, `rust-json = { path = "../RS-JSON", features = ["fast"] }`. Example in `RS-JSON/README.md`.
 
 **Status in this repository**: Not yet applied (policy only). Code will be switched over place by place, starting where measurements show large or frequent JSON reads.
+
+## 更新のお知らせメール(標準機能、2026-11-04追加、ユーザー指示)
+実体は `server/src/update_notify.rs`(宛先・履歴の保存、連投抑制、検証)、`mail.rs` の `send_notice`、画面は `src/api_notify.rs`・`src/notify_ui.rs`・`src/shell.rs` のパネル。詳細はREADME。
+**守ること**: 宛先の登録は管理者だけ(公開の自己登録にしない=迷惑メールの踏み台防止)。件名・本文・宛先は検証し、制御文字・改行は通さない。外部から来る本文は RS-JSON `from_str_secure`。画面(WASM)側は `sonic-rs` を使わない。
+**確認した**: サーバーのテスト131件、WASMビルド、実サーバーで管理API(401・400・保存・SMTP未設定の断り)。**未確認**: 本番SMTPでの実送信、ブラウザ画面の目視。
