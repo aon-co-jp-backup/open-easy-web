@@ -67,7 +67,6 @@ async fn refresh() {
     match crate::api_notify::overview(&base_url(), &token()).await {
         Ok(v) => {
             render(&v);
-            set_text("notify-status", "");
         }
         Err(e) => set_text("notify-status", &format!("❌ {e}")),
     }
