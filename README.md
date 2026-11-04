@@ -124,8 +124,8 @@ mode" and "Free domain setup wizard" sections above).
 - **システムメモリ・ディスク使用状況の円グラフ表示(2026-07-31/
   2026-08-04追加)**: このサーバーが動いているマシンの実メモリ・
   仮想メモリ(スワップ)・実HDD/SSDの使用状況を`sysinfo`クレート経由で
-  取得し、GUIの円グラフ+GiB表示で確認できる(`/admin/system/memory`・
-  `/admin/system/disk`、`x-admin-token`認証)。同じ画面から電源プロファイル
+  取得し、GUIの円グラフ+GiB表示で確認できる(`System/GetMemory`・
+  `System/GetDisk`(Connect)、`x-admin-token`認証)。同じ画面から電源プロファイル
   (省電力/省メモリ/常時電源接続、独立チェックボックスで組み合わせ自由)も
   切り替えられる。
 - **IPアドレスから起動**: `scripts/serve.sh` でローカル/VPS上の任意のIP・
@@ -151,7 +151,7 @@ mode" and "Free domain setup wizard" sections above).
   `DisasterRecoveryManager::protect_write`経由で保護する(電源断・
   ディスク切断時もジャーナルに記録済みのため、再起動時に自動リプレイで
   復旧できる)。登録済みVPS同期先(SFTP)へのファイル複製、Email/
-  Googleドライブへのオフサイト退避先設定にも対応(`/admin/dist-sync/*`
+  Googleドライブへのオフサイト退避先設定にも対応(`DistSync/*`(Connect)
   管理API)。正直な開示: 実SMTPサーバー/実Googleドライブアカウントでの
   E2E確認は未実施(ローカルモックのみで検証)、詳細は`CLAUDE.md`参照。
 - **アカウント認証(パスワード不使用)**: 固定パスワードを一切使わず、
@@ -433,7 +433,7 @@ HTTPSで公開したい場合は、ご自身で証明書を用意し、別のTLS
 ロリポップ側のcron機能やプランに依存せず、`open-easy-web-server`が内蔵スケジューラで実行します。
 
 - 設定: ログイン後のメインページ「ロリポップ!時間指定オートクロール」(GUI)、または管理API
-  `/admin/lolipop-cron/jobs`(`x-admin-token`認証)。ジョブ名・URL・GET/POST・実行時刻(`03:00, 15:30`のように複数可)・曜日・タイムアウトを指定
+  `LolipopCron/*`(Connect、`x-admin-token`認証)。ジョブ名・URL・GET/POST・実行時刻(`03:00, 15:30`のように複数可)・曜日・タイムアウトを指定
 - 時刻はJST基準(環境変数`OPEN_EASYWEB_LOLIPOP_TZ_OFFSET_HOURS`で変更)。設定は`OPEN_EASYWEB_LOLIPOP_CRON_FILE`へ保存され再起動後も保持
 - **後追い実行**: サーバー停止中に過ぎた時刻は、起動後に1回だけ実行(既定ON、ジョブごとに無効化可、直近24時間以内の取りこぼしのみ)
 - 登録内容を、ロリポップ管理画面のcron設定へ貼れる「分 時 日 月 曜日」書式でも確認可能

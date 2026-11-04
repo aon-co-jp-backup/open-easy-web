@@ -3532,9 +3532,35 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 ## API 方針: REST 全廃・Connect(2026-11-04、ユーザー決定)
 - **REST は全廃する。新しい API は REST で作らない。** 方式は Connect の単純呼び出し(`POST /open_easy_web.admin.v1.<Service>/<Method>`、`content-type: application/json`、本文は JSON)。`curl` から呼べ、WASM は `fetch` のままで、`prost` を WASM に入れない(サイズが増えるため)。RPoem の管理API(`open_runo.admin.v1.Admin`、gRPC・gRPC-web・Connect)と呼び方をそろえる。
 - **JSON は RS-JSON に統一**: 読み込みは `from_str_secure` / `parse_secure`(サイズ・深さ・重複キーの上限つき)、書き出しは `rust_json::fast`。エラーは Connect の形式 `{"code","message"}`(HTTP ステータスは Connect 仕様の対応表、`server/src/connect.rs`)。
-- **移行の状況**: 更新のお知らせ(`Notify`)とストレージ(`Storage`)は、REST の経路を**持たない**(Connect のみ)。それ以外の既存の REST 風 `/admin/...` と `/api/...`(約40本)は、**実際に触るときに順に Connect へ移す**(その時に REST の経路は消す)。移行が終わるまで、既存の REST は残るが、**新規に追加しない**。
+- **移行の状況(2026-11-04、ユーザー指示「今触って今移して」で完了)**: このリポジトリの REST 風 API は**すべて Connect へ移し、旧 REST の経路は削除した**。対応表は下の「旧 REST → Connect の対応表」。REST のまま残るのは**例外だけ**(下に理由つき)。
 - スキーマは `proto/open_easy_web/admin/v1/admin.proto`(説明用。コード生成には使っていない)。素の gRPC(ストリーミング)は、必要になってから。
 - **WASM を小さくする設計**: 画面側は `serde_json` + `fetch`。`profile.release` は `opt-level = "z"`・`lto`・`codegen-units = 1`・`panic = "abort"`・`strip`(2026-11-04: 753KB → 474KB、gzip 206KB → 163KB)。
+
+### 旧 REST → Connect の対応表(2026-11-04)
+呼び方は `POST /open_easy_web.admin.v1.<Service>/<Method>`、本文は JSON(引数なしは `{}`)。認証は、管理系は `x-admin-token`、サイト操作と TOTP 設定は `Authorization: Bearer <セッション>`。
+
+| 旧 REST | Connect | 備考 |
+|---|---|---|
+| `POST /api/auth/totp-login` | `Auth/TotpLogin` | |
+| `POST /api/auth/qr-login/{start,confirm,finish}` | `Auth/QrLogin{Start,Confirm,Finish}` | |
+| `GET /api/auth/qr-login/{status,whoami}?id=` | `Auth/QrLogin{Status,Whoami}`(本文 `{"id":…}`) | id は英数字・`-`・`_` のみ |
+| `POST /api/auth/logout` | `Auth/Logout` | |
+| `POST /api/auth/totp/{setup,enable,disable}` | `Auth/Totp{Setup,Enable,Disable}` | Bearer |
+| `POST /api/auth/request-email-change` | `Auth/RequestEmailChange` | Bearer |
+| `POST /api/auth/{request-otp,verify-otp}` | `Auth/{RequestOtp,VerifyOtp}` | **旧 REST は期限つきの互換として残す**(応答に `Deprecation: true`)。利用者は `open-upstream-watch` だけで、Connect へ更新済み(b8517b6)。**配備したら旧 REST を削除する** |
+| `DELETE /api/sites/:name` | `Sites/Delete`(`{"site":…}`) | Bearer |
+| `POST /api/sites/:name/{folder,detect-and-configure,correct,register-appserver}` | `Sites/{CreateFolder,DetectAndConfigure,Correct,RegisterAppserver}`(本文に `site`) | Bearer |
+| `GET/POST /admin/dist-sync/targets`、`DELETE …/:id`、`POST …/disaster-fallback`、`POST …/first-time-setup` | `DistSync/{ListTargets,RegisterTarget,DeleteTarget,SetDisasterFallback,FirstTimeSetup}` | |
+| `GET /admin/system/{memory,disk}`、`GET /admin/easyweb-system-{memory,disk}-breakdown` | `System/{GetMemory,GetDisk,GetMemoryBreakdown,GetDiskBreakdown}` | |
+| `GET/POST /admin/easyweb-login-mode` | `Settings/{GetLoginMode,SetLoginMode}` | |
+| `GET/POST /admin/easyweb-power-profile` | `Settings/{GetPowerProfile,SetPowerProfile}` | `easyweb-` 接頭辞は不要に(`open-web-server` の同名 API との衝突が起きない) |
+| `/admin/lolipop-cron/jobs…` | `LolipopCron/{ListJobs,CreateJob,DeleteJob,RunJob,SetJobEnabled}`(id は本文) | |
+| `GET/POST /admin/auto-update`、`POST …/check-now` | `AutoUpdate/{Get,Set,CheckNow}` | |
+| `/admin/notify…`、`/admin/storage/…` | `Notify/*`、`Storage/*` | 初めから Connect のみ |
+
+**REST のまま残す例外**(理由): `GET /api/auth/confirm-email-change?token=`(メールに載るリンクをブラウザで直接開くため)、`POST /api/sites/:name/upload`(`multipart/form-data` のファイル送信。JSON にすると大きくなる)、`GET /healthz`、`/ime/…`(aruaru-IME の中継と配布)、静的ファイル・`/pkg/…`・`/qr-confirm.html` など、期限つき互換の `request-otp`・`verify-otp`(上記)。
+**このリポジトリの範囲外**: 画面の「無料ドメイン」パネルが呼ぶ `/admin/ddns/…`・`/admin/sftp/…` は `open-web-server` 本体の API で、同リポジトリ側で別途移行が要る(未対応)。
+**本文の上限**: 入口で読み込む本文は 64 KiB まで(以前はハンドラごとに無制限)。アップロードだけ 256 MiB まで。超えると 413。
 
 ## API 方針: REST 全廃・gRPC / Connect へ (2026-11-04)
 

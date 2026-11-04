@@ -502,3 +502,10 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 - **Исключения (интерфейсы, форму которых определяет чужой стандарт, а не наш собственный API)**: ACME, обратные вызовы OAuth/OIDC, вебхуки сторонних сервисов (например, GitHub), проверки работоспособности, раздача статических файлов, OTLP и тому подобное. Такие интерфейсы принимают обычный HTTP, как того требует соответствующий стандарт.
 - Эталонные реализации: `RPoem` (`open_runo.admin.v1.Admin`) и `open-easy-web` (`server/src/connect.rs`, `proto/open_easy_web/admin/v1/admin.proto`).
 - Примечание: соответствует ли код конкретного репозитория этой политике, зависит от самого репозитория. Данный раздел лишь фиксирует политику и не означает, что код уже изменён.
+
+## API 移行(REST → Connect)の記録 (2026-11-04)
+このリポジトリの REST 風 API(`/admin/...`・`/api/...`)は、**すべて Connect の単純呼び出し(`POST /open_easy_web.admin.v1.<Service>/<Method>`、JSON、読み書きは RS-JSON)へ移し、旧 REST の経路を削除した**。対応表・例外とその理由は `CLAUDE.md`「旧 REST → Connect の対応表」、スキーマは `proto/open_easy_web/admin/v1/admin.proto`。
+- **引っ越し(移植)時の注意**: ヘルスチェックは `GET /healthz` のまま。外から呼ぶスクリプトを書くときは `curl -X POST -H 'content-type: application/json' -H "x-admin-token: …" -d '{}' https://…/open_easy_web.admin.v1.System/GetMemory` の形にする。
+- **期限つき互換**: `POST /api/auth/request-otp`・`verify-otp`(旧 REST)は、利用者の `open-upstream-watch` を Connect 版へ更新して配備するまで残している(応答に `Deprecation: true`)。配備後に削除すること。
+- **本文の上限**: 入口で 64 KiB(アップロードのみ 256 MiB)。以前はハンドラごとに無制限に読んでいた。
+- **範囲外**: 画面の「無料ドメイン」パネルが呼ぶ `/admin/ddns/…`・`/admin/sftp/…` は `open-web-server` 本体の API(同リポジトリ側で別途移行)。
