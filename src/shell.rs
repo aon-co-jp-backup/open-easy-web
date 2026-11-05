@@ -910,7 +910,7 @@ Windows: .\uninstall.ps1 (as Administrator / 管理者権限で)</pre>
     またがるリポジトリの一方向/双方向ミラー同期を行うRust+Poem製Webアプリ。
     既定では<code>https://easy-web.tokyo/rs-sync/</code>(VPS上でopen-web-server
     自身の「分身の術」テナントルーティング〈`domains.toml`、
-    <code>POST /admin/tenants</code>で登録〉経由で`127.0.0.1:8096`へ
+    <code>POST /open_web_server.admin.v1.Admin/AddTenant</code>で登録〉経由で`127.0.0.1:8096`へ
     転送)で稼働中のインスタンスを指す(2026-07-28、runo.tokyo上のデモ
     インスタンスは廃止しeasy-web.tokyoへ移設した)。別の場所で動かしている
     場合は上記URLを書き換えてください。デモ環境は
@@ -922,7 +922,7 @@ Windows: .\uninstall.ps1 (as Administrator / 管理者権限で)</pre>
     default this points at the instance running at
     <code>https://easy-web.tokyo/rs-sync/</code> (routed via open-web-server's
     own "ninja clone" tenant routing, registered in <code>domains.toml</code>
-    via <code>POST /admin/tenants</code>, forwarding to
+    via <code>POST /open_web_server.admin.v1.Admin/AddTenant</code>, forwarding to
     <code>127.0.0.1:8096</code> on the VPS; the old runo.tokyo demo instance
     was decommissioned 2026-07-28 and moved here). Adjust the URL above if
     you run RS-Sync elsewhere. A demo link is available at

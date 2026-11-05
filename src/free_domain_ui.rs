@@ -2,11 +2,11 @@
 //!
 //! 4ステップ: (a) DuckDNSアカウント作成への外部リンク案内、(b) サブ
 //! ドメイン名+トークン入力、(c) `open-web-server`側の
-//! `POST /admin/ddns/setup-free-domain`を呼んで即時疎通確認(1インスタンス
+//! Connect `Admin/SetupFreeDomain`(POST、RS-JSON)を呼んで即時疎通確認(1インスタンス
 //! につき最大20ドメインまで登録可能)、(d) 成功したらSFTP接続コマンド例も
-//! 一緒に表示(`GET /admin/sftp/connection-info`、複数ドメイン登録時は
+//! 一緒に表示(`Admin/GetSftpConnectionInfo`、複数ドメイン登録時は
 //! どれを使うか選択できる)。加えて、登録済みドメイン一覧+残り枠の表示・
-//! 個別削除にも対応する(`GET`/`DELETE /admin/ddns/domains`)。
+//! 個別削除にも対応する(`Admin/ListFreeDomains`・`Admin/RemoveFreeDomain`)。
 //! 過剰実装を避け、1画面で完結するシンプルな構成として実装する。
 
 use crate::api_free_domain;

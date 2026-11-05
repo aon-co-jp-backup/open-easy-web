@@ -5,8 +5,8 @@
 //! プロセスを個別インストール・起動する必要が無くなる
 //! (2026-07-16、ユーザー指示)。
 //!
-//! `open-web-server`側は`POST /admin/tenants`(HTTPルーティング)+
-//! `POST /admin/tenants/:host/tls`(TLS証明書、任意)、
+//! `open-web-server`側は`POST /open_web_server.admin.v1.Admin/AddTenant`(Connect、HTTPルーティング)+
+//! `Admin/UpsertTenantTls`(TLS証明書、任意)、
 //! `poem-cosmo-tauri`側は`POST /admin/appserver-tenants`
 //! (アプリケーションサーバー層のルーティング)。どちらも「共有インスタンス
 //! への動的テナント登録」という同じ目的だが、リポジトリごとにAPI形状が
@@ -94,7 +94,8 @@ async fn register_open_web_server(client: &reqwest::Client, host: &str, req: &Re
         db_uri: &'a str,
     }
 
-    let endpoint = format!("{}/admin/tenants", req.shared_endpoint.trim_end_matches('/'));
+    // 2026-11-04: REST(`POST /admin/tenants`)から Connect の単純呼び出しへ(open-web-server の REST 全廃)。
+    let endpoint = format!("{}/open_web_server.admin.v1.Admin/AddTenant", req.shared_endpoint.trim_end_matches('/'));
     let mut builder = client.post(&endpoint).json(&TenantConfig {
         host,
         backend: Backend::OpenRuno,
@@ -224,7 +225,7 @@ mod tests {
 
         let r = recorded.lock().unwrap().take().expect("server should have recorded a request");
         assert_eq!(r.method, "POST");
-        assert_eq!(r.path, "/admin/tenants");
+        assert_eq!(r.path, "/open_web_server.admin.v1.Admin/AddTenant");
         assert_eq!(r.header.as_deref(), Some("secret-token"));
         assert_eq!(r.body["host"], "shop.example.jp");
         assert_eq!(r.body["backend"], "open_runo");

@@ -15,28 +15,32 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Headers, Request, RequestInit, RequestMode, Response};
 
-/// `open-web-server`管理APIへ、任意メソッド+JSONボディでリクエストする。
+/// `open-web-server`の管理API(Connect の単純呼び出し)。2026-11-04に REST から移行:
+/// `POST /open_web_server.admin.v1.Admin/<Method>`、`content-type: application/json`、本文は JSON オブジェクト。
+const ADMIN_SERVICE: &str = "/open_web_server.admin.v1.Admin/";
+
+/// `open-web-server`管理APIへ、Connect の単純呼び出し(POST + JSON)でリクエストする。
 async fn call_admin_api<T: Serialize>(
     base_url: &str,
-    path: &str,
-    method: &str,
+    rpc: &str,
     admin_token: &str,
     body: Option<&T>,
 ) -> Result<Value, String> {
-    let url = format!("{}{}", base_url.trim_end_matches('/'), path);
+    let url = format!("{}{}{}", base_url.trim_end_matches('/'), ADMIN_SERVICE, rpc);
 
     let opts = RequestInit::new();
-    opts.set_method(method);
+    opts.set_method("POST");
     opts.set_mode(RequestMode::Cors);
 
     let headers = Headers::new().map_err(|e| format!("headers init failed: {e:?}"))?;
     headers.set("x-admin-token", admin_token).ok();
 
-    if let Some(b) = body {
-        let body_str = serde_json::to_string(b).map_err(|e| format!("request encode failed: {e}"))?;
-        opts.set_body(&JsValue::from_str(&body_str));
-        headers.set("Content-Type", "application/json").ok();
-    }
+    let body_str = match body {
+        Some(b) => serde_json::to_string(b).map_err(|e| format!("request encode failed: {e}"))?,
+        None => "{}".to_string(),
+    };
+    opts.set_body(&JsValue::from_str(&body_str));
+    headers.set("Content-Type", "application/json").ok();
     opts.set_headers(&headers);
 
     let request =
@@ -70,7 +74,7 @@ struct SetupFreeDomainBody {
     token: String,
 }
 
-/// `POST /admin/ddns/setup-free-domain` を呼び、即時疎通確認結果を返す。
+/// `Admin/SetupFreeDomain` を呼び、即時疎通確認結果を返す。
 pub async fn setup_free_domain(
     base_url: &str,
     admin_token: &str,
@@ -79,33 +83,25 @@ pub async fn setup_free_domain(
 ) -> Result<Value, String> {
     call_admin_api(
         base_url,
-        "/admin/ddns/setup-free-domain",
-        "POST",
+        "SetupFreeDomain",
         admin_token,
         Some(&SetupFreeDomainBody { domain: duckdns_domain.to_string(), token: duckdns_token.to_string() }),
     )
     .await
 }
 
-/// `GET /admin/sftp/connection-info` を呼び、コピペで使える接続コマンドを取得する。
+/// `Admin/GetSftpConnectionInfo` を呼び、コピペで使える接続コマンドを取得する。
 pub async fn sftp_connection_info(base_url: &str, admin_token: &str) -> Result<Value, String> {
-    call_admin_api::<()>(base_url, "/admin/sftp/connection-info", "GET", admin_token, None).await
+    call_admin_api::<()>(base_url, "GetSftpConnectionInfo", admin_token, None).await
 }
 
-/// `GET /admin/ddns/domains` を呼び、登録済みドメイン一覧+残り枠を取得する
+/// `Admin/ListFreeDomains` を呼び、登録済みドメイン一覧+残り枠を取得する
 /// (最大20件、`open-web-server`側`free_domain::MAX_DUCKDNS_DOMAINS`)。
 pub async fn list_domains(base_url: &str, admin_token: &str) -> Result<Value, String> {
-    call_admin_api::<()>(base_url, "/admin/ddns/domains", "GET", admin_token, None).await
+    call_admin_api::<()>(base_url, "ListFreeDomains", admin_token, None).await
 }
 
-/// `DELETE /admin/ddns/domains/:domain` を呼び、登録を解除する。
+/// `Admin/RemoveFreeDomain`(本文 `{"domain": ...}`)を呼び、登録を解除する。
 pub async fn remove_domain(base_url: &str, admin_token: &str, domain: &str) -> Result<Value, String> {
-    call_admin_api::<()>(
-        base_url,
-        &format!("/admin/ddns/domains/{}", js_sys::encode_uri_component(domain)),
-        "DELETE",
-        admin_token,
-        None,
-    )
-    .await
+    call_admin_api(base_url, "RemoveFreeDomain", admin_token, Some(&serde_json::json!({ "domain": domain }))).await
 }
