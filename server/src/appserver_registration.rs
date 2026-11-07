@@ -7,7 +7,7 @@
 //!
 //! `open-web-server`側は`POST /open_web_server.admin.v1.Admin/AddTenant`(Connect、HTTPルーティング)+
 //! `Admin/UpsertTenantTls`(TLS証明書、任意)、
-//! `poem-cosmo-tauri`側は`POST /admin/appserver-tenants`
+//! `poem-cosmo-tauri`(RPoem)側は`POST /open_runo.admin.v1.Admin/AppServerUpsertTenant`(Connect)
 //! (アプリケーションサーバー層のルーティング)。どちらも「共有インスタンス
 //! への動的テナント登録」という同じ目的だが、リポジトリごとにAPI形状が
 //! 異なるため、ここで吸収する。
@@ -116,7 +116,8 @@ async fn register_poem_cosmo_tauri(client: &reqwest::Client, host: &str, req: &R
         backend_addr: &'a str,
     }
 
-    let endpoint = format!("{}/admin/appserver-tenants", req.shared_endpoint.trim_end_matches('/'));
+    // 2026-11-08: REST(`POST /admin/appserver-tenants`)から Connect の単純呼び出しへ(RPoem の REST 全廃)。
+    let endpoint = format!("{}/open_runo.admin.v1.Admin/AppServerUpsertTenant", req.shared_endpoint.trim_end_matches('/'));
     let mut builder = client.post(&endpoint).json(&AppserverTenant { host, backend_addr: &req.backend_addr });
     if let Some(key) = &req.admin_key {
         builder = builder.header("x-api-key", key);
@@ -248,7 +249,7 @@ mod tests {
 
         let r = recorded.lock().unwrap().take().expect("server should have recorded a request");
         assert_eq!(r.method, "POST");
-        assert_eq!(r.path, "/admin/appserver-tenants");
+        assert_eq!(r.path, "/open_runo.admin.v1.Admin/AppServerUpsertTenant");
         assert_eq!(r.header.as_deref(), Some("test-key"));
         assert_eq!(r.body["host"], "app.example.jp");
         assert_eq!(r.body["backend_addr"], "127.0.0.1:9100");
