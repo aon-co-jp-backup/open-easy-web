@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>open-easy-web — easy-web.tokyo</title>
+<meta name="description" content="第二のKUSANAGI。アプリをアップロードしてIPアドレスで起動し、ドメイン登録とHTTPS(Let's Encrypt)を自動適用。 A second KUSANAGI: upload the app, start it by IP address, and domain registration plus HTTPS are applied automatically.">
+<style>
+:root{--bg:#fff;--fg:#14181f;--sub:#57606a;--card:#f6f8fa;--line:#d0d7de;--acc:#1f6feb;--warn:#c62828;--ok:#1a7f37}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--sub:#8b949e;--card:#161b22;--line:#30363d;--acc:#4a9eff;--warn:#ff7b72;--ok:#3fb950}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.7 system-ui,-apple-system,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:1.9rem;margin:8px 0 4px}
+h2{font-size:1.25rem;margin:36px 0 8px;padding-top:8px;border-top:1px solid var(--line)}
+.tag{color:var(--sub);margin:0 0 16px}
+.en{color:var(--sub);font-size:.95rem;margin:2px 0 10px}
+.warn{border:1px solid var(--warn);border-radius:12px;padding:12px 16px;margin:18px 0}
+.warn b{color:var(--warn)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th,td{text-align:left;padding:10px 8px;border-top:1px solid var(--line);vertical-align:top}
+th{color:var(--sub);font-weight:600;border-top:0}
+a{color:var(--acc)}
+.btn{display:inline-block;min-height:44px;padding:9px 16px;border-radius:10px;background:var(--acc);color:#fff;text-decoration:none;font-weight:600}
+code{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:.88em;overflow-wrap:anywhere}
+.hash{font:12px/1.4 ui-monospace,Consolas,monospace;color:var(--sub);overflow-wrap:anywhere}
+ol,ul{padding-left:1.3rem}
+li{margin:6px 0}
+footer{margin-top:40px;color:var(--sub);font-size:.88rem}
+@media (max-width:560px){h1{font-size:1.5rem} th:nth-child(3),td:nth-child(3){display:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>open-easy-web</h1>
+<p class="tag">第二のKUSANAGI。アプリをアップロードしてIPアドレスで起動し、ドメイン登録とHTTPS(Let's Encrypt)を自動適用。</p>
+<p class="en">A second KUSANAGI: upload the app, start it by IP address, and domain registration plus HTTPS are applied automatically.</p>
+
+<h2>ダウンロード / Download <small>(v0.2.0)</small></h2>
+<p><a class="btn" href="https://github.com/aon-co-jp/open-easy-web/releases/tag/v0.2.0">最新のリリースページ / Release page (GitHub)</a></p>
+<table>
+<tr><th>対象 / For</th><th>ファイル / File</th><th>SHA-256</th></tr>
+<tr><td>Android</td><td><a href="https://github.com/aon-co-jp/open-easy-web/releases/download/v0.2.0/open-easy-web-android-debug.apk">open-easy-web-android-debug.apk</a> (13.5 MB)</td><td class="hash">49f06b8c33c17208b278881992b4317c2851087dd41dcf94df84f1bb424ef762</td></tr>
+<tr><td>Linux (64bit)</td><td><a href="https://github.com/aon-co-jp/open-easy-web/releases/download/v0.2.0/open-easy-web-server-linux-x86_64.tar.gz">open-easy-web-server-linux-x86_64.tar.gz</a> (4.8 MB)</td><td class="hash">0fa433468b061a7fdd08ff4a2736c91dd29688c81c68c33d52a2ab712d8e17ac</td></tr>
+<tr><td>Windows</td><td><a href="https://github.com/aon-co-jp/open-easy-web/releases/download/v0.2.0/open-easy-web-server-windows-x86_64.zip">open-easy-web-server-windows-x86_64.zip</a> (4.2 MB)</td><td class="hash">d50e422d1dee42b0feda42896a60b6cc354aae93eb031896bf79da3d90e05694</td></tr>
+</table>
+<p class="en">署名のない開発用のビルドの場合があります。ダウンロードしたら、上の SHA-256 と一致するか確かめてください。 / Some builds are unsigned - please verify the SHA-256 after downloading.</p>
+
+<h2>特長 / Features</h2>
+<ul>
+<li>ブラウザ(WASM)の管理画面。管理者はメールのワンタイムパスワードで認証。<span class="en"> Browser (WASM) admin UI; the administrator signs in with an e-mail one-time password.</span></li>
+<li>一般の方向けに、操作できない /demo を用意。<span class="en"> A read-only /demo for the public.</span></li>
+<li>Linux・Windowsのサーバー、Androidの管理アプリ。<span class="en"> Linux and Windows servers, plus an Android admin app.</span></li>
+</ul>
+
+<h2>ドキュメント / Documentation</h2>
+<p>使い方・設計・既知の制限は、<a href="https://github.com/aon-co-jp/open-easy-web">リポジトリの README / CLAUDE.md / PORTING.md</a>(日本語・英語)にあります。<span class="en"> Usage, design and known limits are in the repository's README / CLAUDE.md / PORTING.md (Japanese and English).</span></p>
+
+<footer>
+<p>ライセンスはリポジトリを参照 / See the repository for the license ・ <a href="https://github.com/aon-co-jp/open-easy-web">ソースコード / Source (GitHub)</a> ・ <a href="/">easy-web.tokyo</a></p>
+</footer>
+</main>
+</body>
+</html>
