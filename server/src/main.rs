@@ -292,12 +292,15 @@ fn media_banner_html() -> String {
 }
 
 /// aruaru-IME のオンライン画面(/ime)の変換 API。VPS 上のサーバー運転の aruaru-IME エンジン(127.0.0.1:4660)へ中継する。
-/// 通すのは /health・/key・/session だけ、本文は4KBまで。**入力内容はこのサーバーを通る**(エンジン側は学習・保存をしない)。
+/// 通すのは /health(例外)と Connect の Key・Session だけ、本文は4KBまで。**入力内容はこのサーバーを通る**(エンジン側は学習・保存をしない)。
 async fn ime_api(method: &Method, path: &str, req: Request<Incoming>) -> Response<BoxBody> {
     let target = match (method, path) {
         (&Method::GET, "/ime/api/health") => "/health",
-        (&Method::POST, "/ime/api/key") => "/key",
-        (&Method::POST, "/ime/api/session") => "/session",
+        (&Method::POST, "/ime/api/aruaru_ime.v1.Ime/Key") => "/aruaru_ime.v1.Ime/Key",
+        (&Method::POST, "/ime/api/aruaru_ime.v1.Ime/Session") => "/aruaru_ime.v1.Ime/Session",
+        // 期限つき互換(2026-12-06 まで): 配布済みの Android アプリ・古いページ向け。上流は Connect へ写す。期限後に削除する。
+        (&Method::POST, "/ime/api/key") => "/aruaru_ime.v1.Ime/Key",
+        (&Method::POST, "/ime/api/session") => "/aruaru_ime.v1.Ime/Session",
         _ => return error_response(StatusCode::NOT_FOUND, "not found"),
     };
     // 回数制限: 1つの接続元あたり1秒に40回まで、全体で1秒に400回まで
