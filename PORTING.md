@@ -589,3 +589,8 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 - **メールの確認リンク**: 画面のURL(`/#/confirm-email-change?token=…`)で、GET では何も確定しない。確認ボタンで `Account/ConfirmEmailChange`(POST、RS-JSON)を呼ぶ。旧形式のリンクは案内ページ(410)。
 - **ファイル送信**: `Sites/Upload`(base64 の JSON)。手書きの multipart パーサーは削除した。
 - **範囲外**: 画面の「無料ドメイン」パネルが呼ぶ `/admin/ddns/…`・`/admin/sftp/…` は `open-web-server` 本体の API(同リポジトリ側で別途移行)。
+
+## 2026-11-08 本番(VPS)反映の確認
+- 稼働中のバイナリは `f7c5146`(AppServerUpsertTenant呼び出し・ime-legacy-route-hit計数を含む、13:23反映済み)で最新。再反映は不要。
+- オンライン画面 `easy-web.tokyo/ime` は新経路 `/ime/api/aruaru_ime.v1.Ime/Key` のみを呼び(ブラウザで変換操作、全て200)、旧 `/ime/api/key|session` の呼び出しは無い(旧は2026-12-06まで互換)。
+- AppServer系の呼び先 RPoem ゲートウェイはVPS未稼働。
