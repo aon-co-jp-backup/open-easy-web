@@ -303,6 +303,10 @@ async fn ime_api(method: &Method, path: &str, req: Request<Incoming>) -> Respons
         (&Method::POST, "/ime/api/session") => "/aruaru_ime.v1.Ime/Session",
         _ => return error_response(StatusCode::NOT_FOUND, "not found"),
     };
+    // 期限つき互換(旧 /ime/api/key|session)の利用を数える。2026-12-06 の削除判断の材料(入力内容は記録しない)。
+    if path == "/ime/api/key" || path == "/ime/api/session" {
+        eprintln!("ime-legacy-route-hit path={path}");
+    }
     // 回数制限: 1つの接続元あたり1秒に40回まで、全体で1秒に400回まで
     {
         static HITS: std::sync::OnceLock<Mutex<(std::time::Instant, u32, std::collections::HashMap<String, u32>)>> = std::sync::OnceLock::new();
