@@ -163,3 +163,4 @@ restart = { max_rapid_failures = 5 }
 ## 11. 実装状況
 
 - **段階1(2026-11-09、`open-web-server` 作業ツリー、未コミット)**: `sites.rs`(`sites.toml`→既存テナント/vhost展開、`OPEN_WEB_SERVER_SITES_FILE`)、サイト別同時接続上限(超過は503+`Retry-After`、現状は process のみ・転送のレスポンスヘッダ受信まで枠を保持)、ポート自動割当(IDハッシュ・再起動後も同じ・固定/使用中を回避)。`sites.toml` 由来のテナントは `domains.toml` へ永続化しない。`isolation="tenant"` は拒否。既存の `cargo test -p open-web-server-gateway` 225件成功。段階2以降は未着手。
+- **段階2の一部(2026-11-09、`RPoem/crates/open-runo-appserver`、`fleet` feature)**: `SiteFleet` — 全サイトの子プロセスを**1つのtokioタスク**で監督(従来は1サイト1監視スレッド)。tickは既存`Supervisor`を流用(crash-loop backoff・GaveUpの挙動は二重実装しない)、ヘルスチェックだけ`tokio::net`で全サイト並行。`add/remove/stop/restart/status/list`。テスト: 8サイト同時Healthy・stop/restartでPID変化・他サイト無影響・remove。既定ビルド(feature無し)の既存25件も成功。**未実施**: hyperによる転送(keep-alive/chunked/WebSocket)、`Supervisor`の別ユーザー起動・cgroup(段階3)、open-web-serverからの`SiteFleet`接続(`sites.toml`のprocessサイトを実際に起動する配線)、`/crash`でのcrash復帰の実機確認(テストはstop→restartで代替)。
