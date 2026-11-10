@@ -29,7 +29,10 @@ pub struct MemorySnapshot {
 /// 継続的にポーリングする設計ではないため、都度取得で十分——過剰実装
 /// 回避)。
 pub fn snapshot() -> MemorySnapshot {
-    let mut sys = System::new();
+    // sysinfo 0.40以降は初期化が失敗しうる(Result)。取得できない環境では全て0を返す(エラーにしない)。
+    let Ok(mut sys) = System::new() else {
+        return MemorySnapshot { total_bytes: 0, used_bytes: 0, available_bytes: 0, used_percent: 0.0, total_swap_bytes: 0, used_swap_bytes: 0 };
+    };
     sys.refresh_memory();
     let total_bytes = sys.total_memory();
     let used_bytes = sys.used_memory();

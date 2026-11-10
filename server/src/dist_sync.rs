@@ -755,7 +755,7 @@ mod tests {
 
         pub async fn spawn(root: PathBuf) -> u16 {
             let config = russh::server::Config {
-                keys: vec![PrivateKey::random(&mut rand_for_test_keys::rng(), Algorithm::Ed25519).unwrap()],
+                keys: vec![PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap()],
                 ..Default::default()
             };
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

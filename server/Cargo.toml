@@ -31,14 +31,14 @@ rust-json = { path = "../../RS-JSON", features = ["fast"] }
 open-runo-crossui = { path = "../../RPoem/crates/open-runo-crossui" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-sha2 = "0.10"
-sha1 = "0.10"
-hmac = "0.12"
+sha2 = "0.11"
+sha1 = "0.11"
+hmac = "0.13"
 base32 = "0.5"
-rand = "0.8"
+rand = "0.10"
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "rustls-tls"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-thiserror = "1"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+thiserror = "2"
 # 分散同期(dist_sync.rs)向け: open-raid-zの切断耐性ジャーナル/オフサイト
 # 退避/ディザスタリカバリ/CPU圧縮を再現実装せず再利用する(ユーザー指示、
 # CLAUDE.md参照)。`aruaru-dist`のpath依存パターン(`default-features =
@@ -50,17 +50,17 @@ uuid = { version = "1", features = ["v4", "serde"] }
 flate2 = "1"
 tar = "0.4"
 zip = { version = "9", default-features = false, features = ["deflate"] }
-socket2 = { version = "0.5", features = ["all"] }
+socket2 = { version = "0.6", features = ["all"] }
 # DATABASE暗号化(db_encryption.rs)向け: AES-256-GCM。ハードウェア
 # アクセラレーション(AES-NI)が利用可能な環境では高速に動作する標準的な
 # AEAD暗号(ランダムnonceを毎回生成)。既存のTOTP等と同じくRustCryptoの
 # 実績ある実装を採用し、自前実装はしない。
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 # メモリ使用状況表示(2026-07-31追加): クロスプラットフォーム
 # (Windows/Linux/macOS)でシステムの総メモリ・使用中メモリを取得する
 # 実績あるクレート。自前でプラットフォーム別API(GlobalMemoryStatusEx/
 # /proc/meminfo)を書き分けない。
-sysinfo = "0.32"
+sysinfo = "0.40"
 # TOTPセットアップ画面のQRコード表示(2026-08-27追加、open-english/
 # rs-syncで実機検証済みの実装〈HMAC-SHA1+base32は既存のtotp.rsが自前
 # 実装済み、QRコード描画部分のみこのcrateを追加〉と同じ設計に統一する
@@ -69,19 +69,16 @@ sysinfo = "0.32"
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 
 [dev-dependencies]
-reqwest = { version = "0.12", features = ["json", "multipart"] }
+reqwest = { version = "0.13", features = ["json", "multipart"] }
 tempfile = "3"
 mockito = "1"
 # dist_syncの実複製テスト(インプロセスrussh SFTPサーバー)向け。
 # open_raid_z_core側`tests/offsite_backup_integration.rs`と同じ
 # バージョン・featureに揃える(実クラウド/実VPSには一切接続しない、
 # ローカルモックのみの既存検証方針を踏襲)。
-russh = { version = "0.62", default-features = false, features = ["ring", "rsa"] }
-russh-sftp = "2"
-# `rand`は主依存(`rand = "0.8"`、認証OTP生成等で使用)とメジャー
-# バージョンが異なる(russh 0.62のキー生成が要求するのは0.10系)ため、
-# 名前衝突を避けて`rand_for_test_keys`としてリネームして依存させる。
-rand_for_test_keys = { package = "rand", version = "0.10" }
+russh = { version = "0.65", default-features = false, features = ["ring", "rsa"] }
+russh-sftp = "3"
+# rand 0.10は主依存と共通(russhのキー生成も0.10系)のため、別名の依存は不要。
 
 # RUSTSEC-2023-0071 (rsa Marvin Attack, 修正版なし) 回避: aon-co-jp/rsa-rs の互換実装へ差し替え。
 [patch.crates-io]

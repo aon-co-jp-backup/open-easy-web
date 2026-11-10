@@ -36,8 +36,8 @@
 
 use std::path::Path;
 
-use aes_gcm::aead::{Aead, KeyInit, OsRng};
-use aes_gcm::{Aes256Gcm, AeadCore, Key, Nonce};
+use aes_gcm::aead::{Aead, Generate, KeyInit};
+use aes_gcm::{Aes256Gcm, Key, Nonce};
 
 const NONCE_LEN: usize = 12;
 const KEY_LEN: usize = 32;
@@ -62,7 +62,7 @@ impl DbEncryptionState {
     /// 安全に扱えるようにするための設計)。
     pub fn encrypt(&self, plaintext: &[u8]) -> Vec<u8> {
         let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&self.key));
-        let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+        let nonce = aes_gcm::aead::Nonce::<Aes256Gcm>::generate();
         let ciphertext = cipher.encrypt(&nonce, plaintext).expect("AES-256-GCM encryption cannot fail for in-memory buffers");
         let mut out = Vec::with_capacity(1 + NONCE_LEN + ciphertext.len());
         out.push(MARKER_ENCRYPTED);
@@ -102,7 +102,7 @@ fn load_or_generate_key(key_path: &Path) -> [u8; KEY_LEN] {
         }
         tracing::warn!(path = %key_path.display(), "db_encryption: existing key file has unexpected length, regenerating");
     }
-    let key: [u8; KEY_LEN] = Aes256Gcm::generate_key(&mut OsRng).into();
+    let key: [u8; KEY_LEN] = aes_gcm::aead::Key::<Aes256Gcm>::generate().into();
     if let Some(parent) = key_path.parent() {
         if !parent.as_os_str().is_empty() {
             let _ = std::fs::create_dir_all(parent);

@@ -5,8 +5,8 @@
 //! 標準的な認証アプリとの互換性を優先し、HMAC-SHA1・30秒ステップ・
 //! 6桁コードというGoogle Authenticator互換の最も一般的な設定を採用する。
 
-use hmac::{Hmac, Mac};
-use rand::RngCore;
+use hmac::{Hmac, KeyInit, Mac};
+use rand::Rng;
 use sha1::Sha1;
 
 const TIME_STEP_SECS: u64 = 30;
@@ -18,7 +18,7 @@ const SKEW_STEPS: i64 = 1;
 /// (Google Authenticator等の実装が前提とする長さ)。
 pub fn generate_secret() -> Vec<u8> {
     let mut secret = vec![0u8; 20];
-    rand::thread_rng().fill_bytes(&mut secret);
+    rand::rng().fill_bytes(&mut secret);
     secret
 }
 

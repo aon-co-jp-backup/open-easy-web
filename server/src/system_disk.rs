@@ -33,12 +33,15 @@ pub struct DiskSnapshot {
 /// 一覧を取得する(`system_memory::snapshot`と同じく、常駐ポーリングでは
 /// なく都度取得——過剰実装回避)。
 pub fn snapshot() -> DiskSnapshot {
-    let disks = Disks::new_with_refreshed_list();
+    // sysinfo 0.40以降は一覧取得が失敗しうる(Result)。取得できない環境では空を返す(エラーにしない)。
+    let Ok(disks) = Disks::new_with_refreshed_list() else {
+        return DiskSnapshot { disks: Vec::new(), total_bytes: 0, used_bytes: 0, used_percent: 0.0 };
+    };
     let mut entries = Vec::new();
     let mut total_bytes: u64 = 0;
     let mut used_bytes: u64 = 0;
 
-    for disk in disks.list() {
+    for disk in disks.iter() {
         let disk_total = disk.total_space();
         let available = disk.available_space();
         let disk_used = disk_total.saturating_sub(available);
