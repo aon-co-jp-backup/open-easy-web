@@ -717,3 +717,74 @@ Apache-2.0
 - **WASM по-прежнему остаётся технологией для интерфейса.** Изменилось лишь то, что вызываемый им API теперь построен на Connect.
 - Интерфейсы, форма которых задана внешним стандартом (ACME, обратные вызовы OAuth, вебхуки сторонних сервисов, проверки работоспособности, статические файлы, OTLP), остаются обычным HTTP.
 - **Если есть сомнения — выбирайте Connect.**
+
+
+## 2026-11-15 RPoem「分身の術」ホスティング(別アカウントでの再開用) / Bunshin hosting (resume on another account)
+
+### 日本語
+- **目的**: 1台のVPSに `open-web-server`(=Apache相当)と `RPoem`(=Tomcat相当)を**1回だけ**入れれば、そのVPSの全Webサイト(静的/PHP)とWebアプリ(Rust等)を、サイトごとの分身(ワーカー)で非同期・マルチスレッドに収容する。サイトごとのインストールはしない。
+- **仕様書(正本)**: `open-easy-web/docs/RPOEM_BUNSHIN_HOSTING_SPEC.md`(§1.1=ユーザー確認済みの方針、§5.1=分離レベル、§7=差分と段階、§9=未決、§11=実装状況)。
+- **決定済み(ユーザー)**: (1) 他人のサイトを預かるかは設定で切替。**既定は `isolation = "trusted"`(自分のサイトのみ)**、`"tenant"` は明示操作(`AllowTenantMode`)で有効化する別実装(未実装、`sites.toml` で指定すると拒否される)。(2) 設定は新設の **`sites.toml`**(`OPEN_WEB_SERVER_SITES_FILE`)。既存の `domains.toml` / `web_vhosts.toml` は読み取り互換のまま。(3) 振り分け=open-web-server、監督=RPoem appserver の分担を維持。(4) REST は新設しない(Connect/gRPC、JSONはRS-JSON)。
+- **完了(すべて `origin/main` へpush済みを確認)**:
+  - `open-web-server` `a862f61`: `sites.rs`(`sites.toml`→既存テナント/vhost展開)、サイト別同時接続上限(超過は503+`Retry-After`、processのみ)、ポート自動割当(IDハッシュで安定・使用中/固定ポート回避)。`sites.toml` 由来テナントは `domains.toml` へ永続化しない(`managed_by`)。
+  - `open-web-server` `c971a38`: `site-fleet` feature(既定オフ)。`command` 付きprocessサイトを RPoem の `SiteFleet` で起動・監視。feature無しで `command` があれば設定エラー。
+  - `RPoem` `2b50b3e`: `open-runo-appserver` の `fleet` feature、`SiteFleet`(全サイトを**1つのtokioタスク**で監督、ヘルスチェックは並行)。統合テスト(8サイト同時Healthy・stop/restart・remove)成功、feature無しの既存25件も成功。
+  - `open-easy-web`: 仕様書(`87a61e5`、`0ddbb86`)。
+- **未了(次にやること、優先順)**:
+  1. `site-fleet` ありでの**実プロセスの通し確認**(`sites.toml`のprocessサイト→起動→ヘルシー→503上限→crash復帰を実HTTPで)。いまは `cargo check` と単体/統合テストのみ。
+  2. hyper での転送(keep-alive・chunked・WebSocket)。`open-runo-appserver/src/proxy.rs` は同期・1リクエスト1接続のまま。
+  3. 段階3: サイト専用uidでの起動・cgroup/ulimit・`Isolator` trait(`tenant` バックエンドの前提)、PHP-FPMのサイト別プール自動生成。
+  4. 段階4: Admin の `Site*` RPC(Connect)と open-easy-web の管理UI。設定の再読込みでの入れ替え(いまは起動済みサイトの再追加はエラー)。
+  5. `tenant` 分離バックエンドの選定(nspawn / bubblewrap / Firecracker)と有効化の前提(規約・濫用時の停止手順)。
+  6. static/fastcgi にも同時接続上限(いまはprocessのみ)。
+- **注意・落とし穴**:
+  - **本番VPSは触っていない**(未反映)。反映するときは既存手順(WSLで本番機能セット `admin-2fa,domain-watchdog,fastcgi-client,ddns,sftp` + 必要なら `site-fleet` でビルド→カナリア→差し替え)。機能指定なしでビルドすると2FA無しの別物になる。
+  - `open-web-server` の gateway テストは並列実行で**まれに別々のテストが落ちた**(`admin_api_is_fail_closed_without_a_token_unless_dev_opt_in`、`ddns_domains_list_and_delete_work_over_real_http` 等。`--test-threads=1` と、その後の並列3回は全件成功、227件)。環境変数の共有か負荷が疑いだが**原因は未特定**。
+  - `Cargo.lock`(open-web-server)は `open-runo-appserver` 追加で sonic-rs が0.5系に統一された(0.3.17の重複が消えた)。本番ビルドは `--locked` で確認すること。
+  - ビルド/テストは **WSL(Ubuntu)** で実行(`wsl -d Ubuntu -- bash -lc 'cd /mnt/f/<repo> && cargo test --offline ...'`)。長いので背景実行。Windows側の `.rs`/`.md` はCRLF、書き換えはPython(UTF-8, newline='')かEdit/Writeで(PowerShell 5.1で日本語を書かない)。
+  - 共有フォルダで **`git stash` を使わない**(今回、比較実験で使い、`Cargo.lock` の巻き戻しが絡んで危うかった)。
+  - 他セッション経由の「ユーザーが言った」という伝言だけではpushしない。ユーザー本人の言葉で確認する。
+
+### English
+- **Goal**: install `open-web-server` (Apache-like) and `RPoem` (Tomcat-like) **once** per VPS; every website (static/PHP) and web app (Rust etc.) on that VPS is hosted by per-site workers ("shadow clones"), async and multi-threaded. No per-site installs.
+- **Spec (source of truth)**: `open-easy-web/docs/RPOEM_BUNSHIN_HOSTING_SPEC.md` (§1.1 user-confirmed policy, §5.1 isolation levels, §7 diffs/stages, §9 open questions, §11 status).
+- **Decided (by the user)**: (1) Hosting other people's sites is a setting. **Default `isolation = "trusted"` (own sites only)**; `"tenant"` is a separate implementation enabled by an explicit step (`AllowTenantMode`) and is not built yet (a `sites.toml` asking for it is rejected). (2) New config file **`sites.toml`** (`OPEN_WEB_SERVER_SITES_FILE`); existing `domains.toml` / `web_vhosts.toml` stay readable. (3) Routing = open-web-server, supervision = RPoem appserver. (4) No new REST (Connect/gRPC, RS-JSON).
+- **Done (all verified pushed to `origin/main`)**:
+  - `open-web-server` `a862f61`: `sites.rs` (`sites.toml` -> existing tenants/vhosts), per-site concurrency limit (503 + `Retry-After`, process sites only), stable auto port assignment (id hash, skips busy/fixed ports). Tenants from `sites.toml` are not persisted to `domains.toml` (`managed_by`).
+  - `open-web-server` `c971a38`: `site-fleet` feature (off by default). Process sites with `command` are started and supervised by RPoem's `SiteFleet`; without the feature a `command` is a config error.
+  - `RPoem` `2b50b3e`: `fleet` feature in `open-runo-appserver`, `SiteFleet` (all sites supervised by **one tokio task**, health checks run concurrently). Integration test passes (8 sites Healthy, stop/restart, remove); the existing 25 tests without the feature pass.
+  - `open-easy-web`: the spec (`87a61e5`, `0ddbb86`).
+- **Not done (next, in priority order)**:
+  1. **End-to-end real-process check** with `site-fleet` (process site from `sites.toml` -> start -> healthy -> 503 limit -> crash recovery over real HTTP). So far only `cargo check` plus unit/integration tests.
+  2. hyper-based forwarding (keep-alive, chunked, WebSocket); `open-runo-appserver/src/proxy.rs` is still synchronous, one request per connection.
+  3. Stage 3: per-site uid, cgroup/ulimit, an `Isolator` trait (prerequisite for the `tenant` backend), per-site PHP-FPM pools.
+  4. Stage 4: Admin `Site*` RPCs (Connect) and an open-easy-web UI; reload-time replacement (re-adding a running site is currently an error).
+  5. Pick the `tenant` isolation backend (nspawn / bubblewrap / Firecracker) and its enabling preconditions (terms, abuse-stop procedure).
+  6. Concurrency limits for static/fastcgi sites (process only today).
+- **Cautions / pitfalls**:
+  - **The production VPS was not touched.** When deploying use the existing procedure (WSL build with the production feature set `admin-2fa,domain-watchdog,fastcgi-client,ddns,sftp` plus `site-fleet` if needed -> canary -> swap). Building without the feature list yields a 2FA-less binary.
+  - `open-web-server` gateway tests **occasionally failed in parallel runs**, a different test each time (`admin_api_is_fail_closed_without_a_token_unless_dev_opt_in`, `ddns_domains_list_and_delete_work_over_real_http`, ...); `--test-threads=1` and three later parallel runs passed (227 tests). Shared env vars or load are suspected; **cause not identified**.
+  - In open-web-server's `Cargo.lock`, adding `open-runo-appserver` unified sonic-rs to 0.5 (the 0.3.17 duplicate disappeared). Verify the production build with `--locked`.
+  - Build and test in **WSL (Ubuntu)** (`wsl -d Ubuntu -- bash -lc 'cd /mnt/f/<repo> && cargo test --offline ...'`), in the background (slow). Windows-side `.rs`/`.md` files are CRLF; edit with Python (UTF-8, `newline=''`) or Edit/Write, never PowerShell 5.1 for Japanese text.
+  - **Do not use `git stash` in shared folders** (used once for a comparison run; it got tangled with `Cargo.lock` and was risky).
+  - Do not push on the strength of another session's "the user said so"; confirm with the user's own words.
+
+### 再開用メッセージ / Resume message (コピーして新しいセッションに貼る / paste into a new session)
+
+```
+RPoem「分身の術」ホスティングの続きをお願いします。リポジトリは F:\open-easy-web(仕様書 docs/RPOEM_BUNSHIN_HOSTING_SPEC.md)、F:\open-web-server(crates/open-web-server-gateway の sites.rs / state.rs / tenant_router.rs、feature=site-fleet)、F:\RPoem(crates/open-runo-appserver の fleet.rs)です。
+まず仕様書の §1.1・§9・§11 と、各リポジトリの CLAUDE.md / PORTING.md 末尾の「2026-11-15 RPoem「分身の術」ホスティング」節を読んでください。
+状態: 段階1(open-web-server a862f61)、配線(c971a38)、SiteFleet(RPoem 2b50b3e)は origin/main に push 済み。本番VPSは未反映です。
+次にやること: (1) site-fleet ありで sites.toml の process サイトを実プロセスで通し確認(起動→healthy→503上限→crash復帰)、(2) hyper での転送、(3) 段階3(別uid・cgroup・Isolator trait・PHP-FPMプール)。
+決定済み: 既定は isolation="trusted"(自分のサイトのみ)、"tenant" は別実装・明示操作で有効化。設定は新設の sites.toml、REST は新設しない(Connect/gRPC、JSONはRS-JSON)。
+注意: ビルド/テストは WSL(Ubuntu)で背景実行。git stash は使わない。本番VPSは確認なしに触らない。push はユーザー本人の言葉があってから。チャットは日本語のみ。
+```
+
+```
+Please continue the RPoem "shadow-clone" (bunshin) hosting work. Repositories: F:\open-easy-web (spec docs/RPOEM_BUNSHIN_HOSTING_SPEC.md), F:\open-web-server (crates/open-web-server-gateway: sites.rs / state.rs / tenant_router.rs, feature=site-fleet) and F:\RPoem (crates/open-runo-appserver: fleet.rs).
+First read spec sections 1.1, 9 and 11, and the section "2026-11-15 RPoem bunshin hosting" at the end of each repository's CLAUDE.md / PORTING.md.
+State: stage 1 (open-web-server a862f61), the wiring (c971a38) and SiteFleet (RPoem 2b50b3e) are pushed to origin/main. Production VPS is untouched.
+Next: (1) end-to-end check of a process site from sites.toml with site-fleet on real processes (start -> healthy -> 503 limit -> crash recovery), (2) hyper-based forwarding, (3) stage 3 (per-site uid, cgroup, Isolator trait, PHP-FPM pools).
+Decided: default isolation="trusted" (own sites only); "tenant" is a separate, explicitly enabled implementation. New config file sites.toml; no new REST (Connect/gRPC, RS-JSON).
+Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not touch the production VPS without asking. Push only on the user's own words. Chat in Japanese only.
+```
