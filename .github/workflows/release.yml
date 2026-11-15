@@ -71,6 +71,30 @@ jobs:
           name: open-easy-web-server-windows-x86_64
           path: open-easy-web-server-windows-x86_64.zip
 
+
+  build-windows-arm64:
+    name: Windows ARM64 (Snapdragon, aarch64)
+    runs-on: windows-11-arm
+    continue-on-error: true  # Snapdragon (Windows on ARM64); never blocks the release
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout open-raid-z (sibling path dependency)
+        run: git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z
+      - name: Build
+        working-directory: server
+        run: cargo build --release --bin open-easy-web-server
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item server/target/release/open-easy-web-server.exe dist/
+          Copy-Item install.ps1 dist/
+          Compress-Archive -Path dist/* -DestinationPath open-easy-web-server-windows-aarch64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-easy-web-server-windows-aarch64
+          path: open-easy-web-server-windows-aarch64.zip
+
   build-macos:
     name: macOS (x86_64 + aarch64-apple-darwin)
     runs-on: macos-latest
@@ -92,7 +116,7 @@ jobs:
       - name: Build (aarch64-apple-darwin)
         working-directory: server
         run: cargo build --release --target aarch64-apple-darwin --bin open-easy-web-server
-      - name: Package (universal-ish: 2バイナリを別アーキ用として同梱)
+      - name: "Package (universal-ish, 2バイナリを別アーキ用として同梱)"
         run: |
           mkdir -p dist-x86_64 dist-aarch64
           cp server/target/release/open-easy-web-server dist-x86_64/open-easy-web-server
@@ -165,7 +189,7 @@ jobs:
 
   release:
     name: GitHub Releaseへ添付
-    needs: [build-linux, build-windows, build-android, build-macos]
+    needs: [build-linux, build-windows, build-windows-arm64, build-android, build-macos]
     runs-on: ubuntu-latest
     if: ${{ always() && startsWith(github.ref, 'refs/tags/v') && needs.build-linux.result == 'success' && needs.build-windows.result == 'success' }}
     steps:
