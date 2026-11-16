@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE"
-          for r in RS-JSON RPoem RS-SmartTCP open-cpu open-raid-z open-web-server vps-tidy; do
+          for r in RS-JSON RPoem RS-SmartTCP open-cpu open-raid-z open-web-server; do
             [ "$r" = "${GITHUB_REPOSITORY#*/}" ] && continue
             [ -d "../$r" ] || git clone --depth=1 https://github.com/aon-co-jp/$r.git ../$r
           done
@@ -64,7 +64,7 @@ jobs:
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE"
-          for r in RS-JSON RPoem RS-SmartTCP open-cpu open-raid-z open-web-server vps-tidy; do
+          for r in RS-JSON RPoem RS-SmartTCP open-cpu open-raid-z open-web-server; do
             [ "$r" = "${GITHUB_REPOSITORY#*/}" ] && continue
             [ -d "../$r" ] || git clone --depth=1 https://github.com/aon-co-jp/$r.git ../$r
           done
@@ -94,7 +94,7 @@ jobs:
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE"
-          for r in RS-JSON RPoem RS-SmartTCP open-cpu open-raid-z open-web-server vps-tidy; do
+          for r in RS-JSON RPoem RS-SmartTCP open-cpu open-raid-z open-web-server; do
             [ "$r" = "${GITHUB_REPOSITORY#*/}" ] && continue
             [ -d "../$r" ] || git clone --depth=1 https://github.com/aon-co-jp/$r.git ../$r
           done
@@ -128,7 +128,7 @@ jobs:
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE"
-          for r in RS-JSON RPoem RS-SmartTCP open-cpu open-raid-z open-web-server vps-tidy; do
+          for r in RS-JSON RPoem RS-SmartTCP open-cpu open-raid-z open-web-server; do
             [ "$r" = "${GITHUB_REPOSITORY#*/}" ] && continue
             [ -d "../$r" ] || git clone --depth=1 https://github.com/aon-co-jp/$r.git ../$r
           done
@@ -172,7 +172,7 @@ jobs:
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE"
-          for r in RS-JSON RPoem RS-SmartTCP open-cpu open-raid-z open-web-server vps-tidy; do
+          for r in RS-JSON RPoem RS-SmartTCP open-cpu open-raid-z open-web-server; do
             [ "$r" = "${GITHUB_REPOSITORY#*/}" ] && continue
             [ -d "../$r" ] || git clone --depth=1 https://github.com/aon-co-jp/$r.git ../$r
           done
