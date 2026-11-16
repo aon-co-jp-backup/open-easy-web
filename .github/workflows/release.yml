@@ -42,7 +42,7 @@ jobs:
             [ -d "../$r" ] || git clone --depth=1 https://github.com/aon-co-jp/$r.git ../$r
           done
       - name: Checkout open-raid-z (sibling path dependency)
-        run: git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z
+        run: '[ -d "../open-raid-z" ] || git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z'
       - name: Build
         working-directory: server
         run: cargo build --release --bin open-easy-web-server
@@ -71,7 +71,7 @@ jobs:
             [ -d "../$r" ] || git clone --depth=1 https://github.com/aon-co-jp/$r.git ../$r
           done
       - name: Checkout open-raid-z (sibling path dependency)
-        run: git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z
+        run: '[ -d "../open-raid-z" ] || git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z'
       - name: Build
         working-directory: server
         run: cargo build --release --bin open-easy-web-server
@@ -103,7 +103,7 @@ jobs:
             [ -d "../$r" ] || git clone --depth=1 https://github.com/aon-co-jp/$r.git ../$r
           done
       - name: Checkout open-raid-z (sibling path dependency)
-        run: git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z
+        run: '[ -d "../open-raid-z" ] || git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z'
       - name: Build
         working-directory: server
         run: cargo build --release --bin open-easy-web-server
@@ -139,7 +139,7 @@ jobs:
             [ -d "../$r" ] || git clone --depth=1 https://github.com/aon-co-jp/$r.git ../$r
           done
       - name: Checkout open-raid-z (sibling path dependency)
-        run: git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z
+        run: '[ -d "../open-raid-z" ] || git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z'
       - name: Add Apple Silicon target
         run: rustup target add aarch64-apple-darwin
       - name: Build (x86_64-apple-darwin, ネイティブランナーアーキ)
@@ -185,7 +185,7 @@ jobs:
             [ -d "../$r" ] || git clone --depth=1 https://github.com/aon-co-jp/$r.git ../$r
           done
       - name: Checkout open-raid-z (sibling path dependency)
-        run: git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z
+        run: '[ -d "../open-raid-z" ] || git clone --depth=1 https://github.com/aon-co-jp/open-raid-z.git ../open-raid-z'
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
