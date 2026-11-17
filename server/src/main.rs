@@ -428,7 +428,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 let (parts, body) = r.into_parts();
                 let bytes = body.collect().await.map(|c| c.to_bytes()).unwrap_or_default();
                 let html = String::from_utf8_lossy(&bytes).into_owned();
-                let html = html.replacen("<body>", &format!("<body>{}{}{}{}", ime_banner_html(), mirror_banner_html(), media_banner_html(), intro_banners::INTRO_BANNERS), 1);
+                let html = html.replacen("<body>", &format!("<body>{}{}{}{}{}", ime_banner_html(), mirror_banner_html(), media_banner_html(), intro_banners::INTRO_BANNERS, intro_banners::PROJECTS_INDEX), 1);
                 r = Response::from_parts(parts, Full::new(Bytes::from(html)));
                 r.headers_mut().remove("content-length");
             }
