@@ -672,3 +672,61 @@ Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not
 - **open-cuda / aruaru-llm / open-directx は同梱しない**: 共有基盤を1回だけVPSに入れ、各サイトはConnect/gRPCで呼ぶ方針(本ファイル冒頭の配備アーキテクチャ方針)に従う。
 - **ブラウザ(Windows/Linux/Mac/Android/iPhone)**: 計算はサーバー側で行うため、どの端末のブラウザからでも利用できる。RMojoのWASM(`wasm32-unknown-unknown`の`cargo check`は通過)は将来の遊び場候補。WASMでは open-cpu のSIMD自動選択は使わない。
 - **スマホのアクセラレーター化**: `open-cpu/remote`(`open-cpu-remote`)。実測では手元PCが速いため自動判断は「手元のみ」で、手元が非力な場合に効く。詳細は`open-cpu/remote/README.md`。
+
+## 2026-11-17 追記: 実プロセス通し確認の完了・再開用メッセージ更新(別アカウントでの再開用) / Real-process E2E done, resume message updated (resume on another account)
+
+> この節が最新。直前の「2026-11-15 RPoem「分身の術」ホスティング」節の**未了1(実プロセス通し確認)は完了**した。それ以外の記述(目的・決定済み・コミット・注意)はそのまま有効。 / This section supersedes the 2026-11-15 one: its open item 1 (real-process E2E) is now **done**; everything else there remains valid.
+
+### 日本語
+- **完了(今回)**: `open-web-server` の `crates/open-web-server-gateway/tests/e2e_site_fleet.rs`(新規)。実バイナリを起動し、`sites.toml` の process サイトを `site-fleet` で実プロセスとして動かし、実HTTPで次を確認した(1件・3.04秒・成功、スキップではないことも確認)。
+  1. 本体が分身(RPoemの`open-runo-dummy-http-server`)を起動し、Hostで振り分けて `/health` が200(固定ポートと `port = "auto"` の2サイト)。
+  2. 同時接続上限(`limits.max_concurrent = 1`): 1件が待っている間の2件目は **503 + `Retry-After: 1`**。別サイトは200のまま。塞ぎを外すと待っていた1件目が成功し、枠が戻る。
+  3. crash復帰: `/crash` で分身が落ちても `SiteFleet` が再起動し `/health` が200に戻る。
+- **試験の実行方法**: WSLで `wsl -d Ubuntu -- bash -lc 'cd /mnt/f/open-web-server && cargo test --offline -p open-web-server-gateway --features site-fleet --test e2e_site_fleet -- --nocapture'`(初回ビルドは十数分、背景実行)。分身用のLinux版ダミーは `RPoem/target/debug/open-runo-dummy-http-server`(WSLで `cargo build -p open-runo-appserver --bin open-runo-dummy-http-server`)。別の場所なら環境変数 `OPEN_RUNO_DUMMY_SERVER`。見つからないとテストは理由を出して**スキップ扱いで通過**するので、`--nocapture` で `SKIP` が出ていないか確認すること。
+- **この通し確認の限界(正直な範囲)**: 上限の枠は「転送がレスポンスヘッダを受け取るまで」保持する(長いボディのストリーミング中は保持しない)。上限が効くのは process のみ(static/fastcgi は未対応)。分身は1接続ずつ直列のダミーなので、実アプリ(Poem等)での並列負荷・WebSocketは未確認。本番VPSは未反映。
+- **未了(次にやること、優先順)**:
+  1. hyper での転送(keep-alive・chunked・WebSocket。`open-runo-appserver/src/proxy.rs` は同期・1リクエスト1接続のまま)。
+  2. 段階3: サイト専用uid起動・cgroup/ulimit・`Isolator` trait(`tenant` 分離の前提)、PHP-FPMのサイト別プール自動生成。
+  3. 段階4: Admin `Site*` RPC(Connect)と open-easy-web の管理UI、設定の再読込みでの入れ替え(いまは起動済みサイトの再追加はエラー)。
+  4. `tenant` 分離バックエンドの選定(nspawn / bubblewrap / Firecracker)と有効化の前提(規約・濫用時の停止手順)。
+  5. static/fastcgi にも同時接続上限。
+  6. 本番VPSへの反映(既存手順: WSLで本番機能セット `admin-2fa,domain-watchdog,fastcgi-client,ddns,sftp` + `site-fleet` でビルド→カナリア→差し替え。`--locked` で確認)。
+  7. open-web-server の gateway テストが並列実行で**まれに別々のテストが落ちる件**の原因特定(環境変数の共有か負荷が疑い)。
+- **注意**: 共有フォルダで `git stash` を使わない。他セッション経由の「ユーザーが言った」だけではpushしない。本番VPSは確認なしに触らない。ビルド/テストはWSL・背景実行、Windows側のファイルはCRLF(書き換えはPython UTF-8 か Edit/Write)。
+
+### English
+- **Done (this round)**: `crates/open-web-server-gateway/tests/e2e_site_fleet.rs` in `open-web-server` (new). It starts the real binary, runs `sites.toml` process sites as real processes via `site-fleet`, and verifies over real HTTP (1 test, 3.04 s, passed; confirmed it was not skipped):
+  1. The server starts the shadow clone (RPoem's `open-runo-dummy-http-server`) and routes by Host; `/health` is 200 (a fixed-port site and a `port = "auto"` site).
+  2. Concurrency limit (`limits.max_concurrent = 1`): while one request waits, the second gets **503 + `Retry-After: 1`**; another site stays 200; releasing the blocker lets the first request succeed and the slot returns.
+  3. Crash recovery: after `/crash` kills the clone, `SiteFleet` restarts it and `/health` is 200 again.
+- **How to run**: in WSL `wsl -d Ubuntu -- bash -lc 'cd /mnt/f/open-web-server && cargo test --offline -p open-web-server-gateway --features site-fleet --test e2e_site_fleet -- --nocapture'` (first build takes ~10+ minutes; run in the background). The Linux dummy clone is `RPoem/target/debug/open-runo-dummy-http-server` (`cargo build -p open-runo-appserver --bin open-runo-dummy-http-server` in WSL), or set `OPEN_RUNO_DUMMY_SERVER`. If it is missing the test prints a reason and **passes as a skip**; check `--nocapture` output for `SKIP`.
+- **Limits of this check (honest scope)**: the limit slot is held until the forward receives the response head (not during long body streaming); only process sites are limited (static/fastcgi are not); the clone is a serial dummy, so parallel load and WebSocket with a real app (Poem etc.) are unverified; production VPS is untouched.
+- **Open (next, in priority order)**:
+  1. hyper-based forwarding (keep-alive, chunked, WebSocket; `open-runo-appserver/src/proxy.rs` is still synchronous, one request per connection).
+  2. Stage 3: per-site uid, cgroup/ulimit, `Isolator` trait (prerequisite for `tenant` isolation), per-site PHP-FPM pools.
+  3. Stage 4: Admin `Site*` RPCs (Connect) and an open-easy-web UI; reload-time replacement (re-adding a running site is currently an error).
+  4. Choose the `tenant` isolation backend (nspawn / bubblewrap / Firecracker) and its enabling preconditions (terms, abuse-stop procedure).
+  5. Concurrency limits for static/fastcgi sites.
+  6. Production deploy (existing procedure: WSL build with the production feature set `admin-2fa,domain-watchdog,fastcgi-client,ddns,sftp` plus `site-fleet`, canary, swap; verify with `--locked`).
+  7. Find the cause of the occasional, different-each-time failures of open-web-server gateway tests under parallel runs (shared env vars or load suspected).
+- **Cautions**: no `git stash` in shared folders; do not push on another session's "the user said so"; do not touch the production VPS without asking; build/test in WSL in the background; Windows-side files are CRLF (edit with Python UTF-8 or Edit/Write).
+
+### 再開用メッセージ(最新) / Resume message (latest)
+
+```
+RPoem「分身の術」ホスティングの続きをお願いします。リポジトリは F:\open-easy-web(仕様書 docs/RPOEM_BUNSHIN_HOSTING_SPEC.md)、F:\open-web-server(crates/open-web-server-gateway の sites.rs / state.rs / tenant_router.rs と tests/e2e_site_fleet.rs、feature=site-fleet)、F:\RPoem(crates/open-runo-appserver の fleet.rs)です。
+まず各リポジトリの CLAUDE.md / PORTING.md 末尾の「2026-11-17 追記: 実プロセス通し確認」節と、仕様書の §1.1・§9・§11 を読んでください。
+状態: 段階1(open-web-server a862f61)、配線(c971a38)、SiteFleet(RPoem 2b50b3e)は push 済み。実プロセスの通し確認(起動・転送・503上限・crash復帰)は e2e_site_fleet で成功済み。本番VPSは未反映です。
+次にやること: (1) hyper での転送(keep-alive・chunked・WebSocket)、(2) 段階3(別uid・cgroup・Isolator trait・PHP-FPMプール)、(3) Admin Site* RPC と管理UI。
+決定済み: 既定は isolation="trusted"(自分のサイトのみ)、"tenant" は別実装・明示操作で有効化。設定は新設の sites.toml、REST は新設しない(Connect/gRPC、JSONはRS-JSON)。
+注意: ビルド/テストは WSL(Ubuntu)で背景実行。git stash は使わない。本番VPSは確認なしに触らない。push はユーザー本人の言葉があってから。チャットは日本語のみ。
+```
+
+```
+Please continue the RPoem "shadow-clone" (bunshin) hosting work. Repositories: F:\open-easy-web (spec docs/RPOEM_BUNSHIN_HOSTING_SPEC.md), F:\open-web-server (crates/open-web-server-gateway: sites.rs / state.rs / tenant_router.rs and tests/e2e_site_fleet.rs, feature=site-fleet) and F:\RPoem (crates/open-runo-appserver: fleet.rs).
+First read the section "2026-11-17 追記: 実プロセス通し確認" at the end of each repository's CLAUDE.md / PORTING.md, and spec sections 1.1, 9 and 11.
+State: stage 1 (open-web-server a862f61), the wiring (c971a38) and SiteFleet (RPoem 2b50b3e) are pushed. The real-process E2E (start, forward, 503 limit, crash recovery) passes in e2e_site_fleet. Production VPS is untouched.
+Next: (1) hyper-based forwarding (keep-alive, chunked, WebSocket), (2) stage 3 (per-site uid, cgroup, Isolator trait, PHP-FPM pools), (3) Admin Site* RPCs and an admin UI.
+Decided: default isolation="trusted" (own sites only); "tenant" is a separate, explicitly enabled implementation. New config file sites.toml; no new REST (Connect/gRPC, RS-JSON).
+Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not touch the production VPS without asking. Push only on the user's own words. Chat in Japanese only.
+```
