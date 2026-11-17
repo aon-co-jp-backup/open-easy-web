@@ -334,6 +334,7 @@ async fn route(state: &Arc<AppState>, req: &mut Req, service: &str, method: &str
 
         // ---- システムの状況 ----
         ("System", "GetMemory") => ok(&crate::system_memory::snapshot()),
+        ("System", "GetCpu") => ok(&crate::cpu_info::snapshot()),
         ("System", "GetDisk") => ok(&crate::system_disk::snapshot()),
         ("System", "GetMemoryBreakdown") => memory_breakdown().await,
         ("System", "GetDiskBreakdown") => disk_breakdown().await,

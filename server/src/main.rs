@@ -21,6 +21,7 @@ mod connect;
 mod json_in;
 mod storage_maintenance;
 mod update_notify;
+mod cpu_info;
 mod memory_breakdown;
 mod memory_governor;
 mod mail;
@@ -1350,6 +1351,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
+    tracing::info!("{}", open_cpu::runtime_summary());
 
     // ローカルモード(Windows PC上での簡易リバースプロキシ+DuckDNS、
     // `OPEN_EASY_WEB_LOCAL_MODE=1`のときのみ有効、2026-09-07新設):

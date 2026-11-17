@@ -38,6 +38,7 @@ service DistSync {
 
 service System {
   rpc GetMemory(Empty) returns (Json);
+  rpc GetCpu(Empty) returns (Json);      // 検出した命令セット・コア構成・選ばれた実装(open-cpu)
   rpc GetDisk(Empty) returns (Json);
   rpc GetMemoryBreakdown(Empty) returns (Json);
   rpc GetDiskBreakdown(Empty) returns (Json);

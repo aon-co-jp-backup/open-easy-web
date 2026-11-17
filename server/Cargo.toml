@@ -13,6 +13,8 @@ name = "open-easy-web-server"
 path = "src/main.rs"
 
 [dependencies]
+# CPU命令セットの自動検出(AVX-512BW > AVX2 > NEON > スカラー)。標準機能として同梱し、`System/GetCpu`で状況を返す
+open-cpu = { path = "../../open-cpu" }
 sonic-rs = "0.5"
 tokio = { version = "1", features = ["full"] }
 hyper = { version = "1", features = ["full"] }

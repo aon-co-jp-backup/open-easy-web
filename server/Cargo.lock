@@ -1860,6 +1860,7 @@ dependencies = [
  "hyper-util",
  "lettre",
  "mockito",
+ "open-cpu",
  "open-runo-crossui",
  "open_raid_z_core",
  "qrcode",
