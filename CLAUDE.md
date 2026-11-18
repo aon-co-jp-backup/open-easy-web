@@ -3805,3 +3805,10 @@ Next: (1) hyper-based forwarding (keep-alive, chunked, WebSocket), (2) stage 3 (
 Decided: default isolation="trusted" (own sites only); "tenant" is a separate, explicitly enabled implementation. New config file sites.toml; no new REST (Connect/gRPC, RS-JSON).
 Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not touch the production VPS without asking. Push only on the user's own words. Chat in Japanese only.
 ```
+
+
+## 2026-11-18 追記: QR確認ログインのVPS反映 / QR-confirm login deployed to the VPS
+
+**日本語**: VPS(`/root/open-easy-web-app`、`open-easy-web.service`)のバイナリはQR確認ログイン(`qr`/`otp_qr`、`origin/main`の`8570230`相当)より古いビルドだったため、`cargo build --release`(約4分)で再ビルドして再起動した(旧バイナリは`server/target/release/open-easy-web-server.before-qr-20261118`、ロールバックはこれを戻して`systemctl restart open-easy-web`)。確認: `healthz`200、`/qr-confirm.html`200、公開URLでも`open_easy_web.admin.v1.Auth/QrLoginWhoami`が期待どおりの404(`not_found`、無効なid)・`QrLoginStart`が403(TOTP未有効の宛先)、`Settings/GetLoginMode`は管理トークンなしで401。**注意**: 認証のRESTは廃止済みで、`/api/auth/qr-login/*`は404が正しい(Connectは`POST /open_easy_web.admin.v1.Auth/<Method>`)。**未了**: 実スマホのカメラでの撮影の通し試験、実SMTPでの`otp_qr`通し。
+
+**English**: The binary on the VPS (`/root/open-easy-web-app`, `open-easy-web.service`) predated the QR-confirm login (`qr`/`otp_qr`, equivalent to `8570230` on `origin/main`), so it was rebuilt with `cargo build --release` (about 4 minutes) and restarted (old binary kept as `server/target/release/open-easy-web-server.before-qr-20261118`; roll back by restoring it and running `systemctl restart open-easy-web`). Verified: `healthz` 200, `/qr-confirm.html` 200, and on the public URL `open_easy_web.admin.v1.Auth/QrLoginWhoami` answers the expected 404 (`not_found`, invalid id) and `QrLoginStart` 403 (TOTP not enabled for that address); `Settings/GetLoginMode` returns 401 without the admin token. **Note**: the REST auth routes are abolished, so `/api/auth/qr-login/*` correctly returns 404 (Connect is `POST /open_easy_web.admin.v1.Auth/<Method>`). **Open**: a real phone-camera scan and `otp_qr` with real SMTP.
