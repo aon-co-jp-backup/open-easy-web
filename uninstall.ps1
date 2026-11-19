@@ -9,9 +9,12 @@
 
 #Requires -RunAsAdministrator
 
+param(
+    [string]$InstallDir = "C:\aon-co-jp\open-easy-web"
+)
+
 $ErrorActionPreference = "Stop"
 
-$InstallDir = "C:\Program Files\open-easy-web"
 $ServiceName = "OpenEasyWeb"
 
 Write-Host "==> アンインストール前にデータを退避しますか?(推奨)"

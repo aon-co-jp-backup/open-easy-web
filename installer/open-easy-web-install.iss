@@ -37,7 +37,10 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
-DefaultDirName={autopf}\open-easy-web
+; 既定は C:\aon-co-jp\open-easy-web。ディレクトリ選択ページでドライブ・フォルダーを選べる。
+DefaultDirName={sd}\aon-co-jp\open-easy-web
+DisableDirPage=no
+UsePreviousAppDir=yes
 DefaultGroupName=open-easy-web
 DisableProgramGroupPage=yes
 OutputDir=.
@@ -82,13 +85,13 @@ Source: "fetch-aruaru-llm.ps1"; DestDir: "{app}"; Flags: ignoreversion
 ; 別リポジトリ(GPU描画実験用の2Dデモ)——このため両方とも本タスクの
 ; 対象に含めていない(README.md「🚀 なぜ関連プロジェクトと一緒に使うと
 ; 強力なのか」節に詳細な開示あり)。
-Name: "installaruarullm"; Description: "Also install aruaru-llm (optional, contract-free proprietary AI chat-commerce response service paired with open-cuda; NOT auto-started, and open-cuda itself is statically linked in — not a separate download) / aruaru-llm(任意、契約不要の独自AIチャットコマース応答サービス、open-cudaとSET構成)も一緒にインストール——自動起動はしません。open-cuda自体はaruaru-llmへ静的リンクされており別途ダウンロード対象ではありません"; Flags: unchecked
+Name: "installaruarullm"; Description: "Also install aruaru-llm (optional, contract-free proprietary AI chat-commerce response service paired with open-cuda; NOT auto-started, and open-cuda itself is statically linked in — not a separate download) / aruaru-llm(任意、契約不要の独自AIチャットコマース応答サービス、open-cudaとSET構成)も一緒にインストール——自動起動はしません。open-cuda自体はaruaru-llmへ静的リンクされており別途ダウンロード対象ではありません"
 
 [Run]
 ; install.ps1自体がサービス登録(New-Service)ロジックを持つため、
 ; 二重実装を避けてそのまま呼び出す。
 Filename: "powershell.exe"; \
-    Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\install.ps1"""; \
+    Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\install.ps1"" -InstallDir ""{app}"""; \
     WorkingDir: "{app}"; StatusMsg: "open-easy-web サービスをセットアップしています..."; \
     Flags: runhidden waituntilterminated
 Filename: "powershell.exe"; \
@@ -99,5 +102,5 @@ Filename: "powershell.exe"; \
 
 [UninstallRun]
 Filename: "powershell.exe"; \
-    Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall.ps1"""; \
+    Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall.ps1"" -InstallDir ""{app}"""; \
     WorkingDir: "{app}"; RunOnceId: "UninstallOpenEasyWeb"; Flags: runhidden waituntilterminated

@@ -16,9 +16,13 @@
 
 #Requires -RunAsAdministrator
 
+param(
+    # 既定は C:\aon-co-jp\open-easy-web。インストーラーではドライブ・フォルダーを選べる。
+    [string]$InstallDir = "C:\aon-co-jp\open-easy-web"
+)
+
 $ErrorActionPreference = "Stop"
 
-$InstallDir = "C:\Program Files\open-easy-web"
 $ServiceName = "OpenEasyWeb"
 
 Write-Host "==> インストール先: $InstallDir"
@@ -29,7 +33,9 @@ if (-not (Test-Path $BinSrc)) {
     Write-Error "open-easy-web-server.exe が見つかりません($BinSrc)。zipを展開したディレクトリで実行してください。"
     exit 1
 }
-Copy-Item $BinSrc -Destination $InstallDir -Force
+if ((Resolve-Path $BinSrc).Path -ne (Join-Path (Resolve-Path $InstallDir).Path "open-easy-web-server.exe")) {
+    Copy-Item $BinSrc -Destination $InstallDir -Force
+}
 
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existing) {
