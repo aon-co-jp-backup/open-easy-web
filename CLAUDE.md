@@ -3824,3 +3824,55 @@ Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not
 - The installer (`installer/open-easy-web-install.iss`) now defaults to `{sd}\aon-co-jp\open-easy-web` and shows the folder page. `install.ps1` and `uninstall.ps1` take `-InstallDir`. Fetching aruaru-llm is on by default.
 - The full repository list on the top page is `server/src/all_repos.rs` (generated; see the record on the `F:\runo` side). 153 entries, default order by importance, switchable to A-Z. Repositories without a description show "coming soon" (we do not guess).
 - Open: build and test the installer on a real machine, and check whether open-directx has a standalone release. `uninstall.ps1` already had 13 syntax errors before this change (unrelated).
+
+## 他の言語 / Other languages (2026-11-19)
+
+### 简体中文
+
+- 安装程序(`installer/open-easy-web-install.iss`)默认改为 `{sd}\aon-co-jp\open-easy-web`,并启用了文件夹选择页。`install.ps1` 和 `uninstall.ps1` 接受 `-InstallDir`。获取 aruaru-llm 默认开启。
+- 首页的全部仓库列表是 `server/src/all_repos.rs`(自动生成),共 153 项,默认按重要程度排序,可切换为 A-Z。没有简介的显示“准备中”(不凭空编写)。
+- 未完成:在真机上构建并测试安装程序;确认 open-directx 是否有独立发布。`uninstall.ps1` 原本就有 13 处语法错误(与本次修改无关)。
+
+### 繁體中文(台灣)
+
+- 安裝程式(`installer/open-easy-web-install.iss`)預設改為 `{sd}\aon-co-jp\open-easy-web`,並啟用了資料夾選擇頁。`install.ps1` 與 `uninstall.ps1` 接受 `-InstallDir`。取得 aruaru-llm 預設開啟。
+- 首頁的全部儲存庫清單是 `server/src/all_repos.rs`(自動產生),共 153 項,預設依重要程度排序,可切換為 A-Z。沒有簡介的顯示「準備中」(不憑空編寫)。
+- 未完成:在真機上建置並測試安裝程式;確認 open-directx 是否有獨立發行。`uninstall.ps1` 原本就有 13 處語法錯誤(與本次修改無關)。
+
+### 한국어
+
+- 설치 프로그램(`installer/open-easy-web-install.iss`)의 기본값을 `{sd}\aon-co-jp\open-easy-web`로 바꾸고 폴더 선택 페이지를 켰습니다. `install.ps1`과 `uninstall.ps1`은 `-InstallDir`를 받습니다. aruaru-llm 내려받기는 기본으로 켜져 있습니다.
+- 첫 화면의 전체 저장소 목록은 `server/src/all_repos.rs`(자동 생성)이며 153개, 기본은 중요도 순이고 A-Z로 바꿀 수 있습니다. 설명이 없는 항목은 "준비 중"으로 표시합니다(추측으로 채우지 않음).
+- 남은 일: 실제 기기에서 설치 프로그램 빌드와 시험, open-directx 단독 배포물 확인. `uninstall.ps1`에는 원래부터 문법 오류 13건이 있습니다(이번 변경과 무관).
+
+### Deutsch
+
+- Der Installer (`installer/open-easy-web-install.iss`) verwendet jetzt standardmäßig `{sd}\aon-co-jp\open-easy-web` und zeigt die Ordnerseite. `install.ps1` und `uninstall.ps1` nehmen `-InstallDir` entgegen. Das Laden von aruaru-llm ist standardmäßig an.
+- Die Gesamtliste auf der Startseite ist `server/src/all_repos.rs` (generiert): 153 Einträge, Standard nach Wichtigkeit, umschaltbar auf A–Z. Ohne Beschreibung steht „in Vorbereitung“ (nichts wird erfunden).
+- Offen: Installer auf einem echten Rechner bauen und testen; prüfen, ob open-directx eine eigenständige Veröffentlichung hat. `uninstall.ps1` hatte schon vorher 13 Syntaxfehler (unabhängig von dieser Änderung).
+
+### Français
+
+- L'installateur (`installer/open-easy-web-install.iss`) utilise maintenant `{sd}\aon-co-jp\open-easy-web` par défaut et affiche la page de choix du dossier. `install.ps1` et `uninstall.ps1` acceptent `-InstallDir`. Le téléchargement d'aruaru-llm est activé par défaut.
+- La liste complète de la page d'accueil est `server/src/all_repos.rs` (générée) : 153 entrées, ordre par importance par défaut, commutable en A–Z. Sans description, on affiche « bientôt disponible » (rien n'est inventé).
+- Reste à faire : compiler et tester l'installateur sur une vraie machine ; vérifier si open-directx a une version autonome. `uninstall.ps1` avait déjà 13 erreurs de syntaxe (sans rapport avec ce changement).
+
+### Español
+
+- El instalador (`installer/open-easy-web-install.iss`) ahora usa por defecto `{sd}\aon-co-jp\open-easy-web` y muestra la página de carpeta. `install.ps1` y `uninstall.ps1` aceptan `-InstallDir`. La descarga de aruaru-llm está activada por defecto.
+- La lista completa de la página principal es `server/src/all_repos.rs` (generada): 153 entradas, orden por importancia por defecto, conmutable a A–Z. Sin descripción se muestra «próximamente» (no se inventa nada).
+- Pendiente: compilar y probar el instalador en una máquina real; comprobar si open-directx tiene una versión independiente. `uninstall.ps1` ya tenía 13 errores de sintaxis (ajenos a este cambio).
+
+### Português (BR)
+
+- O instalador (`installer/open-easy-web-install.iss`) agora usa por padrão `{sd}\aon-co-jp\open-easy-web` e mostra a página de pasta. `install.ps1` e `uninstall.ps1` aceitam `-InstallDir`. O download do aruaru-llm vem ativado.
+- A lista completa da página inicial é `server/src/all_repos.rs` (gerada): 153 itens, ordem por importância por padrão, alternável para A–Z. Sem descrição aparece "em breve" (nada é inventado).
+- Pendente: compilar e testar o instalador numa máquina real; verificar se o open-directx tem versão independente. O `uninstall.ps1` já tinha 13 erros de sintaxe (alheios a esta mudança).
+
+### Русский
+
+- Установщик (`installer/open-easy-web-install.iss`) теперь по умолчанию использует `{sd}\aon-co-jp\open-easy-web` и показывает страницу выбора папки. `install.ps1` и `uninstall.ps1` принимают `-InstallDir`. Загрузка aruaru-llm включена по умолчанию.
+- Полный список на главной — `server/src/all_repos.rs` (генерируется): 153 записи, по умолчанию по важности, можно переключить на A–Z. Если описания нет, пишется «скоро» (ничего не выдумываем).
+- Не сделано: собрать и проверить установщик на реальной машине; выяснить, есть ли у open-directx отдельный релиз. В `uninstall.ps1` и раньше было 13 синтаксических ошибок (к этому изменению не относятся).
+
+(简体中文: AI 翻译,尚未经母语者确认。; 繁體中文(台灣): AI 翻譯,尚未經母語者確認。; 한국어: AI 번역이며 원어민 확인 전입니다.; Deutsch: KI-Übersetzung, noch nicht von Muttersprachlern geprüft.; Français: Traduction par IA, pas encore relue par des locuteurs natifs.; Español: Traducción por IA, aún sin revisión de hablantes nativos.; Português (BR): Tradução por IA, ainda sem revisão de falantes nativos.; Русский: Перевод выполнен ИИ, носителями языка пока не проверен.)

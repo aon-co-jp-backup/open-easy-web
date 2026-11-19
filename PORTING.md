@@ -749,3 +749,55 @@ Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not
 - To deploy to production (VPS): build in WSL, take a backup, swap the binary, run `systemctl restart open-easy-web`, then check the top page returns 200 and the admin API without a token returns 401. Roll back with `*.before-allrepos-20261119`.
 - To refresh the list, regenerate `all_repos.rs` from `gh repo list` and deploy the same way.
 - First step when resuming: build the installer with Inno Setup, then test install and uninstall with a different folder.
+
+## 他の言語 / Other languages (2026-11-19)
+
+### 简体中文
+
+- 部署到生产环境(VPS):在 WSL 中构建 → 备份 → 替换 → `systemctl restart open-easy-web` → 确认首页返回 200、无令牌的管理接口返回 401。回滚用 `*.before-allrepos-20261119`。
+- 要更新列表,先用 `gh repo list` 的结果重新生成 `all_repos.rs`,再按同样步骤部署。
+- 恢复工作时第一步:用 Inno Setup 构建安装程序,换一个文件夹做安装和卸载测试。
+
+### 繁體中文(台灣)
+
+- 部署到正式環境(VPS):在 WSL 中建置 → 備份 → 替換 → `systemctl restart open-easy-web` → 確認首頁回傳 200、無權杖的管理介面回傳 401。回復用 `*.before-allrepos-20261119`。
+- 要更新清單,先用 `gh repo list` 的結果重新產生 `all_repos.rs`,再依同樣步驟部署。
+- 恢復工作時第一步:用 Inno Setup 建置安裝程式,換一個資料夾做安裝與解除安裝測試。
+
+### 한국어
+
+- 운영(VPS) 반영: WSL에서 빌드 → 백업 → 교체 → `systemctl restart open-easy-web` → 첫 화면이 200, 토큰 없는 관리 API가 401인지 확인합니다. 되돌릴 때는 `*.before-allrepos-20261119`.
+- 목록을 새로 만들 때는 `gh repo list` 결과로 `all_repos.rs`를 다시 생성하고 같은 절차로 반영합니다.
+- 작업을 이어받을 때 첫걸음: Inno Setup으로 설치 프로그램을 만들고, 폴더를 바꿔 설치·삭제를 시험합니다.
+
+### Deutsch
+
+- Produktiv (VPS) ausrollen: in WSL bauen → Sicherung → austauschen → `systemctl restart open-easy-web` → prüfen, dass die Startseite 200 und die Admin-API ohne Token 401 liefert. Zurück mit `*.before-allrepos-20261119`.
+- Zum Aktualisieren der Liste `all_repos.rs` aus `gh repo list` neu erzeugen und genauso ausrollen.
+- Erster Schritt beim Weitermachen: den Installer mit Inno Setup bauen und Installation und Deinstallation mit einem anderen Ordner testen.
+
+### Français
+
+- Déployer en production (VPS) : compiler dans WSL → sauvegarde → remplacer → `systemctl restart open-easy-web` → vérifier que la page d'accueil renvoie 200 et l'API d'administration sans jeton 401. Retour arrière avec `*.before-allrepos-20261119`.
+- Pour rafraîchir la liste, régénérez `all_repos.rs` à partir de `gh repo list` et déployez de la même façon.
+- Premier pas à la reprise : construire l'installateur avec Inno Setup, puis tester l'installation et la désinstallation avec un autre dossier.
+
+### Español
+
+- Desplegar en producción (VPS): compilar en WSL → copia de seguridad → sustituir → `systemctl restart open-easy-web` → comprobar que la página principal devuelve 200 y la API de administración sin token 401. Para volver atrás: `*.before-allrepos-20261119`.
+- Para actualizar la lista, regenera `all_repos.rs` a partir de `gh repo list` y despliega igual.
+- Primer paso al retomar: construir el instalador con Inno Setup y probar instalar y desinstalar con otra carpeta.
+
+### Português (BR)
+
+- Implantar em produção (VPS): compilar no WSL → backup → trocar → `systemctl restart open-easy-web` → conferir que a página inicial devolve 200 e a API de administração sem token devolve 401. Para voltar: `*.before-allrepos-20261119`.
+- Para atualizar a lista, gere de novo o `all_repos.rs` a partir de `gh repo list` e implante do mesmo jeito.
+- Primeiro passo ao retomar: montar o instalador com o Inno Setup e testar instalar e desinstalar com outra pasta.
+
+### Русский
+
+- Выкатка в продакшн (VPS): сборка в WSL → резервная копия → замена → `systemctl restart open-easy-web` → проверить, что главная отдаёт 200, а админ-API без токена — 401. Откат: `*.before-allrepos-20261119`.
+- Чтобы обновить список, заново сгенерируйте `all_repos.rs` из `gh repo list` и выкатите так же.
+- Первый шаг при возобновлении: собрать установщик в Inno Setup и проверить установку и удаление с другой папкой.
+
+(简体中文: AI 翻译,尚未经母语者确认。; 繁體中文(台灣): AI 翻譯,尚未經母語者確認。; 한국어: AI 번역이며 원어민 확인 전입니다.; Deutsch: KI-Übersetzung, noch nicht von Muttersprachlern geprüft.; Français: Traduction par IA, pas encore relue par des locuteurs natifs.; Español: Traducción por IA, aún sin revisión de hablantes nativos.; Português (BR): Tradução por IA, ainda sem revisão de falantes nativos.; Русский: Перевод выполнен ИИ, носителями языка пока не проверен.)

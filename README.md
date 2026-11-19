@@ -858,3 +858,55 @@ Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not
 - The installer uses `C:\aon-co-jp\open-easy-web\` by default. During setup you can pick another drive and folder.
 - aruaru-llm (the AI part) goes into an `aruaru-llm` folder inside it. Its box is checked from the start.
 - The top page of easy-web.tokyo lists every public repository with a short description. You can switch between "by importance and use" (the first order) and "A to Z".
+
+## 他の言語 / Other languages (2026-11-19)
+
+### 简体中文
+
+- 安装程序默认位置是 `C:\aon-co-jp\open-easy-web\`,安装时可以选择其他磁盘和文件夹。
+- aruaru-llm(AI 组件)会放进其中的 `aruaru-llm` 文件夹,默认已勾选。
+- easy-web.tokyo 首页会列出所有公开仓库的简介,可在“按重要程度和使用度”(默认)与“A 到 Z”之间切换。
+
+### 繁體中文(台灣)
+
+- 安裝程式預設位置是 `C:\aon-co-jp\open-easy-web\`,安裝時可以選擇其他磁碟與資料夾。
+- aruaru-llm(AI 元件)會放進其中的 `aruaru-llm` 資料夾,預設已勾選。
+- easy-web.tokyo 首頁會列出所有公開儲存庫的簡介,可在「依重要程度與使用度」(預設)與「A 到 Z」之間切換。
+
+### 한국어
+
+- 설치 프로그램의 기본 위치는 `C:\aon-co-jp\open-easy-web\`이며, 설치 중에 다른 드라이브와 폴더를 고를 수 있습니다.
+- aruaru-llm(AI 구성 요소)은 그 안의 `aruaru-llm` 폴더에 들어가며, 처음부터 체크되어 있습니다.
+- easy-web.tokyo 첫 화면에는 공개된 모든 저장소의 설명이 나열됩니다. "중요도·사용도 순"(기본)과 "가나다·ABC 순"을 바꿀 수 있습니다.
+
+### Deutsch
+
+- Der Installer nutzt standardmäßig `C:\aon-co-jp\open-easy-web\`. Bei der Installation können Sie ein anderes Laufwerk und einen anderen Ordner wählen.
+- aruaru-llm (die KI-Komponente) kommt in den Unterordner `aruaru-llm`; das Kästchen ist von Anfang an angehakt.
+- Die Startseite von easy-web.tokyo listet alle öffentlichen Repositories mit Kurzbeschreibung. Sie können zwischen „nach Wichtigkeit und Nutzung“ (Standard) und „A bis Z“ wechseln.
+
+### Français
+
+- L'installateur utilise par défaut `C:\aon-co-jp\open-easy-web\`. Pendant l'installation, vous pouvez choisir un autre lecteur et dossier.
+- aruaru-llm (la partie IA) va dans un dossier `aruaru-llm` à l'intérieur ; la case est cochée dès le départ.
+- La page d'accueil d'easy-web.tokyo liste tous les dépôts publics avec une courte description. Vous pouvez passer de « par importance et usage » (par défaut) à « de A à Z ».
+
+### Español
+
+- El instalador usa por defecto `C:\aon-co-jp\open-easy-web\`. Durante la instalación puedes elegir otra unidad y carpeta.
+- aruaru-llm (la parte de IA) va en una carpeta `aruaru-llm` dentro; la casilla viene marcada.
+- La página principal de easy-web.tokyo lista todos los repositorios públicos con una breve descripción. Puedes cambiar entre «por importancia y uso» (por defecto) y «de la A a la Z».
+
+### Português (BR)
+
+- O instalador usa por padrão `C:\aon-co-jp\open-easy-web\`. Durante a instalação você pode escolher outra unidade e pasta.
+- O aruaru-llm (a parte de IA) vai para uma pasta `aruaru-llm` dentro dela; a caixa já vem marcada.
+- A página inicial do easy-web.tokyo lista todos os repositórios públicos com uma breve descrição. Você pode alternar entre "por importância e uso" (padrão) e "de A a Z".
+
+### Русский
+
+- Установщик по умолчанию использует `C:\aon-co-jp\open-easy-web\`. Во время установки можно выбрать другой диск и папку.
+- aruaru-llm (ИИ-компонент) попадает в папку `aruaru-llm` внутри; галочка стоит с самого начала.
+- На главной странице easy-web.tokyo перечислены все открытые репозитории с кратким описанием. Можно переключаться между «по важности и использованию» (по умолчанию) и «от A до Z».
+
+(简体中文: AI 翻译,尚未经母语者确认。; 繁體中文(台灣): AI 翻譯,尚未經母語者確認。; 한국어: AI 번역이며 원어민 확인 전입니다.; Deutsch: KI-Übersetzung, noch nicht von Muttersprachlern geprüft.; Français: Traduction par IA, pas encore relue par des locuteurs natifs.; Español: Traducción por IA, aún sin revisión de hablantes nativos.; Português (BR): Tradução por IA, ainda sem revisão de falantes nativos.; Русский: Перевод выполнен ИИ, носителями языка пока не проверен.)
