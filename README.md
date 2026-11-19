@@ -846,3 +846,15 @@ Next: (1) hyper-based forwarding (keep-alive, chunked, WebSocket), (2) stage 3 (
 Decided: default isolation="trusted" (own sites only); "tenant" is a separate, explicitly enabled implementation. New config file sites.toml; no new REST (Connect/gRPC, RS-JSON).
 Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not touch the production VPS without asking. Push only on the user's own words. Chat in Japanese only.
 ```
+
+## インストール先を選べます(2026-11-19) / You can choose where to install
+
+**日本語**
+- インストーラーの既定の場所は `C:\aon-co-jp\open-easy-web\` です。インストール中に、ドライブとフォルダーを選べます。
+- aruaru-llm(AIの部品)は、その中の `aruaru-llm` フォルダーに入ります。チェックは最初からオンです。
+- easy-web.tokyo のトップには、公開しているすべてのリポジトリの説明が並びます。「重要・使用度順」(最初の並び)と「ABC順」を切り替えられます。
+
+**English**
+- The installer uses `C:\aon-co-jp\open-easy-web\` by default. During setup you can pick another drive and folder.
+- aruaru-llm (the AI part) goes into an `aruaru-llm` folder inside it. Its box is checked from the start.
+- The top page of easy-web.tokyo lists every public repository with a short description. You can switch between "by importance and use" (the first order) and "A to Z".

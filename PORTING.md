@@ -737,3 +737,15 @@ Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not
 **日本語**: VPS(`/root/open-easy-web-app`、`open-easy-web.service`)のバイナリはQR確認ログイン(`qr`/`otp_qr`、`origin/main`の`8570230`相当)より古いビルドだったため、`cargo build --release`(約4分)で再ビルドして再起動した(旧バイナリは`server/target/release/open-easy-web-server.before-qr-20261118`、ロールバックはこれを戻して`systemctl restart open-easy-web`)。確認: `healthz`200、`/qr-confirm.html`200、公開URLでも`open_easy_web.admin.v1.Auth/QrLoginWhoami`が期待どおりの404(`not_found`、無効なid)・`QrLoginStart`が403(TOTP未有効の宛先)、`Settings/GetLoginMode`は管理トークンなしで401。**注意**: 認証のRESTは廃止済みで、`/api/auth/qr-login/*`は404が正しい(Connectは`POST /open_easy_web.admin.v1.Auth/<Method>`)。**未了**: 実スマホのカメラでの撮影の通し試験、実SMTPでの`otp_qr`通し。
 
 **English**: The binary on the VPS (`/root/open-easy-web-app`, `open-easy-web.service`) predated the QR-confirm login (`qr`/`otp_qr`, equivalent to `8570230` on `origin/main`), so it was rebuilt with `cargo build --release` (about 4 minutes) and restarted (old binary kept as `server/target/release/open-easy-web-server.before-qr-20261118`; roll back by restoring it and running `systemctl restart open-easy-web`). Verified: `healthz` 200, `/qr-confirm.html` 200, and on the public URL `open_easy_web.admin.v1.Auth/QrLoginWhoami` answers the expected 404 (`not_found`, invalid id) and `QrLoginStart` 403 (TOTP not enabled for that address); `Settings/GetLoginMode` returns 401 without the admin token. **Note**: the REST auth routes are abolished, so `/api/auth/qr-login/*` correctly returns 404 (Connect is `POST /open_easy_web.admin.v1.Auth/<Method>`). **Open**: a real phone-camera scan and `otp_qr` with real SMTP.
+
+## 引っ越し・再開メモ(2026-11-19) / Moving and resuming
+
+**日本語**
+- 本番(VPS)への反映は、WSLでビルド → バックアップ → 差し替え → `systemctl restart open-easy-web` → トップが200・認証なしの管理APIが401、を確認する。ロールバックは `*.before-allrepos-20261119`。
+- 一覧を作り直すときは、`gh repo list` の結果から `all_repos.rs` を再生成して同じ手順で入れる。
+- 再開の最初の一手: Inno Setupでインストーラーを作り、フォルダーを替えて入れる・消す試験をする。
+
+**English**
+- To deploy to production (VPS): build in WSL, take a backup, swap the binary, run `systemctl restart open-easy-web`, then check the top page returns 200 and the admin API without a token returns 401. Roll back with `*.before-allrepos-20261119`.
+- To refresh the list, regenerate `all_repos.rs` from `gh repo list` and deploy the same way.
+- First step when resuming: build the installer with Inno Setup, then test install and uninstall with a different folder.

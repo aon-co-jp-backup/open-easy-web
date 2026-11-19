@@ -3812,3 +3812,15 @@ Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not
 **日本語**: VPS(`/root/open-easy-web-app`、`open-easy-web.service`)のバイナリはQR確認ログイン(`qr`/`otp_qr`、`origin/main`の`8570230`相当)より古いビルドだったため、`cargo build --release`(約4分)で再ビルドして再起動した(旧バイナリは`server/target/release/open-easy-web-server.before-qr-20261118`、ロールバックはこれを戻して`systemctl restart open-easy-web`)。確認: `healthz`200、`/qr-confirm.html`200、公開URLでも`open_easy_web.admin.v1.Auth/QrLoginWhoami`が期待どおりの404(`not_found`、無効なid)・`QrLoginStart`が403(TOTP未有効の宛先)、`Settings/GetLoginMode`は管理トークンなしで401。**注意**: 認証のRESTは廃止済みで、`/api/auth/qr-login/*`は404が正しい(Connectは`POST /open_easy_web.admin.v1.Auth/<Method>`)。**未了**: 実スマホのカメラでの撮影の通し試験、実SMTPでの`otp_qr`通し。
 
 **English**: The binary on the VPS (`/root/open-easy-web-app`, `open-easy-web.service`) predated the QR-confirm login (`qr`/`otp_qr`, equivalent to `8570230` on `origin/main`), so it was rebuilt with `cargo build --release` (about 4 minutes) and restarted (old binary kept as `server/target/release/open-easy-web-server.before-qr-20261118`; roll back by restoring it and running `systemctl restart open-easy-web`). Verified: `healthz` 200, `/qr-confirm.html` 200, and on the public URL `open_easy_web.admin.v1.Auth/QrLoginWhoami` answers the expected 404 (`not_found`, invalid id) and `QrLoginStart` 403 (TOTP not enabled for that address); `Settings/GetLoginMode` returns 401 without the admin token. **Note**: the REST auth routes are abolished, so `/api/auth/qr-login/*` correctly returns 404 (Connect is `POST /open_easy_web.admin.v1.Auth/<Method>`). **Open**: a real phone-camera scan and `otp_qr` with real SMTP.
+
+## 2026-11-19 作業メモ / Work note
+
+**日本語**
+- インストーラー(`installer/open-easy-web-install.iss`)の既定を `{sd}\aon-co-jp\open-easy-web` にし、フォルダー選択ページを有効にした。`install.ps1`・`uninstall.ps1` は `-InstallDir` を受け取る。aruaru-llmの取得は既定オン。
+- トップ画面の全リポジトリ一覧は `server/src/all_repos.rs`(生成物。作り方は `F:\runo` 側の記録を参照)。153件、既定は重要順、ABC順に切替。説明のないものは「準備中」と表示(推測で埋めない)。
+- 未了: インストーラーのビルドと実機の通し試験、open-directxの配布物の確認。`uninstall.ps1` には元から13件の構文エラーがある(今回の変更とは無関係)。
+
+**English**
+- The installer (`installer/open-easy-web-install.iss`) now defaults to `{sd}\aon-co-jp\open-easy-web` and shows the folder page. `install.ps1` and `uninstall.ps1` take `-InstallDir`. Fetching aruaru-llm is on by default.
+- The full repository list on the top page is `server/src/all_repos.rs` (generated; see the record on the `F:\runo` side). 153 entries, default order by importance, switchable to A-Z. Repositories without a description show "coming soon" (we do not guess).
+- Open: build and test the installer on a real machine, and check whether open-directx has a standalone release. `uninstall.ps1` already had 13 syntax errors before this change (unrelated).
