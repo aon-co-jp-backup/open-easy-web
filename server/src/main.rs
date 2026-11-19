@@ -290,6 +290,10 @@ fn mirror_banner_html() -> String {
 }
 
 /// トップページの open-media の紹介(ダウンロード・紹介は /open-media、デモは /open-media/demo/)。
+fn pl2pl_banner_html() -> String {
+    "<section id=\"pl2pl-intro\" style=\"margin:12px auto;max-width:960px;padding:12px 16px;border:1px solid #888;border-radius:8px;font-family:system-ui,sans-serif\"><h2 style=\"margin:0 0 6px\">pl2pl</h2><p style=\"margin:0 0 8px\">プログラミング言語やフレームワークを、別のものへ書きかえる道具です。PHP(Laravel / Symfony)・Python(Flask)・Java(Spring)などのWebアプリを FastAPI などへ変換し、書きかえられない所は黙って消さず TODO として残します。Windows / Linux / macOS に対応。<br>A tool that rewrites programs from one language or framework into another. It converts web apps written in PHP (Laravel / Symfony), Python (Flask) or Java (Spring) into FastAPI and similar targets, and it never drops what it cannot convert: those parts are kept as TODO notes. For Windows, Linux and macOS.</p><p style=\"margin:0\"><a href=\"/pl2pl/\"><b>ダウンロード・紹介 / Download &amp; About</b></a> ・ <a href=\"https://github.com/aon-co-jp/pl2pl/releases/latest\">最新版 / Latest release</a> ・ <a href=\"https://github.com/aon-co-jp/pl2pl\">GitHub</a></p></section>".to_string()
+}
+
 fn media_banner_html() -> String {
     "<section id=\"open-media-intro\" style=\"margin:12px auto;max-width:960px;padding:12px 16px;border:1px solid #888;border-radius:8px;font-family:system-ui,sans-serif\"><h2 style=\"margin:0 0 6px\">open-media</h2><p style=\"margin:0 0 8px\">CD・DVD・Blu-ray の書き込み・変換と、高音質プレーヤーを1つにしたアプリ。音楽CDを排他モード+高品質アップサンプル(例: 44.1kHz→352.8kHz、32bit)で再生し、DVD・MP4・MKV はFull HD / 4Kへ引き上げながら再生します。Windows / macOS / Linux / Android に対応。<br>One app that combines disc burning/conversion with a hi-fi player: it plays audio CDs in exclusive mode with high-quality upsampling (e.g. 44.1 to 352.8 kHz, 32-bit) and upconverts DVD / MP4 / MKV to Full HD / 4K while playing. For Windows, macOS, Linux and Android.</p><p style=\"margin:0\"><a href=\"/open-media\"><b>ダウンロード・紹介 / Download &amp; About</b></a> ・ <a href=\"/open-media/demo/\"><b>デモを試す / Try the demo</b></a> ・ <a href=\"https://github.com/aon-co-jp/open-media/releases/latest\">最新版 / Latest release</a> ・ <a href=\"https://github.com/aon-co-jp/open-media\">GitHub</a></p></section>".to_string()
 }
@@ -430,7 +434,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
                 let (parts, body) = r.into_parts();
                 let bytes = body.collect().await.map(|c| c.to_bytes()).unwrap_or_default();
                 let html = String::from_utf8_lossy(&bytes).into_owned();
-                let html = html.replacen("<body>", &format!("<body>{}{}{}{}{}{}", ime_banner_html(), mirror_banner_html(), media_banner_html(), intro_banners::INTRO_BANNERS, intro_banners::PROJECTS_INDEX, all_repos::ALL_REPOS), 1);
+                let html = html.replacen("<body>", &format!("<body>{}{}{}{}{}{}{}", ime_banner_html(), mirror_banner_html(), media_banner_html(), pl2pl_banner_html(), intro_banners::INTRO_BANNERS, intro_banners::PROJECTS_INDEX, all_repos::ALL_REPOS), 1);
                 r = Response::from_parts(parts, Full::new(Bytes::from(html)));
                 r.headers_mut().remove("content-length");
             }
