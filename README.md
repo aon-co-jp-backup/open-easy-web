@@ -1,0 +1,912 @@
+# open-easy-web
+
+**「第二のKUSANAGI」— アプリのアップロード後にIPアドレスで起動し、
+ドメイン登録・HTTPS化を簡単に自動適用できる運用ツール(Rust →
+WebAssembly、フレームワーク不使用)**
+
+WordPress高速化サーバー構築キット「KUSANAGI」のように、アプリを
+アップロードしたら**IPアドレスから起動 → ドメイン登録の簡易化 →
+HTTPS自動化**までを一気通貫でこなすことを目指す運用ツールです。
+複数サイトの接続先を登録・切替・疎通確認できる「サイト管理」画面、
+WordPress・PHP + Laravel・Python + FastAPIなど任意のバックエンド
+スタック向けの基本的なリバースプロキシ設定(Nginx/Apache)を自動生成
+できます。**DB(データベース)への接続機能は持ちません**(意図的に
+スコープ外)。
+
+**2026-07-13、`aruaru-web` からのスコープ分離**: `aruaru-web` が
+開発していた機能のうち「ドメイン/サブドメインの簡単な登録・削除」
+「HTTPS自動監視・自動発行・自動更新」「アップロード後の簡単な
+サイト運用」——**KUSANAGIのWeb高速化機能を除く全て**——を、この
+`open-easy-web` へ引き継ぎました。KUSANAGI的な高速化機能
+(gzip圧縮・静的アセットの長期キャッシュ・FastCGIバッファ調整・
+upstream keepaliveプーリング)は、Nginx/Apacheの設定生成ではなく
+**`open-runo`/RPoem(旧poem-cosmo-tauri)側のネイティブRust(hyperミドルウェア)
+実装として統合**されました(gzip応答圧縮ミドルウェア・静的アセット
+Cache-Controlミドルウェア等、詳細は両リポジトリのCLAUDE.md参照)。
+
+📖 他の言語: [日本語](README-Japan.md) / [English](README-English.md) /
+[中文](README-Chinese.md) / [한국어](README-Korea.md) / [Español](README-Spain.md) /
+[Français](README-France.md) / [Deutsch](README-Germany.md) / [Italiano](README-Italy.md) /
+[Русский](README-Russia.md) / [العربية](README-Arabic.md)
+
+📘 **セルフホスト時のアカウント設定・2FA(フィーチャーフォンでの確認方法含む)は
+[manual-JAPAN.md](manual-JAPAN.md) を参照してください。**(多言語版あり)
+
+---
+
+## 🚀 なぜ関連プロジェクトと一緒に使うと強力なのか / Why using this together with related projects is powerful (2026-09-07追加)
+
+**日本語**: `https://easy-web.tokyo` は、**好きな有料ドメイン、または
+DuckDNS等の無料ドメイン/サブドメインを簡単に設定し、HTTPS(URLの
+末尾の`s`)を簡単に付けられる**ことを示すための運用サイトです
+(上記「ローカルモード」節・「簡単ドメイン設定ウィザード」節参照)。
+
+- **open-easy-webはApache+Nginx互換**(vhost自動生成、上記「配信
+  エンジン」節参照)、**RPoem(旧poem-cosmo-tauri)はTomcat互換**の
+  アプリケーションサーバー層として機能します。この2つを組み合わせる
+  ことで、高速・高セキュリティな「4層4重」通信の構成が実現できます
+  (詳細は`CLAUDE.md`「アプリケーションサーバー層の役割」節・
+  `open-raid-z/CLAUDE.md`参照)。
+- **open-raid-zとaruaru-dbを組み合わせる**ことで、高速・高セキュリティ
+  なDATABASE運用も同時に実現できます。**さらにPostgreSQLを併用する
+  ことで**(open-english側で実装・実機検証済みのDUAL DB同時書き込み
+  機能と同じ設計思想)、**どちらを先にインストールしても後から
+  インストールしても、片方のDATABASEに障害が発生した場合、もう片方の
+  DATABASEが自動的にデータを補完・復旧できます**——**正直な開示**:
+  この自動補完・自動復旧の実装本体は`aruaru-db`/`open-raid-z`側に
+  あり、`open-easy-web`自体はこれらを組み合わせて使うための土台
+  (ドメイン割り当て・リバースプロキシ)を提供するに留まります。
+- **一緒にインストールをおすすめするもの**: `aruaru-llm`
+  (契約不要の独自AIチャットコマース応答サービス、`open-cuda`とSET
+  構成)——Windowsインストーラーに任意タスクとして追加済み(下記
+  「インストーラー」節参照)。
+  **正直な開示(誇張しないこと)**: `open-cuda`自体は`aruaru-llm`
+  バイナリへ静的リンクされるライブラリであり、独立したサービスとして
+  別途インストールする対象ではありません(`open-english`側の
+  2026-08-19/2026-08-20の調査で確認済みの事実、詳細は
+  `open-english/CLAUDE.md`参照)。`open-directx`は`open-cuda`とは
+  無関係な別リポジトリ(Breakout風2Dデモ、GPU描画の実験用)であり、
+  `open-easy-web`・`aruaru-llm`とも機能的な依存関係はありません
+  ——このため`open-cuda`/`open-directx`は本リポジトリのインストーラー
+  へは同梱していません(実体の無い「同梱したふり」を避けるため)。
+
+**English**: `https://easy-web.tokyo` is an operational demo site
+showing how easy it is to **assign either a paid domain of your choice,
+or a free domain/subdomain via DuckDNS, and add HTTPS** (see the "Local
+mode" and "Free domain setup wizard" sections above).
+
+- **open-easy-web is Apache+Nginx compatible** (auto-generated vhosts,
+  see the "Delivery engine" section above), and **RPoem (formerly
+  poem-cosmo-tauri) is Tomcat-compatible** as the application-server
+  layer. Combining the two gives you a high-speed, high-security
+  "4-layer, 4-fold" communication setup (see `CLAUDE.md`'s "Role of the
+  application server layer" section and `open-raid-z/CLAUDE.md`).
+- **Combining open-raid-z and aruaru-db** also gives you a high-speed,
+  high-security DATABASE. **Adding PostgreSQL on top** (same design
+  philosophy as the DUAL DB simultaneous-write feature already
+  implemented and field-tested in open-english) means **regardless of
+  which database you install first or second, if one DATABASE fails,
+  the other automatically completes/recovers its data**. **Honest
+  disclosure**: the actual auto-heal/auto-recovery implementation lives
+  in `aruaru-db`/`open-raid-z` — `open-easy-web` itself only provides
+  the foundation (domain assignment, reverse proxying) for using them
+  together.
+- **Recommended companion to install alongside**: `aruaru-llm` (a
+  contract-free proprietary AI chat-commerce response service, paired
+  with `open-cuda` in a SET configuration) — already added as an
+  optional installer task (see the "Installer" section below).
+  **Honest disclosure (not overclaiming)**: `open-cuda` itself is a
+  library statically linked into the `aruaru-llm` binary, not a
+  standalone service to install separately (confirmed by open-english's
+  2026-08-19/2026-08-20 investigation, see `open-english/CLAUDE.md`).
+  `open-directx` is an unrelated separate repository (a Breakout-style
+  2D demo for experimenting with GPU rendering) with no functional
+  dependency on `open-cuda`, `open-easy-web`, or `aruaru-llm` — for
+  this reason, `open-cuda`/`open-directx` are NOT bundled into this
+  repository's installer (to avoid pretending to bundle something with
+  no substance behind it).
+
+## いまできること
+
+- **スマホ縦画面レスポンシブ対応・英語(日本語)ハイブリッド表示(2026-07-24追加)**:
+  `index.html`が`@media (max-width: 600px)`でスマホ幅の単一カラム
+  レイアウト・タップ操作向けサイズ(44px以上)に自動切り替わる。UIの
+  見出し・ボタン・フォームラベルは「英語表記の直後に(日本語)」形式
+  (例: `Save (保存)`)で常時両方表示(切り替えスイッチャーではない)。
+- **サイト管理画面**: open-easy-web自身・WordPress・Laravel・FastAPIなど
+  任意のバックエンドスタックのデプロイ先(IPアドレス/ドメイン/サブドメイン/
+  ポート/パス)を複数登録し、`localStorage` に保存してワンクリックで選択・
+  疎通確認できる(KUSANAGIのサイト一覧に相当)。カードごとに**「接続テスト」
+  ボタン**(選択中のサイトを変えずに単純なHTTP到達性確認のみ実行)、ポート
+  番号の入力検証(1〜65535)、登録済みサイト一覧の**JSONエクスポート/
+  インポート**(バックアップ・他ブラウザへの持ち出し用)、削除前の確認
+  ダイアログを備える。
+- **システムメモリ・ディスク使用状況の円グラフ表示(2026-07-31/
+  2026-08-04追加)**: このサーバーが動いているマシンの実メモリ・
+  仮想メモリ(スワップ)・実HDD/SSDの使用状況を`sysinfo`クレート経由で
+  取得し、GUIの円グラフ+GiB表示で確認できる(`System/GetMemory`・
+  `System/GetDisk`(Connect)、`x-admin-token`認証)。同じ画面から電源プロファイル
+  (省電力/省メモリ/常時電源接続、独立チェックボックスで組み合わせ自由)も
+  切り替えられる。
+- **IPアドレスから起動**: `scripts/serve.sh` でローカル/VPS上の任意のIP・
+  ポートにbindして配信できる。
+- **vhost生成・HTTPS自動設定**: `scripts/gen-vhost.sh` で、
+  ドメイン・IP・バックエンドスタックの組み合わせから Nginx/Apache の
+  vhost(HTTP→HTTPSリダイレクト込み)を生成する。`static`(静的サイト)・
+  `proxy`(任意のHTTPバックエンド向け汎用リバースプロキシ)・
+  `wordpress`・`laravel`・`fastapi` の5スタックに対応。**高速化
+  チューニング(gzip・静的キャッシュ・FastCGIバッファ・upstream
+  keepalive)はここには含まれない**(`open-runo`/RPoem(旧poem-cosmo-tauri)側の
+  ネイティブRust実装が担当)。
+- **HTTPS(TLS)の自動監視・自動更新**: `scripts/setup-tls.sh` で
+  Let's Encrypt(certbot)の証明書取得、`deploy/systemd/
+  install-systemd-units.sh` で「1日2回の自動更新
+  (`easyweb-tls-renew.timer`)」と「1日1回の失効監視
+  (`easyweb-tls-monitor.timer` → `scripts/check-all-tls.sh`)」を有効化できる。
+- **VPSへのデプロイ**: Windows PowerShellから `scripts/deploy-vps.ps1` を
+  実行するだけで、ビルド → VPSへのアップロード → 起動までを自動化できる。
+- **分散同期・ディザスタリカバリ(2026-07-25〜27追加)**: 姉妹リポジトリ
+  `open-raid-z`の切断耐性ジャーナル(`open_raid_z_core::disaster_recovery`)
+  を再利用し、アップロードされたサイトファイルの実書き込みを
+  `DisasterRecoveryManager::protect_write`経由で保護する(電源断・
+  ディスク切断時もジャーナルに記録済みのため、再起動時に自動リプレイで
+  復旧できる)。登録済みVPS同期先(SFTP)へのファイル複製、Email/
+  Googleドライブへのオフサイト退避先設定にも対応(`DistSync/*`(Connect)
+  管理API)。正直な開示: 実SMTPサーバー/実Googleドライブアカウントでの
+  E2E確認は未実施(ローカルモックのみで検証)、詳細は`CLAUDE.md`参照。
+- **アカウント認証(パスワード不使用)**: 固定パスワードを一切使わず、
+  メール1・メール2(セカンドメール)・電話番号のいずれかへのワンタイム
+  パスワード(OTP)でログインする。認証アプリ(TOTP、Google Authenticator
+  等)による2段階認証も有効化でき、**メールOTPと認証アプリコードの
+  どちらか一方だけでもログイン可能**(2FA有効時、メールOTPを経由せず
+  認証アプリのコードだけでログインする専用の導線も用意)。連絡先の変更は
+  必ず現在の主メール宛の確認リンク経由(アカウント乗っ取り防止)。
+  **2026-07-15時点、セキュリティ上の理由で公開の新規登録(サインアップ)は
+  無効化されており、起動時にシードされる固定アカウント1件のみがログイン
+  可能**(`server/src/main.rs`の`FIXED_ACCOUNT_EMAIL`)。複数アカウントを
+  運用したい場合は、現状はこの固定アカウントの仕組みを自分の環境向けに
+  書き換える必要がある。
+- **AIによる自動PHP判定**: サイトへファイルをアップロードすると、外部LLM・
+  契約不要の自己学習型AI(ファイル拡張子・`<?php`タグ・`wp-config.php`・
+  `composer.json`等のシグネチャをスコアリング)がPHPサイトかどうかを判定し、
+  該当すればnginx + PHP-FPMのvhostを自動生成・配置する。判定結果は
+  手動で訂正でき、訂正のたびにAIの重みがオンライン学習(EWMA式)で
+  補正される。
+- **共有バックエンドへの動的登録(「分身の術」)**: ドメインごとに
+  `open-runo`/RPoem(旧poem-cosmo-tauri)の新規プロセスを個別インストール
+  する代わりに、既に稼働中の共有バックエンドへこのサイトのドメインを
+  動的登録できる(ドメイン追加のたびにバックエンドプロセスを増やす
+  必要が無い)。
+- **簡単ドメイン設定ウィザード(無料DDNS/DuckDNS、最大20ドメイン対応、
+  2026-07-23新設)**: 固定IPを持たないDDNS環境向けに、`open-web-server`
+  側の新設管理APIを1画面のウィザードから呼び出す。(a) DuckDNS
+  (duckdns.org)アカウント作成への外部リンク案内、(b) 登録済みドメイン
+  一覧(残り枠・個別削除ボタン付き)、(c) サブドメイン名+トークン入力→
+  「追加&疎通確認」、(d) 成功後にSFTP接続コマンド例を表示(複数ドメイン
+  登録時はどれを使うか選択可能)。1インスタンスにつき最大20ドメインまで
+  登録・自動更新できる。**正直な開示**: DuckDNSアカウント自体の取得
+  (OAuthログイン)は自動化しない。呼び出し先の`open-web-server`が別
+  オリジンの場合、`open-web-server`側で`OPEN_WEB_SERVER_CORS_ALLOWED_
+  ORIGINS`(2026-07-23新設)を設定すれば呼び出せるようになる(詳細は
+  [PORTING.md](PORTING.md)参照)。
+
+## いまできないこと(正直な範囲)
+
+- **Web高速化(KUSANAGI的なgzip圧縮・静的キャッシュ・FastCGIバッファ調整・
+  upstream keepaliveプーリング)は持たない**(意図的にスコープ外——
+  `open-runo`/RPoem(旧poem-cosmo-tauri)側のネイティブRust実装を参照)。
+- **DB(データベース)への接続機能は持たない**。SQL実行・GraphQLクエリなど
+  特定のデータベース製品に依存する機能は意図的にスコープ外。
+- ページネーション・エラー時の自動リトライは未実装。
+- Tauriのようなネイティブアプリ体験は提供しない(ブラウザで動くWASMのみ)。
+- **実際のドメイン取得・DNSレコード登録(レジストラでの操作)はこの
+  リポジトリからは行わない**。ここで自動化しているのは、取得済み
+  ドメインに対する「vhost設定生成」「TLS証明書の取得・監視・自動更新」
+  までであり、DNS登録自体は利用者がレジストラで行う。
+- 実際のVPS契約(レンタルサーバー事業者との契約)もこのリポジトリからは
+  行わない。
+
+## ビルド方法
+
+Node.js・npm・TypeScriptは使わない。Rustツールチェーンのみで完結する。
+
+```bash
+rustup target add wasm32-unknown-unknown        # 初回のみ
+cargo install wasm-bindgen-cli --version 0.2.126 # 初回のみ(Cargo.lockのバージョンと一致させること)
+
+cargo build --target wasm32-unknown-unknown
+wasm-bindgen --target web --no-typescript --out-dir pkg \
+  target/wasm32-unknown-unknown/debug/open_easy_web.wasm
+
+# 静的サーバーで配信して開く(何でもよい。例:)
+python -m http.server 8080
+# ブラウザで http://localhost:8080/index.html を開く
+```
+
+> ⚠️ **ビルド時の注意(ネットワークドライブ環境)**: リポジトリがSMB等の
+> ネットワーク共有ドライブ上にある場合、`cargo build`の出力(`target/`)や
+> `wasm-bindgen`の入出力をそのドライブ上で直接読み書きすると、書き込み
+> 直後の読み取りが古い内容を返す(読み取りキャッシュの不整合)ことがある
+> (2026-07-20に実際に発生・確認済み)。再ビルドしても変更が反映されない
+> 場合は、`cargo build --target-dir <ローカルドライブの一時ディレクトリ>`
+> でビルド出力先をネットワークドライブ外(ローカルのC:等)に切り替え、
+> `wasm-bindgen`もそのローカルコピーに対して実行すると解消する。
+
+## サーバー側(open-easy-web-server)のインストール(2026-07-23追加)
+
+上記はWASMフロントエンド(`pkg/`+`index.html`)のビルド手順。バックエンド
+API(`server/`配下、フォルダー作成・アップロード・AI自動PHP判定・
+nginx+PHP-FPM自動構成を担う`open-easy-web-server`バイナリ)は別途、
+`install.sh`(Linux、systemdサービス登録)・`install.ps1`(Windows、
+サービス登録案内)・`.github/workflows/release.yml`(タグpush時に
+Linux x86_64・Windows x86_64向けバイナリを自動ビルドし
+[GitHub Releases](https://github.com/aon-co-jp/open-easy-web/releases)へ
+添付)を用意した。**正直な開示**: `open-easy-web-server`は固定アカウント
+制の認証を持ち、環境変数`OPEN_EASYWEB_FIXED_ACCOUNT_EMAIL`が未設定だと
+起動時にpanicする(誰もログインできない状態でサイレントに動き続ける
+より起動失敗のほうが安全という設計判断)。この配布物にWASM
+フロントエンドは含まれない(上記のビルド手順で別途生成すること)。
+
+```
+curl -fsSL https://github.com/aon-co-jp/open-easy-web/releases/latest/download/open-easy-web-server-linux-x86_64.tar.gz | tar xz
+sudo ./install.sh
+```
+
+### Windows向けインストーラー(2026-08-19新設、2026-08-20 サービス登録方式に一本化)
+
+`installer/open-easy-web-install.iss`(Inno Setup)は、既存の
+`install.ps1`/`uninstall.ps1`(Windowsサービス`OpenEasyWeb`として登録)を
+そのまま呼び出す薄いラッパー。open-easy-webは複数の関連リポジトリを
+統括する中央サービスであるため、**常時稼働するWindowsサービスとして
+登録される方式のみを正式採用**している(手動起動する単体プロセス方式は
+不適切と判断し廃止した)。ビルド方法・詳細はスクリプト冒頭のコメント、
+および`CLAUDE.md`のHANDOFF(2026-08-20)を参照。
+
+### macOS向けインストール(2026-08-06追加)
+
+`install-macos.sh`(launchd用plistを`~/Library/LaunchAgents/`へ配置)を
+用意した。**正直な開示**: この開発環境はWindows機のため、実際のmacOS
+環境でのビルド・`launchctl`実行・動作確認は一切行っていない
+(シェル構文検証・plistのXML構文検証のみ)。Apple Silicon
+(`aarch64-apple-darwin`)/Intel(`x86_64-apple-darwin`)向けのビルド自体は
+Appleのプロプライエタリなツールチェーン(Xcode Command Line Tools)が
+必要でWindows上ではクロスコンパイルできないため、GitHub Actions
+(`macos-latest`ランナー)側でビルドする方針とした
+(`.github/workflows/release.yml`の`build-macos`ジョブ、次回タグpush時に
+実際に動作するか要確認)。
+
+```
+curl -fsSL https://github.com/aon-co-jp/open-easy-web/releases/latest/download/open-easy-web-server-macos-x86_64.tar.gz | tar xz
+./install-macos.sh
+# plist内のOPEN_EASYWEB_FIXED_ACCOUNT_EMAIL等を編集後:
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/jp.co.aon.open-easy-web.plist
+```
+
+対になる`uninstall-macos.sh`も用意した(停止・plist削除、ユーザーデータは
+削除しない)。
+
+### インストール/アンインストール時のデータ移行(2026-07-29追加)
+
+`install.sh`/`install.ps1`は、実行時に「既存の関連DATAを取り込むか」を
+尋ねます。取り込む場合はローカルのtar.gz・GitHubリポジトリ・rclone
+(Googleドライブ等)のいずれかから復元できます。対になる
+`uninstall.sh`/`uninstall.ps1`(新設)は、アンインストール前に同じ
+3方式でデータを退避するか尋ねます。実体は`scripts/data-portability.sh`
+(`.ps1`)——GoogleドライブそのものへのOAuth認証は本ソフトウェアから
+代行しません(`rclone config`で事前にご自身が設定したリモートを使う
+方式です)。GitHubリポジトリの公開/非公開は、リポジトリ作成時にご自身で
+選んだ設定に従います。
+
+## IPアドレスから起動する
+
+```bash
+scripts/serve.sh 0.0.0.0 8080        # 全インターフェースで待受
+scripts/serve.sh 192.168.1.50 8080   # 特定のIPアドレスのみで待受
+```
+
+## ローカルモード: Windows PC上の簡易リバースプロキシ + DuckDNS(2026-09-07追加)
+
+**English**: This is a NEW, opt-in local mode for running
+`open-easy-web-server` on your own Windows/Linux/macOS PC as a simple
+plain-HTTP reverse proxy in front of another local app — for example
+[open-english](https://github.com/aon-co-jp/open-english)'s local server
+(`127.0.0.1:4601` by default). It is a separate code path from the
+existing VPS-oriented nginx/PHP-FPM feature described above and does not
+touch it. **Honest limitations**: this proxy does NOT terminate TLS —
+plain HTTP only. It does NOT default to port 80/443 (binding those on
+Windows normally needs admin rights / URL ACL reservations, which this
+tool never attempts silently) — the default listen address is
+`127.0.0.1:8090`. DuckDNS support only points a domain name at your
+current IP address; it does NOT open router ports or set up port
+forwarding for you, and it does NOT give you HTTPS.
+
+**日本語**: これはWindows/Linux/macOSの自分のPC上で
+`open-easy-web-server`を、別のローカルアプリ(例:
+[open-english](https://github.com/aon-co-jp/open-english)のローカル
+サーバー、既定`127.0.0.1:4601`)の手前に立つ**単純な平文HTTPリバース
+プロキシ**として動かす、新規のopt-in機能です。上記のVPS向けnginx/
+PHP-FPM機能とは完全に別の経路で、そちらには一切手を加えていません。
+**正直な限界**: このプロキシはTLS終端を一切行いません(平文HTTPのみ)。
+80/443番ポートへは既定でbindしません(Windowsで特権ポートへのbindは
+通常管理者権限/URL ACL予約を要し、それを黙って試みることはありません)
+——既定の待受アドレスは`127.0.0.1:8090`です。DuckDNS対応はドメイン名を
+現在のIPアドレスへ結びつけるだけで、ルーターのポート開放・ポート
+フォワーディングは行いません。HTTPS化も行いません。
+
+### 起動方法 / How to run
+
+```powershell
+$env:OPEN_EASY_WEB_LOCAL_MODE = "1"
+$env:OPEN_EASY_WEB_LOCAL_BIND = "127.0.0.1:8090"       # 既定値(省略可)
+$env:OPEN_EASY_WEB_LOCAL_BACKEND = "127.0.0.1:4601"    # 既定値、open-englishのローカルサーバー
+.\open-easy-web-server.exe
+```
+
+```bash
+OPEN_EASY_WEB_LOCAL_MODE=1 \
+OPEN_EASY_WEB_LOCAL_BIND=127.0.0.1:8090 \
+OPEN_EASY_WEB_LOCAL_BACKEND=127.0.0.1:4601 \
+./open-easy-web-server
+```
+
+起動後、`http://127.0.0.1:8090/`(または`OPEN_EASY_WEB_LOCAL_BIND`で
+指定したアドレス)へのアクセスが、そのまま`OPEN_EASY_WEB_LOCAL_BACKEND`
+(既定`127.0.0.1:4601`)へ転送されます。バックエンドが起動していない
+場合はクラッシュせず`502 Bad Gateway`を返します。
+
+### 無料のDuckDNSサブドメインを取得する / Getting a free DuckDNS subdomain
+
+1. https://www.duckdns.org/ へアクセスし、GitHub/Google等のアカウントで
+   サインインします(**アカウント作成自体はこのツールから自動化しません**
+   ——ユーザー自身がブラウザで行ってください)。
+2. 好きなサブドメイン名(例: `myopenenglish`)を登録すると
+   `myopenenglish.duckdns.org`が使えるようになり、ページ上に表示される
+   **token**(長い英数字の文字列)を控えます。
+3. このサーバーの`POST /v1/duckdns/update`エンドポイントへ、
+   `{"domain": "myopenenglish", "token": "<あなたのtoken>"}`を送ると、
+   DuckDNS側のIPアドレスがこのPCの現在のグローバルIPへ更新されます
+   (トークンはディスクへ保存されません、リクエストのたびに渡してください)。
+   ```bash
+   curl -X POST http://127.0.0.1:8090/v1/duckdns/update \
+     -H "Content-Type: application/json" \
+     -d '{"domain":"myopenenglish","token":"YOUR-TOKEN-HERE"}'
+   ```
+4. **これだけでは外部からアクセスできません**——ご自身のルーターで、
+   このPCの待受ポート(`OPEN_EASY_WEB_LOCAL_BIND`で指定したポート)への
+   ポートフォワーディングを別途設定する必要があります。
+
+### 既に持っている有料ドメインを使う / Using a domain you already own
+
+DuckDNSの代わりに、購入済みの独自ドメインを使うこともできます。
+ドメインのDNS管理画面で、Aレコードをご自宅ルーターの**グローバル
+(WAN側)IPアドレス**へ向け、ルーターでこのPCの待受ポートへポート
+フォワーディングを設定してください。DuckDNSと同様、これはIPアドレスの
+紐付けとポート到達性の話であり、HTTPS化は別途必要です。
+
+### 正直な開示・TLS/HTTPSは未対応 / Honest limitation: no TLS/HTTPS
+
+このローカルモードのリバースプロキシは**平文HTTPのみ**をサポートします。
+HTTPSで公開したい場合は、ご自身で証明書を用意し、別のTLS終端
+(例: `stunnel`・IIS・別のリバースプロキシ)をこの手前に置く必要が
+あります——このパスでは意図的にACME/Let's Encrypt自動取得は実装して
+いません(既存のVPS向け機能`server/src/tls.rs`はサーバー証明書として
+別の設計であり、このローカルモードとは無関係です)。
+
+## Android版: root化端末での外付けHDD対応 + ダウンロード導線(2026-08-04追加)
+
+`android/`に「外付けHDDをストレージに使う(root)」機能を追加(root化
+済み端末専用、`su`到達性を確認できない場合は起動を拒否——内部
+ストレージへの黙示的フォールバックはしない)。トップページ
+(`https://easy-web.tokyo/`)の「Completed Projects」に、open-easy-web
+自身の本番/デモ(`/demo`)/ダウンロード(Windows・Linux・Android APK、
+[GitHub Releases](https://github.com/aon-co-jp/open-easy-web/releases/latest))
+リンクを追加。詳細は[PORTING.md §15](PORTING.md#15-android版の外付けhdd対応--リリースワークフローのsibling依存漏れ2026-08-04)参照。
+
+## 更新のお知らせメール(標準機能、2026-11-04追加)
+
+バージョンアップが必要なとき、自動更新では対応できず**Claudeへの依頼が必要**なとき、**重い試験をVPSでは走らせず手元(WSL)で行う必要**があるときなどに、登録したメールアドレスへ**日英併記でお知らせ**する標準機能です(`server/src/update_notify.rs`)。
+
+- **宛先の登録**: ログイン後のメインページ「更新のお知らせメール」で、1行1件(20件まで)。登録は管理者(`x-admin-token`)だけ。**公開の自己登録にはしていません**(確認メールの無い登録は、他人のアドレスへの迷惑メールの踏み台になるため)。メールアドレスは `lettre` の解析 + 改行・空白・カンマ等の拒否で検証し、ヘッダー注入を防ぎます。
+- **お知らせの送信**: 外部の仕組み(`version-control`、`rsa-rs` の毎晩・毎朝の更新、自動保守など)が `POST /open_easy_web.admin.v1.Notify/Send`(`content-type: application/json`、`x-admin-token` 必須、本文 `{"kind","subject","body"}`)を呼びます。`kind` は `update-needed`(更新が必要)/ `needs-claude`(Claudeへの依頼が必要)/ `heavy-test`(重い試験を手元で)/ `info`。
+- **連投の抑制**: 同じ件名は6時間以内に再送しません(毎晩の実行で同じ知らせが溜まらないように)。履歴は直近50件を状態ファイルに残して画面に出します。
+- **管理API**(Connect(POST、RS-JSON)、`POST /open_easy_web.admin.v1.Notify/<Method>`、`x-admin-token` 必須): `Get`(宛先・履歴・SMTP設定の有無)、`SetRecipients`(`{"emails":[...]}`)、`Send`、`SendTest`。本文は RS-JSON の `from_str_secure`(16KiB・重複キー拒否)で読み、応答は `rust_json::fast` で書く。REST は使わない。
+- **設定**: SMTP は既存の `OPEN_EASYWEB_SMTP_*`(OTP メールと共通)。状態の保存先は `OPEN_EASYWEB_UPDATE_NOTIFY_FILE`(既定 `/var/www/.open-easy-web-update-notify.json`)。
+- **正直な限界**: SMTP 実送信は、本番の SMTP でしか確認できません(ローカルでは、認証・入力検証・保存・SMTP 未設定の断りまでを確認)。SMTP が未設定だと、送信は理由つきで断ります。
+
+## ストレージ(HDD/SSD)のメンテナンス(標準機能、2026-11-03追加)
+
+サーバーが動いているマシンの HDD/SSD を、**決まった規則だけで、安全に、定期的に**メンテナンスする標準機能です(AIは使いません)。中身は、姉妹リポジトリ [`vps-tidy`](https://github.com/aon-co-jp/vps-tidy)(Rust 製、Linux と Windows)で、ここは「サーバーへの組み込み」(設定の保存・定期実行・管理API・画面)です。
+
+- **健康チェック**(SMART など、読み取りだけ): Linux は `smartctl`(smartmontools)、Windows は `Get-PhysicalDisk` と `Get-StorageReliabilityCounter`(追加のソフト不要)。「正常 / 不明 / 注意 / 危険」と、その理由(代替処理セクター・保留セクター・SSD の消耗・温度・Windows の総合判定 など)を出す。取得できなかったもの(仮想ディスク・ツール無し)は「不明」で、「正常」とは言わない。
+- **無駄なデータの整理**: 古い実行ファイルの控え、古いログ、キャッシュ、cargo の `target`、`node_modules`、`.gradle`、`__pycache__` などを、**設定ファイル(`vps-tidy` の規則)の通りにだけ**消す。「保護パス」「使用中は消さない」「1回の削除の上限」「再生成できる目印の確認」「最近使ったものは消さない」を、すべての削除に適用する。
+- **最適化**: SSD は TRIM(Linux `fstrim`、Windows `Optimize-Volume -ReTrim`)、HDD は最適化(Windows `Optimize-Volume -Defrag`)。Windows では管理者権限が要る。
+- **既定は安全側**: 整理は**試し実行**(報告だけ)、最適化は**無効**。**自動でも実際に消す/実行する**には、画面で明示的に有効にして、確認ダイアログに答える。手動の「実際に実行」も、確認ダイアログが出る。
+- **画面**: ログイン後のメインページ「ストレージ(HDD/SSD)のメンテナンス」。健康チェック・整理の試し実行/実行・最適化の計画/実行・自動実行の設定(時刻・各項目の有効/無効)。
+- **管理API**(Connect(POST、RS-JSON)、`POST /open_easy_web.admin.v1.Storage/<Method>`、本文は JSON、`x-admin-token` 必須): `GetMaintenance`(設定と直近の結果)、`SetSettings`、`RunHealth`、`RunTidy`、`RunOptimize`(後の2つは、本文 `{"apply": true}` のときだけ実際に実行。省くと試し実行・計画だけ)。リクエスト本文は、RS-JSON の `from_str_secure`(サイズ4KiB・深さ・重複キーの上限つき)で読む。REST は使わない。
+- **自動実行**: 毎日、設定した時刻(既定 4 時、`OPEN_EASYWEB_STORAGE_TZ_OFFSET_HOURS` で時差、既定 9)に、健康チェックと整理を実行(最適化は、有効なら毎週日曜)。同じ日に二度は実行しない。結果は、画面と、状態ファイルに残る。
+- **設定**: 状態の保存先 `OPEN_EASYWEB_STORAGE_MAINTENANCE_FILE`(既定 `/var/www/.open-easy-web-storage-maintenance.json`)。整理の規則 `OPEN_EASYWEB_STORAGE_TIDY_CONFIG`(既定: Linux `/etc/vps-tidy/tidy.toml`、Windows `%LOCALAPPDATA%\\vps-tidy\\tidy.toml`)。規則の書き方は、`vps-tidy` の `tidy.example.toml` と、`tidy.example.windows.toml`。
+- **正直な限界**: 整理の規則ファイルが無いと、整理は何もせずに「規則を読めません」と報告する。SMART は、仮想ディスク(VPS など)では、取得できないことが多い。最適化は、Windows で管理者権限が無いと失敗する(失敗として報告する)。`vps-tidy` は、姉妹リポジトリとして、`../vps-tidy`(と、その依存の `../RS-JSON`)が、横に置いてあることを前提にしたパス依存(他の姉妹リポジトリと同じ運用)。
+
+## ロリポップ!向け時間指定オートクロール(cron相当、2026-10-08追加)
+
+指定した時刻・曜日に、ロリポップ!上のPHP等のURLを自動でHTTP呼び出しする機能です。
+ロリポップ側のcron機能やプランに依存せず、`open-easy-web-server`が内蔵スケジューラで実行します。
+
+- 設定: ログイン後のメインページ「ロリポップ!時間指定オートクロール」(GUI)、または管理API
+  `LolipopCron/*`(Connect、`x-admin-token`認証)。ジョブ名・URL・GET/POST・実行時刻(`03:00, 15:30`のように複数可)・曜日・タイムアウトを指定
+- 時刻はJST基準(環境変数`OPEN_EASYWEB_LOLIPOP_TZ_OFFSET_HOURS`で変更)。設定は`OPEN_EASYWEB_LOLIPOP_CRON_FILE`へ保存され再起動後も保持
+- **後追い実行**: サーバー停止中に過ぎた時刻は、起動後に1回だけ実行(既定ON、ジョブごとに無効化可、直近24時間以内の取りこぼしのみ)
+- 登録内容を、ロリポップ管理画面のcron設定へ貼れる「分 時 日 月 曜日」書式でも確認可能
+
+**正直な開示**: 実際のロリポップ!サーバーへの呼び出しは未検証(ローカルのモック先のみで検証)。
+スケジューラはサーバー起動中のみ動作します。
+
+## 廃止済みサービスの残骸監査(dry-run、2026-07-14追加)
+
+ドメイン/サブコンテンツを削除した後、そのサービス専用のsystemd
+unit・crontabエントリ・certbot証明書更新設定が残っていないかを検出
+します。**削除は一切行いません**(検出結果を一覧表示するのみ)——
+実際の削除は、一覧を確認した上で人間が個別に実行してください
+(誤検知で無関係なサービスを巻き添えにしないための意図的な設計)。
+
+```bash
+scripts/audit-orphaned-services.sh <廃止したサービス名やドメイン名>
+# 例:
+scripts/audit-orphaned-services.sh aruaru-web
+```
+
+## VPSへのデプロイ(Windows PowerShellから)
+
+```powershell
+.\scripts\deploy-vps.ps1 -VpsHost 203.0.113.10 -VpsUser root -StartServer
+```
+
+> ⚠️ **デプロイ先ソースツリーの乖離に注意(2026-07-28発見・教訓)**:
+> VPS上のデプロイ先ディレクトリが、実際に`aon-co-jp/open-easy-web`の
+> `git clone`そのものであることを必ず確認すること。過去に別の
+> メタリポジトリ(`aon-co-jp/RUNO`)のチェックアウト配下へ、未コミット
+> のまま手動でファイルを配置してしまい、GitHub側をいくら更新しても
+> 本番に一切反映されない状態が長期間続いていた実例がある(フロント
+> エンド・バックエンドの両方で発生)。`ls <デプロイ先>/src`と
+> ローカルの`src/`・`server/src/`を突き合わせ、モジュール数が一致する
+> ことを確認してから完了と報告すること。詳細な再発防止手順は
+> `PORTING.md`を参照。
+
+## vhost生成・ドメイン/サブドメインの登録
+
+```bash
+# open-easy-web自身(静的サイト)
+scripts/gen-vhost.sh --stack=static easyweb.example.com 203.0.113.10
+
+# 任意のバックエンドへの汎用リバースプロキシ
+scripts/gen-vhost.sh --stack=proxy tool.example.com 203.0.113.10 127.0.0.1:9000
+
+# WordPress(PHP-FPMソケット/アドレスを指定)
+scripts/gen-vhost.sh --stack=wordpress blog.example.com 203.0.113.10 \
+  unix:/run/php/php8.3-fpm.sock /var/www/blog
+
+# Laravel(publicディレクトリを明示)
+scripts/gen-vhost.sh --stack=laravel app.example.com 203.0.113.10 \
+  unix:/run/php/php8.3-fpm.sock /var/www/app/public
+
+# FastAPI(ASGIサーバーへのリバースプロキシ、WebSocket/ストリーミング対応)
+scripts/gen-vhost.sh --stack=fastapi api.example.com 203.0.113.10 127.0.0.1:8000
+```
+
+生成された設定ファイル(`deploy/generated/` 以下、`.gitignore` 対象)を
+Nginx/Apacheの設定ディレクトリに配置してリロードした後、証明書を取得する:
+
+```bash
+scripts/setup-tls.sh easyweb.example.com admin@example.com /var/www/easyweb.example.com
+
+# 自動更新(1日2回)+ 自動監視(1日1回、失効間近を検知)を有効化
+sudo deploy/systemd/install-systemd-units.sh
+```
+
+## 動作確認(このパスで実施)
+
+- `cargo check --target wasm32-unknown-unknown` / `cargo build --target
+  wasm32-unknown-unknown` / `cargo clippy --target wasm32-unknown-unknown`
+  ともに成功(警告0件)。
+- `wasm-bindgen --target web` で `pkg/open_easy_web.js` /
+  `pkg/open_easy_web_bg.wasm` を生成し、ビルド成果物を確認済み。
+- `scripts/gen-vhost.sh` を全5スタック(static/proxy/wordpress/laravel/
+  fastapi)で実行し、`{{DOMAIN}}`/`{{IP}}`/`{{UPSTREAM}}`/`{{WEBROOT}}`の
+  プレースホルダが正しく置換されることを確認済み。**Windows環境である
+  ため、`nginx -t`/`apache2ctl configtest`によるバイナリでの実構文検証は
+  この開発環境では未実施**(aruaru-webの過去パスがLinuxコンテナで
+  実施した検証と同様の手順を、実際にNginx/Apacheが利用可能な環境で
+  行うことを推奨。全テンプレートはaruaru-web側で検証済みだった
+  テンプレートから高速化ディレクティブのみを除去した差分であり、
+  文法的な破壊的変更は含まない)。
+- 実際のcertbotによるLet's Encrypt発行、`scripts/deploy-vps.ps1`の実VPS
+  環境での動作は未検証(詳細はCLAUDE.md参照)。
+
+## 構成
+
+```text
+open-easy-web/
+├── Cargo.toml             # ルートクレート(WASM UI、cdylib+rlib)
+├── src/
+│   ├── lib.rs
+│   ├── dom.rs
+│   ├── profiles.rs        # サイト管理(接続プロファイル)
+│   ├── shell.rs           # 画面HTML組み立て
+│   ├── api_auth.rs        # 認証API fetch()ラッパー
+│   ├── api_upload.rs      # アップロード/ドメイン登録API fetch()ラッパー
+│   ├── auth_ui.rs         # 認証UI DOM配線
+│   └── view_bridge.rs     # open-runo-view(Phase 3 SSR hydration)連携
+├── server/                # バックエンドREST API(別クレート、tokio/hyper直接実装)
+│   ├── Cargo.toml         # バイナリ名: open-easy-web-server
+│   └── src/               # auth/users/totp/mail/sms/tls/vhost/
+│                          # php_detector/upload/appserver_registration/main
+├── index.html
+├── pkg/                   # wasm-bindgen生成物(.gitignore対象)
+├── scripts/
+│   ├── serve.sh / deploy-vps.ps1 / gen-vhost.sh
+│   ├── setup-tls.sh / check-tls.sh / check-all-tls.sh
+│   ├── switch-engine.sh / switch-app-server.sh
+│   └── audit-orphaned-services.sh
+├── deploy/
+│   ├── nginx/vhost-{static,proxy,wordpress,laravel,fastapi,php,php-http-only}.conf.template
+│   ├── apache/vhost-{static,proxy,wordpress,laravel,fastapi,php}.conf.template
+│   ├── systemd/
+│   └── generated/          # .gitignore対象
+├── docs/
+│   └── HYBRID_NETWORK_ARCHITECTURE.md
+├── PORTING.md
+└── CLAUDE.md
+```
+
+## 関連プロジェクト
+
+- **aruaru-web**(分離元、高速化スコープの旧居場所): https://github.com/aon-co-jp/aruaru-web
+- **open-runo**(高速化機能のネイティブRust実装先): https://github.com/aon-co-jp/open-runo
+- **RPoem**(旧poem-cosmo-tauri、実装の先行地点): https://github.com/aon-co-jp/RPoem
+- **aruaru-db**: https://github.com/aon-co-jp/aruaru-db
+- **open-web-server**: https://github.com/aon-co-jp/open-web-server
+- **open-raid-z**(開発ルールの正本): https://github.com/aon-co-jp/open-raid-z
+- **rs-to-readme**: https://github.com/aon-co-jp/rs-to-readme
+
+## License
+
+Apache-2.0
+
+## ロリポップ!向け時間指定オートクロール(cron相当、2026-10-08)と後追い実行・設定画面
+指定した時刻・曜日にURLを自動でHTTP呼び出しする内蔵スケジューラ(`server/src/lolipop_cron.rs`)。管理API `LolipopCron/*`(Connect)、設定画面(WASM)、
+ロリポップ管理画面用のcron書式の書き出し、**サーバー停止中に過ぎた時刻の後追い実行**(既定ON・直近24時間・1回のみ)を実装。テスト7件合格、ローカルで再起動後の後追いも実測済み。
+実ロリポップ(`www.ion.tokyo`)へのGET 1回でHTTP 200を確認。**未確認**: ロリポップ上での長期の自動発火。
+**お引越し**: 設定は `OPEN_EASYWEB_LOLIPOP_CRON_FILE`(既定`/var/www/.open-easy-web-lolipop-cron.json`)のJSON1ファイル。新サーバーへはこのファイルをコピーし、環境変数`OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN`を設定すれば移せる。
+
+## JSON処理の使用方針: `parse_secure_sonic`(速い型+安全)と`sonic-rs`は使える所では全て使う(2026-10-14、ユーザー指示)
+正本は[`RS-JSON`](https://github.com/aon-co-jp/RS-JSON)(`README.md`・`PORTING.md`)。
+
+**方針**: JSONを読む所は、使える所では**全て** `rust-json`(RS-JSON)の `parse_secure_sonic`(`fast`機能、結果は`sonic_rs::Value`)を使う。
+`sonic-rs` を直接使える所(型付き構造体への読み込みなど)も同様。使えない所は `parse_secure`(結果は`serde_json::Value`)を使う。
+外部から来る信頼できない入力(HTTP本文・ネットワーク越しのファイル・アップロード)は、**必ずサイズ・深さ・重複キーの上限つき**で読む。
+
+**実測(7 MB・4万件)**: `serde_json` 200 ms / `parse_secure` 217 ms / **`parse_secure_sonic` 83 ms(約2.4倍速い、防御込み)** / `sonic-rs`そのまま 33 ms(約6倍、防御なし)。
+`serde_json::Value`に読む限りSIMDでもほぼ速くならない(188 ms)。**速さの源は、結果を連続した領域に詰め込む値の型**。
+
+**使える所 / 使えない所**
+- ✅ 読み取り中心で、JSONを大きく・頻繁に読む所(キャッシュJSON、設定、APIの応答、ログ、インデックス)。
+- ✅ 外部からの入力の入口(速さより防御が目的。`parse_secure`でも可)。
+- ⚠️ `serde_json::Value`を関数間で受け渡している既存コードは、型を`sonic_rs::Value`に直す書き換えが要る(`JsonValueTrait`/`JsonContainerTrait`のメソッド)。書き換えずに`serde_json::Value`へ読むと速くならない。
+- ❌ WASM(`rust_json::light`、依存ゼロ)、PHP/JavaScript側のJSON処理(Rustの部品は使えない)。
+- 注意: 依存先の`sonic-rs`は内部で`unsafe`を使う(自前コードに`unsafe`は無い)。小さなJSON(数KB)では体感差が出ない。速度目的の書き換えは、実測で効く所から。
+
+**導入**: `Cargo.toml`に `rust-json = { path = "../RS-JSON", features = ["fast"] }`。使用例は`RS-JSON/README.md`。
+
+**このリポジトリでの適用状況**: 未適用(方針のみ)。コードの切り替えは、JSONを大きく・頻繁に読む所から実測して順に行う。
+
+---
+
+作者 / Author: 石 塚 正 浩（MASAHIRO ISHIZUKA） (https://github.com/aon-co-jp)
+
+## API 方針: REST 全廃・Connect(2026-11-04)
+新しい管理APIは REST で作らず、Connect(POST、RS-JSON)(`POST /open_easy_web.admin.v1.<Service>/<Method>`、JSON、読み書きは RS-JSON)にします。`curl` から呼べ、画面(WASM)は `fetch` のままです。旧 REST の経路は削除しました。ほかの既存の REST 風 API も、すべて Connect へ移しました(2026-11-04。例外と対応表は `CLAUDE.md`)。詳細は `CLAUDE.md`「API 方針」と `proto/open_easy_web/admin/v1/admin.proto`。
+
+## API 方針: REST 全廃・gRPC / Connect へ (2026-11-04)
+
+### 日本語
+- **REST は全廃する。新しい API は REST で作らない。** ブラウザや `curl` から呼ぶ API は **Connect の単純呼び出し**(`POST /<パッケージ>.<Service>/<Method>`、`content-type: application/json`、本文は JSON)、サービス間は **gRPC / gRPC-web**(RPoem の管理API `open_runo.admin.v1.Admin` と同じ流儀)。ストリーミングは、必要になってから。
+- **既存の REST は、触るときに順に移す。** 移したら旧 REST の経路は消す。移行が終わるまで残るが、**新規には追加しない**。
+- **JSON は RS-JSON に統一**する(読み込みは `from_str_secure` / `parse_secure` でサイズ・深さ・重複キーの上限つき、書き出しは `rust_json::fast`)。ブラウザの WASM に `prost` は入れない(サイズが増えるため)。
+- **例外(自分たちの API ではなく、相手の規格が決めているもの)**: ACME、OAuth/OIDC のコールバック、第三者(GitHub など)からの Webhook、ヘルスチェック、静的ファイル配信、OTLP など。これらは規格どおりの HTTP を受ける。
+- 参考実装: `RPoem`(`open_runo.admin.v1.Admin`)、`open-easy-web`(`server/src/connect.rs`、`proto/open_easy_web/admin/v1/admin.proto`)。
+- ※ このリポジトリのコードが既に方針どおりかどうかは、各リポジトリの現状による。この節は方針の記録であり、コードの変更を意味しない。
+
+### English
+- **REST is being abolished. New APIs are not built as REST.** APIs called from browsers or `curl` use **Connect unary calls** (`POST /<package>.<Service>/<Method>`, `content-type: application/json`, JSON body); service-to-service calls use **gRPC / gRPC-web** (the same style as RPoem's admin API `open_runo.admin.v1.Admin`). Streaming only when it is actually needed.
+- **Existing REST endpoints are migrated one by one, when they are touched.** The old REST route is removed once migrated. Until migration is finished they remain, but **no new ones are added**.
+- **JSON is unified on RS-JSON**: reading with `from_str_secure` / `parse_secure` (size, depth and duplicate-key limits), writing with `rust_json::fast`. `prost` is not put into browser WASM (it would grow the binary).
+- **Exceptions (shapes dictated by someone else's standard, not our own API)**: ACME, OAuth/OIDC callbacks, webhooks from third parties (e.g. GitHub), health checks, static file serving, OTLP, and so on. These accept plain HTTP as the standard requires.
+- Reference implementations: `RPoem` (`open_runo.admin.v1.Admin`) and `open-easy-web` (`server/src/connect.rs`, `proto/open_easy_web/admin/v1/admin.proto`).
+- Note: whether the code in a given repository already follows this policy depends on that repository. This section records the policy; it does not mean the code has been changed.
+
+### Deutsch (KI-Übersetzung, redaktionell überarbeitet; noch nicht von Muttersprachlern geprüft)
+- **REST wird vollständig abgeschafft; neue APIs entstehen nicht mehr als REST.** APIs, die aus dem Browser oder per `curl` aufgerufen werden, verwenden **unäre Connect-Aufrufe** (`POST /<Paket>.<Service>/<Methode>`, `content-type: application/json`, JSON-Body). Zwischen Diensten kommen **gRPC bzw. gRPC-web** zum Einsatz, im selben Stil wie die Admin-API von RPoem (`open_runo.admin.v1.Admin`). Streaming wird erst ergänzt, wenn es tatsächlich gebraucht wird.
+- **Bestehende REST-Endpunkte werden schrittweise umgestellt, und zwar immer dann, wenn man ohnehin an ihnen arbeitet.** Sobald ein Endpunkt umgestellt ist, wird die alte REST-Route entfernt. Bis zum Abschluss der Migration bleiben die übrigen bestehen, es werden aber **keine neuen mehr hinzugefügt**.
+- **JSON wird einheitlich über RS-JSON verarbeitet**: Gelesen wird mit `from_str_secure` bzw. `parse_secure` (mit Obergrenzen für Größe, Verschachtelungstiefe und doppelte Schlüssel), geschrieben mit `rust_json::fast`. `prost` wird nicht in das Browser-WASM aufgenommen, da es die Datei vergrößern würde.
+- **Ausnahmen (Schnittstellen, deren Form ein fremder Standard vorgibt und die nicht zu unserer eigenen API gehören)**: ACME, OAuth/OIDC-Callbacks, Webhooks von Drittanbietern (z. B. GitHub), Health-Checks, die Auslieferung statischer Dateien, OTLP und Ähnliches. Diese nehmen, wie vom jeweiligen Standard verlangt, gewöhnliches HTTP entgegen.
+- Referenzimplementierungen: `RPoem` (`open_runo.admin.v1.Admin`) und `open-easy-web` (`server/src/connect.rs`, `proto/open_easy_web/admin/v1/admin.proto`).
+- Hinweis: Ob der Code eines einzelnen Repositorys diese Richtlinie bereits erfüllt, hängt vom jeweiligen Repository ab. Dieser Abschnitt dokumentiert lediglich die Richtlinie; er besagt nicht, dass der Code schon angepasst wurde.
+
+### Русский (перевод выполнен с помощью ИИ и отредактирован; носителями языка пока не проверен)
+- **От REST мы полностью отказываемся; новые API больше не создаются в стиле REST.** API, к которым обращаются из браузера или через `curl`, используют **унарные вызовы Connect** (`POST /<пакет>.<Service>/<Method>`, `content-type: application/json`, тело запроса — JSON). Для взаимодействия между сервисами применяются **gRPC и gRPC-web** — в том же стиле, что и административный API RPoem (`open_runo.admin.v1.Admin`). Потоковая передача данных добавляется лишь тогда, когда в ней действительно возникает необходимость.
+- **Существующие REST-эндпоинты переводятся поэтапно — по мере того, как с ними приходится работать.** После перевода старый REST-маршрут удаляется. Пока миграция не завершена, оставшиеся эндпоинты сохраняются, но **новые не добавляются**.
+- **Работа с JSON унифицирована на основе RS-JSON**: чтение — через `from_str_secure` или `parse_secure` (с ограничениями на размер, глубину вложенности и повторяющиеся ключи), запись — через `rust_json::fast`. `prost` в браузерный WASM не включается, поскольку это увеличило бы размер файла.
+- **Исключения (интерфейсы, форму которых определяет чужой стандарт, а не наш собственный API)**: ACME, обратные вызовы OAuth/OIDC, вебхуки сторонних сервисов (например, GitHub), проверки работоспособности, раздача статических файлов, OTLP и тому подобное. Такие интерфейсы принимают обычный HTTP, как того требует соответствующий стандарт.
+- Эталонные реализации: `RPoem` (`open_runo.admin.v1.Admin`) и `open-easy-web` (`server/src/connect.rs`, `proto/open_easy_web/admin/v1/admin.proto`).
+- Примечание: соответствует ли код конкретного репозитория этой политике, зависит от самого репозитория. Данный раздел лишь фиксирует политику и не означает, что код уже изменён.
+
+## API 方針の補足: 用語の整理と使い分け (2026-11-04)
+
+### 日本語
+**1つに統一するものではなく、別の層の話です。** 「REST の代わり」になるのは Connect・gRPC・GraphQL だけで、WASM は画面を作る技術です。
+
+| 用語 | 何か | REST の代わりか |
+|---|---|---|
+| REST | URL と HTTP メソッドで操作を表す API の作り方 | 全廃する側 |
+| **Connect** | `POST /サービス名/メソッド名` に JSON を送る形式。`curl` でもブラウザの `fetch` でも呼べる | はい(**採用**) |
+| **gRPC** | 同じ「サービス/メソッド」の考え方を、バイナリ(protobuf)と HTTP/2 で行う形式。速く、ストリーミングも得意 | はい(**サービス同士に採用**) |
+| gRPC-web | gRPC のブラウザ向けの変形版 | はい(必要なら) |
+| GraphQL | 欲しい項目を問い合わせる形式 | 一部だけ(**問い合わせ(読み取り)専用**) |
+| WASM | Rust をブラウザの中で動かす仕組み | いいえ(画面を作る技術) |
+
+- **ブラウザの画面や `curl` から呼ぶ API は Connect**(POST、JSON を RS-JSON で読み書き)。ブラウザの WASM は素の gRPC を話せず、Connect なら `fetch` のままで、`prost` を足さずに済む(画面のサイズも増えない)。
+- **サービス同士の通信(サーバー間、重い処理、ストリーミング)は gRPC。** 多くは Connect で足りるので、ストリーミングが必要になった所だけ gRPC に上げる。
+- **GraphQL は、まとめて問い合わせたいときの読み取り専用。** 書き込み(操作)には使わない。
+- **WASM は画面を作る技術として、そのまま使う。** 画面から呼ぶ API が Connect になっただけ。
+- 外部の規格が形を決めるもの(ACME、OAuth のコールバック、第三者の Webhook、ヘルスチェック、静的ファイル、OTLP)は、規格どおりの HTTP のまま。
+- **迷ったら Connect。**
+
+### English
+**These are not alternatives to unify; they sit at different layers.** Only Connect, gRPC and GraphQL can replace REST; WASM is a way to build the UI.
+
+| Term | What it is | Replaces REST? |
+|---|---|---|
+| REST | API style that expresses operations through URLs and HTTP methods | The thing being abolished |
+| **Connect** | `POST /Service/Method` with a JSON body; callable from `curl` and from a browser `fetch` | Yes (**adopted**) |
+| **gRPC** | The same service/method idea over binary (protobuf) and HTTP/2; fast, good at streaming | Yes (**for service-to-service**) |
+| gRPC-web | A browser-friendly variant of gRPC | Yes (if needed) |
+| GraphQL | A query language: ask for exactly the fields you want | Partly (**read-only queries**) |
+| WASM | Runs Rust inside the browser | No (a UI technology) |
+
+- **APIs called from browser screens or `curl` use Connect** (POST, JSON read and written with RS-JSON). Browser WASM cannot speak plain gRPC; with Connect it stays a `fetch`, and `prost` is not needed (the binary does not grow).
+- **Service-to-service calls (server to server, heavy work, streaming) use gRPC.** Connect is enough in most places; move a call to gRPC only where streaming is actually needed.
+- **GraphQL is read-only**, for queries that gather several pieces of data. It is not used for writes (operations).
+- **WASM stays as the way to build the UI.** The API it calls simply became Connect.
+- Interfaces whose shape an outside standard dictates (ACME, OAuth callbacks, third-party webhooks, health checks, static files, OTLP) stay plain HTTP.
+- **When in doubt, use Connect.**
+
+### Deutsch (KI-Übersetzung, sprachlich überarbeitet; noch nicht von Muttersprachlern geprüft)
+**Es geht nicht darum, eine einzige Technik auszuwählen – die Begriffe liegen auf unterschiedlichen Ebenen.** Als Ersatz für REST kommen nur Connect, gRPC und GraphQL in Frage; WASM dagegen ist eine Technik, mit der die Benutzeroberfläche gebaut wird.
+
+| Begriff | Was ist das? | Ersatz für REST? |
+|---|---|---|
+| REST | Ein API-Stil, bei dem Operationen über URLs und HTTP-Methoden ausgedrückt werden | wird abgeschafft |
+| **Connect** | `POST /Dienst/Methode` mit JSON im Body; aufrufbar mit `curl` ebenso wie mit `fetch` im Browser | ja (**gewählt**) |
+| **gRPC** | Dasselbe Prinzip aus Dienst und Methode, aber über binäres protobuf und HTTP/2; schnell und gut für Streaming geeignet | ja (**zwischen Diensten**) |
+| gRPC-web | Eine für den Browser angepasste Variante von gRPC | ja (bei Bedarf) |
+| GraphQL | Abfragesprache, mit der man genau die benötigten Felder anfordert | teilweise (**nur für lesende Abfragen**) |
+| WASM | Führt Rust-Code direkt im Browser aus | nein (Technik für die Oberfläche) |
+
+- **APIs, die von Browseroberflächen oder per `curl` aufgerufen werden, verwenden Connect** (POST; JSON wird mit RS-JSON gelesen und geschrieben). WASM im Browser kann kein reines gRPC sprechen. Mit Connect bleibt es bei einem gewöhnlichen `fetch`, und `prost` ist nicht nötig – die WASM-Datei wird dadurch nicht größer.
+- **Für die Kommunikation zwischen Diensten (Server zu Server, rechenintensive Aufgaben, Streaming) wird gRPC eingesetzt.** In den meisten Fällen reicht Connect aus; auf gRPC wird nur dort umgestellt, wo Streaming tatsächlich gebraucht wird.
+- **GraphQL dient ausschließlich lesenden Abfragen**, wenn mehrere Informationen gebündelt abgefragt werden sollen. Für Schreibzugriffe (Operationen) wird es nicht verwendet.
+- **WASM bleibt die Technik für die Oberfläche.** Geändert hat sich lediglich, dass die aufgerufene API nun auf Connect beruht.
+- Schnittstellen, deren Form durch einen externen Standard festgelegt ist (ACME, OAuth-Callbacks, Webhooks von Drittanbietern, Health-Checks, statische Dateien, OTLP), bleiben gewöhnliches HTTP.
+- **Im Zweifel: Connect.**
+
+### Русский (перевод выполнен с помощью ИИ и литературно отредактирован; носителями языка пока не проверен)
+**Это не варианты, из которых нужно выбрать один, а технологии разных уровней.** Заменить REST могут только Connect, gRPC и GraphQL; WASM же — это способ создания пользовательского интерфейса.
+
+| Термин | Что это | Заменяет REST? |
+|---|---|---|
+| REST | Стиль построения API, при котором операции выражаются через URL и HTTP-методы | отменяется |
+| **Connect** | `POST /Сервис/Метод` с телом в формате JSON; вызывается как из `curl`, так и из браузерного `fetch` | да (**выбран**) |
+| **gRPC** | Тот же принцип «сервис — метод», но поверх двоичного формата protobuf и HTTP/2; работает быстро и хорошо подходит для потоковой передачи | да (**для связи между сервисами**) |
+| gRPC-web | Адаптированный для браузера вариант gRPC | да (при необходимости) |
+| GraphQL | Язык запросов: клиент запрашивает ровно те поля, которые ему нужны | частично (**только запросы на чтение**) |
+| WASM | Позволяет выполнять код на Rust прямо в браузере | нет (технология для интерфейса) |
+
+- **API, которые вызываются из браузерных интерфейсов или через `curl`, строятся на Connect** (POST; JSON читается и записывается через RS-JSON). Браузерный WASM не умеет работать с «чистым» gRPC. С Connect достаточно обычного `fetch`, а `prost` не требуется — размер WASM-файла не увеличивается.
+- **Для обмена между сервисами (сервер — сервер, ресурсоёмкие задачи, потоковая передача) применяется gRPC.** В большинстве случаев достаточно Connect; на gRPC переходят только там, где потоковая передача действительно необходима.
+- **GraphQL используется только для чтения**, когда нужно получить сразу несколько связанных данных. Для записи (операций) он не применяется.
+- **WASM по-прежнему остаётся технологией для интерфейса.** Изменилось лишь то, что вызываемый им API теперь построен на Connect.
+- Интерфейсы, форма которых задана внешним стандартом (ACME, обратные вызовы OAuth, вебхуки сторонних сервисов, проверки работоспособности, статические файлы, OTLP), остаются обычным HTTP.
+- **Если есть сомнения — выбирайте Connect.**
+
+
+## 2026-11-15 RPoem「分身の術」ホスティング(別アカウントでの再開用) / Bunshin hosting (resume on another account)
+
+### 日本語
+- **目的**: 1台のVPSに `open-web-server`(=Apache相当)と `RPoem`(=Tomcat相当)を**1回だけ**入れれば、そのVPSの全Webサイト(静的/PHP)とWebアプリ(Rust等)を、サイトごとの分身(ワーカー)で非同期・マルチスレッドに収容する。サイトごとのインストールはしない。
+- **仕様書(正本)**: `open-easy-web/docs/RPOEM_BUNSHIN_HOSTING_SPEC.md`(§1.1=ユーザー確認済みの方針、§5.1=分離レベル、§7=差分と段階、§9=未決、§11=実装状況)。
+- **決定済み(ユーザー)**: (1) 他人のサイトを預かるかは設定で切替。**既定は `isolation = "trusted"`(自分のサイトのみ)**、`"tenant"` は明示操作(`AllowTenantMode`)で有効化する別実装(未実装、`sites.toml` で指定すると拒否される)。(2) 設定は新設の **`sites.toml`**(`OPEN_WEB_SERVER_SITES_FILE`)。既存の `domains.toml` / `web_vhosts.toml` は読み取り互換のまま。(3) 振り分け=open-web-server、監督=RPoem appserver の分担を維持。(4) REST は新設しない(Connect/gRPC、JSONはRS-JSON)。
+- **完了(すべて `origin/main` へpush済みを確認)**:
+  - `open-web-server` `a862f61`: `sites.rs`(`sites.toml`→既存テナント/vhost展開)、サイト別同時接続上限(超過は503+`Retry-After`、processのみ)、ポート自動割当(IDハッシュで安定・使用中/固定ポート回避)。`sites.toml` 由来テナントは `domains.toml` へ永続化しない(`managed_by`)。
+  - `open-web-server` `c971a38`: `site-fleet` feature(既定オフ)。`command` 付きprocessサイトを RPoem の `SiteFleet` で起動・監視。feature無しで `command` があれば設定エラー。
+  - `RPoem` `2b50b3e`: `open-runo-appserver` の `fleet` feature、`SiteFleet`(全サイトを**1つのtokioタスク**で監督、ヘルスチェックは並行)。統合テスト(8サイト同時Healthy・stop/restart・remove)成功、feature無しの既存25件も成功。
+  - `open-easy-web`: 仕様書(`87a61e5`、`0ddbb86`)。
+- **未了(次にやること、優先順)**:
+  1. `site-fleet` ありでの**実プロセスの通し確認**(`sites.toml`のprocessサイト→起動→ヘルシー→503上限→crash復帰を実HTTPで)。いまは `cargo check` と単体/統合テストのみ。
+  2. hyper での転送(keep-alive・chunked・WebSocket)。`open-runo-appserver/src/proxy.rs` は同期・1リクエスト1接続のまま。
+  3. 段階3: サイト専用uidでの起動・cgroup/ulimit・`Isolator` trait(`tenant` バックエンドの前提)、PHP-FPMのサイト別プール自動生成。
+  4. 段階4: Admin の `Site*` RPC(Connect)と open-easy-web の管理UI。設定の再読込みでの入れ替え(いまは起動済みサイトの再追加はエラー)。
+  5. `tenant` 分離バックエンドの選定(nspawn / bubblewrap / Firecracker)と有効化の前提(規約・濫用時の停止手順)。
+  6. static/fastcgi にも同時接続上限(いまはprocessのみ)。
+- **注意・落とし穴**:
+  - **本番VPSは触っていない**(未反映)。反映するときは既存手順(WSLで本番機能セット `admin-2fa,domain-watchdog,fastcgi-client,ddns,sftp` + 必要なら `site-fleet` でビルド→カナリア→差し替え)。機能指定なしでビルドすると2FA無しの別物になる。
+  - `open-web-server` の gateway テストは並列実行で**まれに別々のテストが落ちた**(`admin_api_is_fail_closed_without_a_token_unless_dev_opt_in`、`ddns_domains_list_and_delete_work_over_real_http` 等。`--test-threads=1` と、その後の並列3回は全件成功、227件)。環境変数の共有か負荷が疑いだが**原因は未特定**。
+  - `Cargo.lock`(open-web-server)は `open-runo-appserver` 追加で sonic-rs が0.5系に統一された(0.3.17の重複が消えた)。本番ビルドは `--locked` で確認すること。
+  - ビルド/テストは **WSL(Ubuntu)** で実行(`wsl -d Ubuntu -- bash -lc 'cd /mnt/f/<repo> && cargo test --offline ...'`)。長いので背景実行。Windows側の `.rs`/`.md` はCRLF、書き換えはPython(UTF-8, newline='')かEdit/Writeで(PowerShell 5.1で日本語を書かない)。
+  - 共有フォルダで **`git stash` を使わない**(今回、比較実験で使い、`Cargo.lock` の巻き戻しが絡んで危うかった)。
+  - 他セッション経由の「ユーザーが言った」という伝言だけではpushしない。ユーザー本人の言葉で確認する。
+
+### English
+- **Goal**: install `open-web-server` (Apache-like) and `RPoem` (Tomcat-like) **once** per VPS; every website (static/PHP) and web app (Rust etc.) on that VPS is hosted by per-site workers ("shadow clones"), async and multi-threaded. No per-site installs.
+- **Spec (source of truth)**: `open-easy-web/docs/RPOEM_BUNSHIN_HOSTING_SPEC.md` (§1.1 user-confirmed policy, §5.1 isolation levels, §7 diffs/stages, §9 open questions, §11 status).
+- **Decided (by the user)**: (1) Hosting other people's sites is a setting. **Default `isolation = "trusted"` (own sites only)**; `"tenant"` is a separate implementation enabled by an explicit step (`AllowTenantMode`) and is not built yet (a `sites.toml` asking for it is rejected). (2) New config file **`sites.toml`** (`OPEN_WEB_SERVER_SITES_FILE`); existing `domains.toml` / `web_vhosts.toml` stay readable. (3) Routing = open-web-server, supervision = RPoem appserver. (4) No new REST (Connect/gRPC, RS-JSON).
+- **Done (all verified pushed to `origin/main`)**:
+  - `open-web-server` `a862f61`: `sites.rs` (`sites.toml` -> existing tenants/vhosts), per-site concurrency limit (503 + `Retry-After`, process sites only), stable auto port assignment (id hash, skips busy/fixed ports). Tenants from `sites.toml` are not persisted to `domains.toml` (`managed_by`).
+  - `open-web-server` `c971a38`: `site-fleet` feature (off by default). Process sites with `command` are started and supervised by RPoem's `SiteFleet`; without the feature a `command` is a config error.
+  - `RPoem` `2b50b3e`: `fleet` feature in `open-runo-appserver`, `SiteFleet` (all sites supervised by **one tokio task**, health checks run concurrently). Integration test passes (8 sites Healthy, stop/restart, remove); the existing 25 tests without the feature pass.
+  - `open-easy-web`: the spec (`87a61e5`, `0ddbb86`).
+- **Not done (next, in priority order)**:
+  1. **End-to-end real-process check** with `site-fleet` (process site from `sites.toml` -> start -> healthy -> 503 limit -> crash recovery over real HTTP). So far only `cargo check` plus unit/integration tests.
+  2. hyper-based forwarding (keep-alive, chunked, WebSocket); `open-runo-appserver/src/proxy.rs` is still synchronous, one request per connection.
+  3. Stage 3: per-site uid, cgroup/ulimit, an `Isolator` trait (prerequisite for the `tenant` backend), per-site PHP-FPM pools.
+  4. Stage 4: Admin `Site*` RPCs (Connect) and an open-easy-web UI; reload-time replacement (re-adding a running site is currently an error).
+  5. Pick the `tenant` isolation backend (nspawn / bubblewrap / Firecracker) and its enabling preconditions (terms, abuse-stop procedure).
+  6. Concurrency limits for static/fastcgi sites (process only today).
+- **Cautions / pitfalls**:
+  - **The production VPS was not touched.** When deploying use the existing procedure (WSL build with the production feature set `admin-2fa,domain-watchdog,fastcgi-client,ddns,sftp` plus `site-fleet` if needed -> canary -> swap). Building without the feature list yields a 2FA-less binary.
+  - `open-web-server` gateway tests **occasionally failed in parallel runs**, a different test each time (`admin_api_is_fail_closed_without_a_token_unless_dev_opt_in`, `ddns_domains_list_and_delete_work_over_real_http`, ...); `--test-threads=1` and three later parallel runs passed (227 tests). Shared env vars or load are suspected; **cause not identified**.
+  - In open-web-server's `Cargo.lock`, adding `open-runo-appserver` unified sonic-rs to 0.5 (the 0.3.17 duplicate disappeared). Verify the production build with `--locked`.
+  - Build and test in **WSL (Ubuntu)** (`wsl -d Ubuntu -- bash -lc 'cd /mnt/f/<repo> && cargo test --offline ...'`), in the background (slow). Windows-side `.rs`/`.md` files are CRLF; edit with Python (UTF-8, `newline=''`) or Edit/Write, never PowerShell 5.1 for Japanese text.
+  - **Do not use `git stash` in shared folders** (used once for a comparison run; it got tangled with `Cargo.lock` and was risky).
+  - Do not push on the strength of another session's "the user said so"; confirm with the user's own words.
+
+### 再開用メッセージ / Resume message (コピーして新しいセッションに貼る / paste into a new session)
+
+```
+RPoem「分身の術」ホスティングの続きをお願いします。リポジトリは F:\open-easy-web(仕様書 docs/RPOEM_BUNSHIN_HOSTING_SPEC.md)、F:\open-web-server(crates/open-web-server-gateway の sites.rs / state.rs / tenant_router.rs、feature=site-fleet)、F:\RPoem(crates/open-runo-appserver の fleet.rs)です。
+まず仕様書の §1.1・§9・§11 と、各リポジトリの CLAUDE.md / PORTING.md 末尾の「2026-11-15 RPoem「分身の術」ホスティング」節を読んでください。
+状態: 段階1(open-web-server a862f61)、配線(c971a38)、SiteFleet(RPoem 2b50b3e)は origin/main に push 済み。本番VPSは未反映です。
+次にやること: (1) site-fleet ありで sites.toml の process サイトを実プロセスで通し確認(起動→healthy→503上限→crash復帰)、(2) hyper での転送、(3) 段階3(別uid・cgroup・Isolator trait・PHP-FPMプール)。
+決定済み: 既定は isolation="trusted"(自分のサイトのみ)、"tenant" は別実装・明示操作で有効化。設定は新設の sites.toml、REST は新設しない(Connect/gRPC、JSONはRS-JSON)。
+注意: ビルド/テストは WSL(Ubuntu)で背景実行。git stash は使わない。本番VPSは確認なしに触らない。push はユーザー本人の言葉があってから。チャットは日本語のみ。
+```
+
+```
+Please continue the RPoem "shadow-clone" (bunshin) hosting work. Repositories: F:\open-easy-web (spec docs/RPOEM_BUNSHIN_HOSTING_SPEC.md), F:\open-web-server (crates/open-web-server-gateway: sites.rs / state.rs / tenant_router.rs, feature=site-fleet) and F:\RPoem (crates/open-runo-appserver: fleet.rs).
+First read spec sections 1.1, 9 and 11, and the section "2026-11-15 RPoem bunshin hosting" at the end of each repository's CLAUDE.md / PORTING.md.
+State: stage 1 (open-web-server a862f61), the wiring (c971a38) and SiteFleet (RPoem 2b50b3e) are pushed to origin/main. Production VPS is untouched.
+Next: (1) end-to-end check of a process site from sites.toml with site-fleet on real processes (start -> healthy -> 503 limit -> crash recovery), (2) hyper-based forwarding, (3) stage 3 (per-site uid, cgroup, Isolator trait, PHP-FPM pools).
+Decided: default isolation="trusted" (own sites only); "tenant" is a separate, explicitly enabled implementation. New config file sites.toml; no new REST (Connect/gRPC, RS-JSON).
+Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not touch the production VPS without asking. Push only on the user's own words. Chat in Japanese only.
+```
+
+## 2026-11-17 追記: 実プロセス通し確認の完了・再開用メッセージ更新(別アカウントでの再開用) / Real-process E2E done, resume message updated (resume on another account)
+
+> この節が最新。直前の「2026-11-15 RPoem「分身の術」ホスティング」節の**未了1(実プロセス通し確認)は完了**した。それ以外の記述(目的・決定済み・コミット・注意)はそのまま有効。 / This section supersedes the 2026-11-15 one: its open item 1 (real-process E2E) is now **done**; everything else there remains valid.
+
+### 日本語
+- **完了(今回)**: `open-web-server` の `crates/open-web-server-gateway/tests/e2e_site_fleet.rs`(新規)。実バイナリを起動し、`sites.toml` の process サイトを `site-fleet` で実プロセスとして動かし、実HTTPで次を確認した(1件・3.04秒・成功、スキップではないことも確認)。
+  1. 本体が分身(RPoemの`open-runo-dummy-http-server`)を起動し、Hostで振り分けて `/health` が200(固定ポートと `port = "auto"` の2サイト)。
+  2. 同時接続上限(`limits.max_concurrent = 1`): 1件が待っている間の2件目は **503 + `Retry-After: 1`**。別サイトは200のまま。塞ぎを外すと待っていた1件目が成功し、枠が戻る。
+  3. crash復帰: `/crash` で分身が落ちても `SiteFleet` が再起動し `/health` が200に戻る。
+- **試験の実行方法**: WSLで `wsl -d Ubuntu -- bash -lc 'cd /mnt/f/open-web-server && cargo test --offline -p open-web-server-gateway --features site-fleet --test e2e_site_fleet -- --nocapture'`(初回ビルドは十数分、背景実行)。分身用のLinux版ダミーは `RPoem/target/debug/open-runo-dummy-http-server`(WSLで `cargo build -p open-runo-appserver --bin open-runo-dummy-http-server`)。別の場所なら環境変数 `OPEN_RUNO_DUMMY_SERVER`。見つからないとテストは理由を出して**スキップ扱いで通過**するので、`--nocapture` で `SKIP` が出ていないか確認すること。
+- **この通し確認の限界(正直な範囲)**: 上限の枠は「転送がレスポンスヘッダを受け取るまで」保持する(長いボディのストリーミング中は保持しない)。上限が効くのは process のみ(static/fastcgi は未対応)。分身は1接続ずつ直列のダミーなので、実アプリ(Poem等)での並列負荷・WebSocketは未確認。本番VPSは未反映。
+- **未了(次にやること、優先順)**:
+  1. hyper での転送(keep-alive・chunked・WebSocket。`open-runo-appserver/src/proxy.rs` は同期・1リクエスト1接続のまま)。
+  2. 段階3: サイト専用uid起動・cgroup/ulimit・`Isolator` trait(`tenant` 分離の前提)、PHP-FPMのサイト別プール自動生成。
+  3. 段階4: Admin `Site*` RPC(Connect)と open-easy-web の管理UI、設定の再読込みでの入れ替え(いまは起動済みサイトの再追加はエラー)。
+  4. `tenant` 分離バックエンドの選定(nspawn / bubblewrap / Firecracker)と有効化の前提(規約・濫用時の停止手順)。
+  5. static/fastcgi にも同時接続上限。
+  6. 本番VPSへの反映(既存手順: WSLで本番機能セット `admin-2fa,domain-watchdog,fastcgi-client,ddns,sftp` + `site-fleet` でビルド→カナリア→差し替え。`--locked` で確認)。
+  7. open-web-server の gateway テストが並列実行で**まれに別々のテストが落ちる件**の原因特定(環境変数の共有か負荷が疑い)。
+- **注意**: 共有フォルダで `git stash` を使わない。他セッション経由の「ユーザーが言った」だけではpushしない。本番VPSは確認なしに触らない。ビルド/テストはWSL・背景実行、Windows側のファイルはCRLF(書き換えはPython UTF-8 か Edit/Write)。
+
+### English
+- **Done (this round)**: `crates/open-web-server-gateway/tests/e2e_site_fleet.rs` in `open-web-server` (new). It starts the real binary, runs `sites.toml` process sites as real processes via `site-fleet`, and verifies over real HTTP (1 test, 3.04 s, passed; confirmed it was not skipped):
+  1. The server starts the shadow clone (RPoem's `open-runo-dummy-http-server`) and routes by Host; `/health` is 200 (a fixed-port site and a `port = "auto"` site).
+  2. Concurrency limit (`limits.max_concurrent = 1`): while one request waits, the second gets **503 + `Retry-After: 1`**; another site stays 200; releasing the blocker lets the first request succeed and the slot returns.
+  3. Crash recovery: after `/crash` kills the clone, `SiteFleet` restarts it and `/health` is 200 again.
+- **How to run**: in WSL `wsl -d Ubuntu -- bash -lc 'cd /mnt/f/open-web-server && cargo test --offline -p open-web-server-gateway --features site-fleet --test e2e_site_fleet -- --nocapture'` (first build takes ~10+ minutes; run in the background). The Linux dummy clone is `RPoem/target/debug/open-runo-dummy-http-server` (`cargo build -p open-runo-appserver --bin open-runo-dummy-http-server` in WSL), or set `OPEN_RUNO_DUMMY_SERVER`. If it is missing the test prints a reason and **passes as a skip**; check `--nocapture` output for `SKIP`.
+- **Limits of this check (honest scope)**: the limit slot is held until the forward receives the response head (not during long body streaming); only process sites are limited (static/fastcgi are not); the clone is a serial dummy, so parallel load and WebSocket with a real app (Poem etc.) are unverified; production VPS is untouched.
+- **Open (next, in priority order)**:
+  1. hyper-based forwarding (keep-alive, chunked, WebSocket; `open-runo-appserver/src/proxy.rs` is still synchronous, one request per connection).
+  2. Stage 3: per-site uid, cgroup/ulimit, `Isolator` trait (prerequisite for `tenant` isolation), per-site PHP-FPM pools.
+  3. Stage 4: Admin `Site*` RPCs (Connect) and an open-easy-web UI; reload-time replacement (re-adding a running site is currently an error).
+  4. Choose the `tenant` isolation backend (nspawn / bubblewrap / Firecracker) and its enabling preconditions (terms, abuse-stop procedure).
+  5. Concurrency limits for static/fastcgi sites.
+  6. Production deploy (existing procedure: WSL build with the production feature set `admin-2fa,domain-watchdog,fastcgi-client,ddns,sftp` plus `site-fleet`, canary, swap; verify with `--locked`).
+  7. Find the cause of the occasional, different-each-time failures of open-web-server gateway tests under parallel runs (shared env vars or load suspected).
+- **Cautions**: no `git stash` in shared folders; do not push on another session's "the user said so"; do not touch the production VPS without asking; build/test in WSL in the background; Windows-side files are CRLF (edit with Python UTF-8 or Edit/Write).
+
+### 再開用メッセージ(最新) / Resume message (latest)
+
+```
+RPoem「分身の術」ホスティングの続きをお願いします。リポジトリは F:\open-easy-web(仕様書 docs/RPOEM_BUNSHIN_HOSTING_SPEC.md)、F:\open-web-server(crates/open-web-server-gateway の sites.rs / state.rs / tenant_router.rs と tests/e2e_site_fleet.rs、feature=site-fleet)、F:\RPoem(crates/open-runo-appserver の fleet.rs)です。
+まず各リポジトリの CLAUDE.md / PORTING.md 末尾の「2026-11-17 追記: 実プロセス通し確認」節と、仕様書の §1.1・§9・§11 を読んでください。
+状態: 段階1(open-web-server a862f61)、配線(c971a38)、SiteFleet(RPoem 2b50b3e)は push 済み。実プロセスの通し確認(起動・転送・503上限・crash復帰)は e2e_site_fleet で成功済み。本番VPSは未反映です。
+次にやること: (1) hyper での転送(keep-alive・chunked・WebSocket)、(2) 段階3(別uid・cgroup・Isolator trait・PHP-FPMプール)、(3) Admin Site* RPC と管理UI。
+決定済み: 既定は isolation="trusted"(自分のサイトのみ)、"tenant" は別実装・明示操作で有効化。設定は新設の sites.toml、REST は新設しない(Connect/gRPC、JSONはRS-JSON)。
+注意: ビルド/テストは WSL(Ubuntu)で背景実行。git stash は使わない。本番VPSは確認なしに触らない。push はユーザー本人の言葉があってから。チャットは日本語のみ。
+```
+
+```
+Please continue the RPoem "shadow-clone" (bunshin) hosting work. Repositories: F:\open-easy-web (spec docs/RPOEM_BUNSHIN_HOSTING_SPEC.md), F:\open-web-server (crates/open-web-server-gateway: sites.rs / state.rs / tenant_router.rs and tests/e2e_site_fleet.rs, feature=site-fleet) and F:\RPoem (crates/open-runo-appserver: fleet.rs).
+First read the section "2026-11-17 追記: 実プロセス通し確認" at the end of each repository's CLAUDE.md / PORTING.md, and spec sections 1.1, 9 and 11.
+State: stage 1 (open-web-server a862f61), the wiring (c971a38) and SiteFleet (RPoem 2b50b3e) are pushed. The real-process E2E (start, forward, 503 limit, crash recovery) passes in e2e_site_fleet. Production VPS is untouched.
+Next: (1) hyper-based forwarding (keep-alive, chunked, WebSocket), (2) stage 3 (per-site uid, cgroup, Isolator trait, PHP-FPM pools), (3) Admin Site* RPCs and an admin UI.
+Decided: default isolation="trusted" (own sites only); "tenant" is a separate, explicitly enabled implementation. New config file sites.toml; no new REST (Connect/gRPC, RS-JSON).
+Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not touch the production VPS without asking. Push only on the user's own words. Chat in Japanese only.
+```
+
+## インストール先を選べます(2026-11-19) / You can choose where to install
+
+**日本語**
+- インストーラーの既定の場所は `C:\aon-co-jp\open-easy-web\` です。インストール中に、ドライブとフォルダーを選べます。
+- aruaru-llm(AIの部品)は、その中の `aruaru-llm` フォルダーに入ります。チェックは最初からオンです。
+- easy-web.tokyo のトップには、公開しているすべてのリポジトリの説明が並びます。「重要・使用度順」(最初の並び)と「ABC順」を切り替えられます。
+
+**English**
+- The installer uses `C:\aon-co-jp\open-easy-web\` by default. During setup you can pick another drive and folder.
+- aruaru-llm (the AI part) goes into an `aruaru-llm` folder inside it. Its box is checked from the start.
+- The top page of easy-web.tokyo lists every public repository with a short description. You can switch between "by importance and use" (the first order) and "A to Z".
+
+## 他の言語 / Other languages (2026-11-19)
+
+### 简体中文
+
+- 安装程序默认位置是 `C:\aon-co-jp\open-easy-web\`,安装时可以选择其他磁盘和文件夹。
+- aruaru-llm(AI 组件)会放进其中的 `aruaru-llm` 文件夹,默认已勾选。
+- easy-web.tokyo 首页会列出所有公开仓库的简介,可在“按重要程度和使用度”(默认)与“A 到 Z”之间切换。
+
+### 繁體中文(台灣)
+
+- 安裝程式預設位置是 `C:\aon-co-jp\open-easy-web\`,安裝時可以選擇其他磁碟與資料夾。
+- aruaru-llm(AI 元件)會放進其中的 `aruaru-llm` 資料夾,預設已勾選。
+- easy-web.tokyo 首頁會列出所有公開儲存庫的簡介,可在「依重要程度與使用度」(預設)與「A 到 Z」之間切換。
+
+### 한국어
+
+- 설치 프로그램의 기본 위치는 `C:\aon-co-jp\open-easy-web\`이며, 설치 중에 다른 드라이브와 폴더를 고를 수 있습니다.
+- aruaru-llm(AI 구성 요소)은 그 안의 `aruaru-llm` 폴더에 들어가며, 처음부터 체크되어 있습니다.
+- easy-web.tokyo 첫 화면에는 공개된 모든 저장소의 설명이 나열됩니다. "중요도·사용도 순"(기본)과 "가나다·ABC 순"을 바꿀 수 있습니다.
+
+### Deutsch
+
+- Der Installer nutzt standardmäßig `C:\aon-co-jp\open-easy-web\`. Bei der Installation können Sie ein anderes Laufwerk und einen anderen Ordner wählen.
+- aruaru-llm (die KI-Komponente) kommt in den Unterordner `aruaru-llm`; das Kästchen ist von Anfang an angehakt.
+- Die Startseite von easy-web.tokyo listet alle öffentlichen Repositories mit Kurzbeschreibung. Sie können zwischen „nach Wichtigkeit und Nutzung“ (Standard) und „A bis Z“ wechseln.
+
+### Français
+
+- L'installateur utilise par défaut `C:\aon-co-jp\open-easy-web\`. Pendant l'installation, vous pouvez choisir un autre lecteur et dossier.
+- aruaru-llm (la partie IA) va dans un dossier `aruaru-llm` à l'intérieur ; la case est cochée dès le départ.
+- La page d'accueil d'easy-web.tokyo liste tous les dépôts publics avec une courte description. Vous pouvez passer de « par importance et usage » (par défaut) à « de A à Z ».
+
+### Español
+
+- El instalador usa por defecto `C:\aon-co-jp\open-easy-web\`. Durante la instalación puedes elegir otra unidad y carpeta.
+- aruaru-llm (la parte de IA) va en una carpeta `aruaru-llm` dentro; la casilla viene marcada.
+- La página principal de easy-web.tokyo lista todos los repositorios públicos con una breve descripción. Puedes cambiar entre «por importancia y uso» (por defecto) y «de la A a la Z».
+
+### Português (BR)
+
+- O instalador usa por padrão `C:\aon-co-jp\open-easy-web\`. Durante a instalação você pode escolher outra unidade e pasta.
+- O aruaru-llm (a parte de IA) vai para uma pasta `aruaru-llm` dentro dela; a caixa já vem marcada.
+- A página inicial do easy-web.tokyo lista todos os repositórios públicos com uma breve descrição. Você pode alternar entre "por importância e uso" (padrão) e "de A a Z".
+
+### Русский
+
+- Установщик по умолчанию использует `C:\aon-co-jp\open-easy-web\`. Во время установки можно выбрать другой диск и папку.
+- aruaru-llm (ИИ-компонент) попадает в папку `aruaru-llm` внутри; галочка стоит с самого начала.
+- На главной странице easy-web.tokyo перечислены все открытые репозитории с кратким описанием. Можно переключаться между «по важности и использованию» (по умолчанию) и «от A до Z».
+
+(简体中文: AI 翻译,尚未经母语者确认。; 繁體中文(台灣): AI 翻譯,尚未經母語者確認。; 한국어: AI 번역이며 원어민 확인 전입니다.; Deutsch: KI-Übersetzung, noch nicht von Muttersprachlern geprüft.; Français: Traduction par IA, pas encore relue par des locuteurs natifs.; Español: Traducción por IA, aún sin revisión de hablantes nativos.; Português (BR): Tradução por IA, ainda sem revisão de falantes nativos.; Русский: Перевод выполнен ИИ, носителями языка пока не проверен.)
