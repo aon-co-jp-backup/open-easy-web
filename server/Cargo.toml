@@ -68,7 +68,7 @@ sysinfo = "0.40"
 # 実装済み、QRコード描画部分のみこのcrateを追加〉と同じ設計に統一する
 # ためのユーザー指示への対応)。従来はprovisioning URI(テキスト)のみを
 # 返しており、認証アプリへは手入力が必要だった。
-qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+qrcode = { version = "0.15", default-features = false, features = ["svg"] }
 
 [dev-dependencies]
 reqwest = { version = "0.13", features = ["json", "multipart"] }

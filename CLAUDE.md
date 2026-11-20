@@ -3876,3 +3876,7 @@ Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not
 - Не сделано: собрать и проверить установщик на реальной машине; выяснить, есть ли у open-directx отдельный релиз. В `uninstall.ps1` и раньше было 13 синтаксических ошибок (к этому изменению не относятся).
 
 (简体中文: AI 翻译,尚未经母语者确认。; 繁體中文(台灣): AI 翻譯,尚未經母語者確認。; 한국어: AI 번역이며 원어민 확인 전입니다.; Deutsch: KI-Übersetzung, noch nicht von Muttersprachlern geprüft.; Français: Traduction par IA, pas encore relue par des locuteurs natifs.; Español: Traducción por IA, aún sin revisión de hablantes nativos.; Português (BR): Tradução por IA, ainda sem revisão de falantes nativos.; Русский: Перевод выполнен ИИ, носителями языка пока не проверен.)
+
+## 2026-11-20 依存の更新(version-control通知) / Dependency update
+- **日本語**: server: lettre 0.11.22→0.11.24(RUSTSEC-2026-0560〜0565)、qrcode 0.14→0.15。コードの変更は不要、`cargo test` 137件成功。本番の再ビルド・差し替えは未実施。VPSの`/root/repository/open-easy-web-app`は`server/Cargo.lock`に未コミット変更があるため触っていない。
+- **English**: server: lettre 0.11.22 -> 0.11.24 (RUSTSEC-2026-0560..0565), qrcode 0.14 -> 0.15. No code changes; `cargo test` 137 passed. Production not rebuilt. The VPS clone `/root/repository/open-easy-web-app` has an uncommitted `server/Cargo.lock` change, so it was left alone.
