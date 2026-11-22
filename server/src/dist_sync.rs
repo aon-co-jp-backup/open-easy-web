@@ -733,17 +733,19 @@ mod tests {
                     .await
                     .map_err(|_| StatusCode::Failure)?;
                 self.files.insert(filename.clone(), file);
-                Ok(Handle { id, handle: filename })
+                Ok(Handle { id, handle: filename.into() })
             }
 
-            async fn write(&mut self, id: u32, handle: String, offset: u64, data: Vec<u8>) -> Result<Status, Self::Error> {
+            async fn write(&mut self, id: u32, handle: russh_sftp::protocol::SftpHandle, offset: u64, data: Vec<u8>) -> Result<Status, Self::Error> {
+                let handle = String::from_utf8_lossy(handle.as_bytes()).into_owned();
                 let file = self.files.get_mut(&handle).ok_or(StatusCode::Failure)?;
                 file.seek(std::io::SeekFrom::Start(offset)).await.map_err(|_| StatusCode::Failure)?;
                 file.write_all(&data).await.map_err(|_| StatusCode::Failure)?;
                 Ok(ok_status(id))
             }
 
-            async fn close(&mut self, id: u32, handle: String) -> Result<Status, Self::Error> {
+            async fn close(&mut self, id: u32, handle: russh_sftp::protocol::SftpHandle) -> Result<Status, Self::Error> {
+                let handle = String::from_utf8_lossy(handle.as_bytes()).into_owned();
                 self.files.remove(&handle);
                 Ok(ok_status(id))
             }

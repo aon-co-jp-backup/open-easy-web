@@ -79,7 +79,7 @@ mockito = "1"
 # バージョン・featureに揃える(実クラウド/実VPSには一切接続しない、
 # ローカルモックのみの既存検証方針を踏襲)。
 russh = { version = "0.65", default-features = false, features = ["ring", "rsa"] }
-russh-sftp = "3"
+russh-sftp = "4"
 # rand 0.10は主依存と共通(russhのキー生成も0.10系)のため、別名の依存は不要。
 
 # RUSTSEC-2023-0071 (rsa Marvin Attack, 修正版なし) 回避: aon-co-jp/rsa-rs の互換実装へ差し替え。
