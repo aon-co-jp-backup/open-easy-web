@@ -806,4 +806,39 @@ mod tests {
         let replicated = std::fs::read(&replicated_path).expect("replicated file should exist on the mock SFTP target");
         assert_eq!(replicated, b"<html>hello</html>");
     }
+
+    /// 実サーバー(open-web-server組み込みSFTP、パスワード認証を明示opt-inした
+    /// 使い捨て環境)へ`replicate_written_file`を通す。環境変数
+    /// `EASYWEB_REAL_SFTP_PORT`と`EASYWEB_REAL_SFTP_PASSWORD`が無ければ何もしない
+    /// (通常のCIでは実行されない)。
+    #[tokio::test]
+    async fn replicate_written_file_reaches_a_real_open_web_server_sftp() {
+        let (Ok(port), Ok(_pw)) = (std::env::var("EASYWEB_REAL_SFTP_PORT"), std::env::var("EASYWEB_REAL_SFTP_PASSWORD")) else {
+            return;
+        };
+        let journal_tmp = tempfile::tempdir().unwrap();
+        let registry = Arc::new(DistSyncRegistry::new(journal_tmp.path().join("journal")));
+        registry.register(RegisterTargetRequest {
+            host: "127.0.0.1".into(),
+            port: port.parse().unwrap(),
+            username: "easyweb-sync".into(),
+            password_env: "EASYWEB_REAL_SFTP_PASSWORD".into(),
+            remote_backup_dir: "backup".into(),
+            label: Some("real open-web-server".into()),
+        });
+        // `replicate_written_file`は失敗をwarnログへ流すだけなので、実サーバー試験では
+        // 同じ経路(`SftpBackupTarget::upload_segment`)を直接呼んでエラーを表に出す。
+        let configs = registry.sftp_target_configs();
+        let result = tokio::task::spawn_blocking(move || {
+            let target = SftpBackupTarget::new(configs.into_iter().next().unwrap());
+            target.upload_segment("real.example/index.html", b"<html>real</html>")
+        })
+        .await
+        .unwrap();
+        result.expect("upload to the real open-web-server SFTP should succeed");
+        if let Ok(root) = std::env::var("EASYWEB_REAL_SFTP_ROOT") {
+            let got = std::fs::read(std::path::Path::new(&root).join("backup").join("real.example/index.html")).expect("file should exist on the real SFTP root");
+            assert_eq!(got, b"<html>real</html>");
+        }
+    }
 }
