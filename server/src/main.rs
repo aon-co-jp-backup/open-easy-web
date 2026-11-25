@@ -350,12 +350,12 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
     // ここから先は、本文を**上限つきで先に読み込んで**から各ハンドラへ渡す(以前はハンドラごとに無制限に読んでいた)。
     // 通常の本文は 64 KiB まで。ファイル送信(`Sites/Upload`)だけ 128 MiB まで。
     let req = {
-        let limit = if path.starts_with(connect::PREFIX) && path.ends_with(".Sites/Upload") { connect::UPLOAD_MAX } else { json_in::DEFAULT_MAX };
+        let limit = if connect::strip_prefix(&path).is_some() && path.ends_with(".Sites/Upload") { connect::UPLOAD_MAX } else { json_in::DEFAULT_MAX };
         let (parts, body) = req.into_parts();
         match http_body_util::Limited::new(body, limit).collect().await {
             Ok(c) => Request::from_parts(parts, Full::new(c.to_bytes())),
             Err(_) => {
-                return if path.starts_with(connect::PREFIX) {
+                return if connect::strip_prefix(&path).is_some() {
                     connect::payload_too_large()
                 } else {
                     error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large / 本文が大きすぎます")
@@ -400,7 +400,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
 
     // `/open_easy_web.admin.v1.<Service>/<Method>` — Connect(POST、RS-JSON)(POST、RS-JSON、`connect.rs`参照)。
     // 新しい管理APIは Connect のみ(REST は作らない。2026-11-04 方針: REST 全廃)。既存の REST 風 `/admin/...` は、触るときに順に移す。
-    if let Some(rest) = path.strip_prefix(connect::PREFIX) {
+    if let Some(rest) = connect::strip_prefix(&path) {
         return connect::dispatch(&state, req, rest).await;
     }
 

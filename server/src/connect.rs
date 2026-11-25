@@ -24,6 +24,18 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub const PREFIX: &str = "/open_easy_web.admin.v1.";
+/// 版なしの別名(Versionless)。`.v1` は呼び出し側を壊さないため当面残す。
+pub const PREFIX_ALIAS: &str = "/open_easy_web.admin.";
+
+/// 版つき・版なしのどちらの接頭辞でも、`<Service>/<Method>` 部分を返す。
+pub fn strip_prefix(path: &str) -> Option<&str> {
+    if let Some(rest) = path.strip_prefix(PREFIX) {
+        return Some(rest);
+    }
+    let rest = path.strip_prefix(PREFIX_ALIAS)?;
+    // `v2.` など別の版は別名として扱わない(版なしの名前は大文字で始まる Service 名)。
+    rest.chars().next().filter(|c| c.is_ascii_uppercase()).map(|_| rest)
+}
 /// ファイル送信(`Sites/Upload`)の本文の上限(JSON + base64 なので、中身はおよそ 96 MiB まで)。ほかは 64 KiB。
 pub const UPLOAD_MAX: usize = 128 * 1024 * 1024;
 /// 本文の上限は `dispatch` の入口で掛けている(Connect は 64 KiB まで)。
@@ -568,6 +580,14 @@ async fn disk_breakdown() -> Response<BoxBody> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn versionless_prefix_is_accepted() {
+        assert_eq!(strip_prefix("/open_easy_web.admin.v1.Sites/List"), Some("Sites/List"));
+        assert_eq!(strip_prefix("/open_easy_web.admin.Sites/List"), Some("Sites/List"));
+        assert_eq!(strip_prefix("/open_easy_web.admin.v2.Sites/List"), None);
+        assert_eq!(strip_prefix("/other.Sites/List"), None);
+    }
 
     #[test]
     fn error_codes_map_to_connect_http_statuses() {
