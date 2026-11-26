@@ -79,7 +79,7 @@
     btn.classList.add("hidden");
     statusEl.className = "status";
     statusEl.textContent = "Confirming... / 確認中...";
-    fetch("/open_easy_web.admin.v1.Auth/QrLoginConfirm", {
+    fetch("/open_easy_web.admin.Auth/QrLoginConfirm", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id: id }),
@@ -102,7 +102,7 @@
       });
   }
 
-  fetch("/open_easy_web.admin.v1.Auth/QrLoginWhoami", {
+  fetch("/open_easy_web.admin.Auth/QrLoginWhoami", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ id: id }),

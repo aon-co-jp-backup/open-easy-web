@@ -3530,14 +3530,14 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 **確認した**: サーバーのテスト131件、WASMビルド、実サーバーで管理API(401・400・保存・SMTP未設定の断り)。**未確認**: 本番SMTPでの実送信、ブラウザ画面の目視。
 
 ## API 方針: REST 全廃・Connect(2026-11-04、ユーザー決定)
-- **REST は全廃する。新しい API は REST で作らない。** 方式は Connect(POST、RS-JSON)(`POST /open_easy_web.admin.v1.<Service>/<Method>`、`content-type: application/json`、本文は JSON)。`curl` から呼べ、WASM は `fetch` のままで、`prost` を WASM に入れない(サイズが増えるため)。RPoem の管理API(`open_runo.admin.v1.Admin`、gRPC・gRPC-web・Connect)と呼び方をそろえる。
+- **REST は全廃する。新しい API は REST で作らない。** 方式は Connect(POST、RS-JSON)(`POST /open_easy_web.admin.<Service>/<Method>`、`content-type: application/json`、本文は JSON)。`curl` から呼べ、WASM は `fetch` のままで、`prost` を WASM に入れない(サイズが増えるため)。RPoem の管理API(`open_runo.admin.v1.Admin`、gRPC・gRPC-web・Connect)と呼び方をそろえる。
 - **JSON は RS-JSON に統一**: 読み込みは `from_str_secure` / `parse_secure`(サイズ・深さ・重複キーの上限つき)、書き出しは `rust_json::fast`。エラーは Connect の形式 `{"code","message"}`(HTTP ステータスは Connect 仕様の対応表、`server/src/connect.rs`)。
 - **移行の状況(2026-11-04、ユーザー指示「今触って今移して」で完了)**: このリポジトリの REST 風 API は**すべて Connect へ移し、旧 REST の経路は削除した**。対応表は下の「旧 REST → Connect の対応表」。REST のまま残るのは**例外だけ**(下に理由つき)。
 - スキーマは `proto/open_easy_web/admin/v1/admin.proto`(説明用。コード生成には使っていない)。素の gRPC(ストリーミング)は、必要になってから。
 - **WASM を小さくする設計**: 画面側は `serde_json` + `fetch`。`profile.release` は `opt-level = "z"`・`lto`・`codegen-units = 1`・`panic = "abort"`・`strip`(2026-11-04: 753KB → 474KB、gzip 206KB → 163KB)。
 
 ### 旧 REST → Connect の対応表(2026-11-04)
-呼び方は `POST /open_easy_web.admin.v1.<Service>/<Method>`、本文は JSON(引数なしは `{}`)。認証は、管理系は `x-admin-token`、サイト操作と TOTP 設定は `Authorization: Bearer <セッション>`。
+呼び方は `POST /open_easy_web.admin.<Service>/<Method>`、本文は JSON(引数なしは `{}`)。認証は、管理系は `x-admin-token`、サイト操作と TOTP 設定は `Authorization: Bearer <セッション>`。
 
 | 旧 REST | Connect | 備考 |
 |---|---|---|
@@ -3809,9 +3809,9 @@ Cautions: build and test in WSL (Ubuntu) in the background. No git stash. Do not
 
 ## 2026-11-18 追記: QR確認ログインのVPS反映 / QR-confirm login deployed to the VPS
 
-**日本語**: VPS(`/root/open-easy-web-app`、`open-easy-web.service`)のバイナリはQR確認ログイン(`qr`/`otp_qr`、`origin/main`の`8570230`相当)より古いビルドだったため、`cargo build --release`(約4分)で再ビルドして再起動した(旧バイナリは`server/target/release/open-easy-web-server.before-qr-20261118`、ロールバックはこれを戻して`systemctl restart open-easy-web`)。確認: `healthz`200、`/qr-confirm.html`200、公開URLでも`open_easy_web.admin.v1.Auth/QrLoginWhoami`が期待どおりの404(`not_found`、無効なid)・`QrLoginStart`が403(TOTP未有効の宛先)、`Settings/GetLoginMode`は管理トークンなしで401。**注意**: 認証のRESTは廃止済みで、`/api/auth/qr-login/*`は404が正しい(Connectは`POST /open_easy_web.admin.v1.Auth/<Method>`)。**未了**: 実スマホのカメラでの撮影の通し試験、実SMTPでの`otp_qr`通し。
+**日本語**: VPS(`/root/open-easy-web-app`、`open-easy-web.service`)のバイナリはQR確認ログイン(`qr`/`otp_qr`、`origin/main`の`8570230`相当)より古いビルドだったため、`cargo build --release`(約4分)で再ビルドして再起動した(旧バイナリは`server/target/release/open-easy-web-server.before-qr-20261118`、ロールバックはこれを戻して`systemctl restart open-easy-web`)。確認: `healthz`200、`/qr-confirm.html`200、公開URLでも`open_easy_web.admin.Auth/QrLoginWhoami`が期待どおりの404(`not_found`、無効なid)・`QrLoginStart`が403(TOTP未有効の宛先)、`Settings/GetLoginMode`は管理トークンなしで401。**注意**: 認証のRESTは廃止済みで、`/api/auth/qr-login/*`は404が正しい(Connectは`POST /open_easy_web.admin.Auth/<Method>`)。**未了**: 実スマホのカメラでの撮影の通し試験、実SMTPでの`otp_qr`通し。
 
-**English**: The binary on the VPS (`/root/open-easy-web-app`, `open-easy-web.service`) predated the QR-confirm login (`qr`/`otp_qr`, equivalent to `8570230` on `origin/main`), so it was rebuilt with `cargo build --release` (about 4 minutes) and restarted (old binary kept as `server/target/release/open-easy-web-server.before-qr-20261118`; roll back by restoring it and running `systemctl restart open-easy-web`). Verified: `healthz` 200, `/qr-confirm.html` 200, and on the public URL `open_easy_web.admin.v1.Auth/QrLoginWhoami` answers the expected 404 (`not_found`, invalid id) and `QrLoginStart` 403 (TOTP not enabled for that address); `Settings/GetLoginMode` returns 401 without the admin token. **Note**: the REST auth routes are abolished, so `/api/auth/qr-login/*` correctly returns 404 (Connect is `POST /open_easy_web.admin.v1.Auth/<Method>`). **Open**: a real phone-camera scan and `otp_qr` with real SMTP.
+**English**: The binary on the VPS (`/root/open-easy-web-app`, `open-easy-web.service`) predated the QR-confirm login (`qr`/`otp_qr`, equivalent to `8570230` on `origin/main`), so it was rebuilt with `cargo build --release` (about 4 minutes) and restarted (old binary kept as `server/target/release/open-easy-web-server.before-qr-20261118`; roll back by restoring it and running `systemctl restart open-easy-web`). Verified: `healthz` 200, `/qr-confirm.html` 200, and on the public URL `open_easy_web.admin.Auth/QrLoginWhoami` answers the expected 404 (`not_found`, invalid id) and `QrLoginStart` 403 (TOTP not enabled for that address); `Settings/GetLoginMode` returns 401 without the admin token. **Note**: the REST auth routes are abolished, so `/api/auth/qr-login/*` correctly returns 404 (Connect is `POST /open_easy_web.admin.Auth/<Method>`). **Open**: a real phone-camera scan and `otp_qr` with real SMTP.
 
 ## 2026-11-19 作業メモ / Work note
 

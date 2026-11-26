@@ -1,5 +1,5 @@
 //! ストレージ(HDD/SSD)のメンテナンス(健康チェック・無駄なデータの整理・TRIM/最適化、`server/src/storage_maintenance.rs`)への
-//! 薄い`fetch()`ラッパー。方式は Connect(POST、RS-JSON)(`POST /open_easy_web.admin.v1.Storage/<Method>`、本文は JSON)。
+//! 薄い`fetch()`ラッパー。方式は Connect(POST、RS-JSON)(`POST /open_easy_web.admin.Storage/<Method>`、本文は JSON)。
 //! REST は使わない(2026-11-04 方針: REST 全廃、`CLAUDE.md`「API 方針」参照)。共通の`call`は`api_auto_update.rs`のものを再利用する。
 
 use serde::Serialize;
@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 
 use crate::api_auto_update::call;
 
-const SVC: &str = "/open_easy_web.admin.v1.Storage/";
+const SVC: &str = "/open_easy_web.admin.Storage/";
 
 /// `Storage/GetMaintenance` — 設定と、直近の実行結果。
 pub async fn overview(base_url: &str, admin_token: &str) -> Result<Value, String> {

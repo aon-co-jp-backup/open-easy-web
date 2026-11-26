@@ -106,7 +106,7 @@ struct ContactBody {
 }
 
 pub async fn request_otp(contact: &str) -> Result<Value, String> {
-    post_json("/open_easy_web.admin.v1.Auth/RequestOtp", None, &ContactBody { contact: contact.to_string() }).await
+    post_json("/open_easy_web.admin.Auth/RequestOtp", None, &ContactBody { contact: contact.to_string() }).await
 }
 
 #[derive(Serialize)]
@@ -127,7 +127,7 @@ pub enum VerifyOtpOutcome {
 
 pub async fn verify_otp(contact: &str, code: &str, totp_code: Option<&str>) -> Result<VerifyOtpOutcome, String> {
     let value = post_json(
-        "/open_easy_web.admin.v1.Auth/VerifyOtp",
+        "/open_easy_web.admin.Auth/VerifyOtp",
         None,
         &VerifyOtpBody {
             contact: contact.to_string(),
@@ -156,7 +156,7 @@ struct TotpLoginBody {
 /// `totp_login`ハンドラに対応、2026-07-17)。
 pub async fn totp_login(account_email: &str, totp_code: &str) -> Result<String, String> {
     let value = post_json(
-        "/open_easy_web.admin.v1.Auth/TotpLogin",
+        "/open_easy_web.admin.Auth/TotpLogin",
         None,
         &TotpLoginBody { account_email: account_email.to_string(), totp_code: totp_code.to_string() },
     )
@@ -174,7 +174,7 @@ struct TokenBody {
 
 pub async fn logout() -> Result<(), String> {
     if let Some(token) = saved_token() {
-        let _ = post_json("/open_easy_web.admin.v1.Auth/Logout", None, &TokenBody { token }).await;
+        let _ = post_json("/open_easy_web.admin.Auth/Logout", None, &TokenBody { token }).await;
     }
     clear_session();
     Ok(())
@@ -190,7 +190,7 @@ struct RequestEmailChangeBody {
 pub async fn request_contact_change(field: &str, new_value: &str) -> Result<Value, String> {
     let token = saved_token().ok_or("not logged in")?;
     post_json(
-        "/open_easy_web.admin.v1.Auth/RequestEmailChange",
+        "/open_easy_web.admin.Auth/RequestEmailChange",
         Some(&token),
         &RequestEmailChangeBody { field: field.to_string(), new_value: new_value.to_string() },
     )
@@ -201,7 +201,7 @@ pub async fn request_contact_change(field: &str, new_value: &str) -> Result<Valu
 /// provisioning URIとシークレットを返す(まだ有効化はされない)。
 pub async fn totp_setup() -> Result<Value, String> {
     let token = saved_token().ok_or("not logged in")?;
-    post_json("/open_easy_web.admin.v1.Auth/TotpSetup", Some(&token), &serde_json::json!({})).await
+    post_json("/open_easy_web.admin.Auth/TotpSetup", Some(&token), &serde_json::json!({})).await
 }
 
 #[derive(Serialize)]
@@ -212,11 +212,11 @@ struct TotpCodeBody {
 /// セットアップ中のTOTPを、認証アプリの確認コードで有効化する。
 pub async fn totp_enable(code: &str) -> Result<Value, String> {
     let token = saved_token().ok_or("not logged in")?;
-    post_json("/open_easy_web.admin.v1.Auth/TotpEnable", Some(&token), &TotpCodeBody { code: code.to_string() }).await
+    post_json("/open_easy_web.admin.Auth/TotpEnable", Some(&token), &TotpCodeBody { code: code.to_string() }).await
 }
 
 /// TOTP2FAを無効化する。
 pub async fn totp_disable() -> Result<Value, String> {
     let token = saved_token().ok_or("not logged in")?;
-    post_json("/open_easy_web.admin.v1.Auth/TotpDisable", Some(&token), &serde_json::json!({})).await
+    post_json("/open_easy_web.admin.Auth/TotpDisable", Some(&token), &serde_json::json!({})).await
 }

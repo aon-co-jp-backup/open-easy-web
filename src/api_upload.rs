@@ -1,7 +1,7 @@
 //! `open-easy-web-server`のサイト操作API(フォルダー作成・AI判定・訂正は Connect の `Sites/*`、
 //! アップロードも Connect の `Sites/Upload`)への薄い`fetch()`ラッパー。全て`Authorization: Bearer`
 //! セッショントークンが必要(`api_auth::saved_token()`)。
-//! 方式は Connect(POST、RS-JSON)(`POST /open_easy_web.admin.v1.<Service>/<Method>`、POST、RS-JSON)で、REST は使わない
+//! 方式は Connect(POST、RS-JSON)(`POST /open_easy_web.admin.<Service>/<Method>`、POST、RS-JSON)で、REST は使わない
 //! (2026-11-04 方針)。ファイルは base64 で JSON に載せ、合計が大きいときは何回かに分けて送る。
 
 use serde::Serialize;
@@ -11,7 +11,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{FileList, Headers, Request, RequestInit, RequestMode, Response};
 
-const NS: &str = "/open_easy_web.admin.v1.";
+const NS: &str = "/open_easy_web.admin.";
 
 #[derive(Serialize)]
 struct SiteBody<'a> {

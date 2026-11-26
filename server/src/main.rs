@@ -398,7 +398,7 @@ async fn dispatch(state: Arc<AppState>, req: Request<Incoming>) -> Response<BoxB
         };
     }
 
-    // `/open_easy_web.admin.v1.<Service>/<Method>` — Connect(POST、RS-JSON)(POST、RS-JSON、`connect.rs`参照)。
+    // `/open_easy_web.admin.<Service>/<Method>` — Connect(POST、RS-JSON)(POST、RS-JSON、`connect.rs`参照)。
     // 新しい管理APIは Connect のみ(REST は作らない。2026-11-04 方針: REST 全廃)。既存の REST 風 `/admin/...` は、触るときに順に移す。
     if let Some(rest) = connect::strip_prefix(&path) {
         return connect::dispatch(&state, req, rest).await;
@@ -1494,7 +1494,7 @@ mod tests {
     async fn upload_over_connect_requires_session_rejects_traversal_and_writes_files() {
         let (addr, state) = spawn_test_server().await;
         let client = reqwest::Client::new();
-        let url = format!("http://{addr}/open_easy_web.admin.v1.Sites/Upload");
+        let url = format!("http://{addr}/open_easy_web.admin.Sites/Upload");
         let body = serde_json::json!({
             "site": "up.example.tokyo",
             "files": [
@@ -1533,7 +1533,7 @@ mod tests {
             assert_eq!(std::fs::metadata(root.join("big.bin")).unwrap().len(), 300_000);
             // 一方、Connect の通常のメソッドは 64 KiB を超えると 413。
             let res = client
-                .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/RequestOtp"))
+                .post(format!("http://{addr}/open_easy_web.admin.Auth/RequestOtp"))
                 .json(&serde_json::json!({"contact": "x".repeat(70_000)}))
                 .send()
                 .await
@@ -1588,7 +1588,7 @@ mod tests {
         assert!(state.users.exists("change@example.com"), "GET must not apply the change");
 
         // 空のトークン・不正なトークンは 400。
-        let url = format!("http://{addr}/open_easy_web.admin.v1.Account/ConfirmEmailChange");
+        let url = format!("http://{addr}/open_easy_web.admin.Account/ConfirmEmailChange");
         let res = client.post(&url).json(&serde_json::json!({"token": ""})).send().await.unwrap();
         assert_eq!(res.status(), reqwest::StatusCode::BAD_REQUEST);
         let res = client.post(&url).json(&serde_json::json!({"token": "nope"})).send().await.unwrap();
@@ -1609,7 +1609,7 @@ mod tests {
 
         // 認証ヘッダ無し → 401。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/CreateFolder")).json(&serde_json::json!({"site": "example.tokyo"}))
+            .post(format!("http://{addr}/open_easy_web.admin.Sites/CreateFolder")).json(&serde_json::json!({"site": "example.tokyo"}))
             .send()
             .await
             .unwrap();
@@ -1617,7 +1617,7 @@ mod tests {
 
         // 不正なトークン → 401。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/CreateFolder")).json(&serde_json::json!({"site": "example.tokyo"}))
+            .post(format!("http://{addr}/open_easy_web.admin.Sites/CreateFolder")).json(&serde_json::json!({"site": "example.tokyo"}))
             .bearer_auth("not-a-real-token")
             .send()
             .await
@@ -1632,7 +1632,7 @@ mod tests {
 
         // 未登録の連絡先でOTPをリクエストすると404。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/RequestOtp"))
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/RequestOtp"))
             .json(&serde_json::json!({"contact": "user@example.com"}))
             .send()
             .await
@@ -1647,7 +1647,7 @@ mod tests {
         // 登録済みでもSMTP未設定なので503(実メール送信はできないが、
         // OTP自体は内部で発行・保存されている)。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/RequestOtp"))
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/RequestOtp"))
             .json(&serde_json::json!({"contact": "user@example.com"}))
             .send()
             .await
@@ -1660,7 +1660,7 @@ mod tests {
         // (user@example.com)のセッションが発行されることを確認する。
         let auth::RequestOtpOutcome::Issued(code) = state.auth.request_otp("user2@example.com");
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/VerifyOtp"))
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/VerifyOtp"))
             .json(&serde_json::json!({"contact": "user2@example.com", "code": code}))
             .send()
             .await
@@ -1671,7 +1671,7 @@ mod tests {
         let token = body["token"].as_str().unwrap().to_string();
 
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/CreateFolder")).json(&serde_json::json!({"site": "example.tokyo"}))
+            .post(format!("http://{addr}/open_easy_web.admin.Sites/CreateFolder")).json(&serde_json::json!({"site": "example.tokyo"}))
             .bearer_auth(&token)
             .send()
             .await
@@ -1681,14 +1681,14 @@ mod tests {
         // DELETE /api/sites/:name — 未登録ドメイン(vhostファイルが無い)への
         // 削除リクエストは冪等にOKを返す。認証無しでは401。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/Delete")).json(&serde_json::json!({"site": "example.tokyo"}))
+            .post(format!("http://{addr}/open_easy_web.admin.Sites/Delete")).json(&serde_json::json!({"site": "example.tokyo"}))
             .send()
             .await
             .unwrap();
         assert_eq!(res.status(), reqwest::StatusCode::UNAUTHORIZED);
 
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/Delete")).json(&serde_json::json!({"site": "example.tokyo"}))
+            .post(format!("http://{addr}/open_easy_web.admin.Sites/Delete")).json(&serde_json::json!({"site": "example.tokyo"}))
             .bearer_auth(&token)
             .send()
             .await
@@ -1705,7 +1705,7 @@ mod tests {
 
         // 認証無し → 401(他の/api/sites/*アクションと同じ扱い)。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/RegisterAppserver"))
+            .post(format!("http://{addr}/open_easy_web.admin.Sites/RegisterAppserver"))
             .json(&serde_json::json!({"site": "example.tokyo",
                 "shared_endpoint": "http://127.0.0.1:1",
                 "kind": "poem_cosmo_tauri",
@@ -1723,7 +1723,7 @@ mod tests {
         // 側のHTTPエラーがそのままBAD_GATEWAYとして返る(ルーティング・
         // 認証・ボディのデシリアライズ・呼び出しがすべて実際に動くことの確認)。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Sites/RegisterAppserver"))
+            .post(format!("http://{addr}/open_easy_web.admin.Sites/RegisterAppserver"))
             .bearer_auth(&token)
             .json(&serde_json::json!({"site": "example.tokyo",
                 "shared_endpoint": "http://127.0.0.1:1",
@@ -1748,7 +1748,7 @@ mod tests {
         // (誤って無認証公開しない安全側デフォルト)。
         std::env::remove_var("OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN");
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/ListTargets")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.DistSync/ListTargets")).header("content-type", "application/json").body("{}")
             .send()
             .await
             .unwrap();
@@ -1760,7 +1760,7 @@ mod tests {
         // 環境変数を読むテストは本テストのみ(grepで確認済み)なので許容する。
         std::env::set_var("OPEN_EASYWEB_DIST_SYNC_ADMIN_TOKEN", "test-dist-sync-token");
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/ListTargets")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.DistSync/ListTargets")).header("content-type", "application/json").body("{}")
             .header("x-admin-token", "wrong-token")
             .send()
             .await
@@ -1769,7 +1769,7 @@ mod tests {
 
         // 正しいトークンで登録。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/RegisterTarget"))
+            .post(format!("http://{addr}/open_easy_web.admin.DistSync/RegisterTarget"))
             .header("x-admin-token", "test-dist-sync-token")
             .json(&serde_json::json!({
                 "host": "vps1.example.tokyo",
@@ -1789,7 +1789,7 @@ mod tests {
 
         // 一覧に反映されている。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/ListTargets")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.DistSync/ListTargets")).header("content-type", "application/json").body("{}")
             .header("x-admin-token", "test-dist-sync-token")
             .send()
             .await
@@ -1801,7 +1801,7 @@ mod tests {
         // ディザスタ用退避先(Email)の設定も通ること(実SMTP接続はしない、
         // 設定を受け付けるだけの経路)。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/SetDisasterFallback"))
+            .post(format!("http://{addr}/open_easy_web.admin.DistSync/SetDisasterFallback"))
             .header("x-admin-token", "test-dist-sync-token")
             .json(&serde_json::json!({
                 "email": {
@@ -1820,7 +1820,7 @@ mod tests {
 
         // 削除。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/DeleteTarget")).json(&serde_json::json!({"id": target_id}))
+            .post(format!("http://{addr}/open_easy_web.admin.DistSync/DeleteTarget")).json(&serde_json::json!({"id": target_id}))
             .header("x-admin-token", "test-dist-sync-token")
             .send()
             .await
@@ -1828,7 +1828,7 @@ mod tests {
         assert_eq!(res.status(), reqwest::StatusCode::OK);
 
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.DistSync/ListTargets")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.DistSync/ListTargets")).header("content-type", "application/json").body("{}")
             .header("x-admin-token", "test-dist-sync-token")
             .send()
             .await
@@ -1848,7 +1848,7 @@ mod tests {
         // ログインしてセッションを得る(TOTP未設定の1回目はコード不要)。
         let auth::RequestOtpOutcome::Issued(code) = state.auth.request_otp("totp-user@example.com");
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/VerifyOtp"))
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/VerifyOtp"))
             .json(&serde_json::json!({"contact": "totp-user@example.com", "code": code}))
             .send()
             .await
@@ -1860,7 +1860,7 @@ mod tests {
 
         // セットアップ開始(セッション必須)。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpSetup")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/TotpSetup")).header("content-type", "application/json").body("{}")
             .bearer_auth(&token)
             .send()
             .await
@@ -1878,7 +1878,7 @@ mod tests {
 
         // 間違ったコードでは有効化できない。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpEnable")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/TotpEnable")).header("content-type", "application/json").body("{}")
             .bearer_auth(&token)
             .json(&serde_json::json!({"code": "000000"}))
             .send()
@@ -1903,7 +1903,7 @@ mod tests {
             .as_secs();
         let correct_code = totp::code_at(&secret_bytes, now);
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpEnable")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/TotpEnable")).header("content-type", "application/json").body("{}")
             .bearer_auth(&token)
             .json(&serde_json::json!({"code": correct_code}))
             .send()
@@ -1915,7 +1915,7 @@ mod tests {
         // トークンは発行されない)。
         let auth::RequestOtpOutcome::Issued(code2) = state.auth.request_otp("totp-user@example.com");
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/VerifyOtp"))
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/VerifyOtp"))
             .json(&serde_json::json!({"contact": "totp-user@example.com", "code": code2}))
             .send()
             .await
@@ -1934,7 +1934,7 @@ mod tests {
             .as_secs();
         let code_for_login = totp::code_at(&secret_bytes, now2);
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpLogin")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/TotpLogin")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"account_email": "totp-user@example.com", "totp_code": code_for_login}))
             .send()
             .await
@@ -1953,7 +1953,7 @@ mod tests {
         state.users.register(email, None, Some(format!("backup-{email}"))).unwrap();
         let auth::RequestOtpOutcome::Issued(code) = state.auth.request_otp(email);
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/VerifyOtp"))
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/VerifyOtp"))
             .json(&serde_json::json!({"contact": email, "code": code}))
             .send()
             .await
@@ -1961,14 +1961,14 @@ mod tests {
         let body: serde_json::Value = res.json().await.unwrap();
         let token = body["token"].as_str().unwrap().to_string();
 
-        let res = client.post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpSetup")).header("content-type", "application/json").body("{}").bearer_auth(&token).send().await.unwrap();
+        let res = client.post(format!("http://{addr}/open_easy_web.admin.Auth/TotpSetup")).header("content-type", "application/json").body("{}").bearer_auth(&token).send().await.unwrap();
         let body: serde_json::Value = res.json().await.unwrap();
         let secret_b32 = body["secret"].as_str().unwrap().to_string();
         let secret_bytes = totp::base32_to_secret(&secret_b32).unwrap();
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
         let correct_code = totp::code_at(&secret_bytes, now);
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpEnable")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/TotpEnable")).header("content-type", "application/json").body("{}")
             .bearer_auth(&token)
             .json(&serde_json::json!({"code": correct_code}))
             .send()
@@ -1988,7 +1988,7 @@ mod tests {
 
         // start: TOTP登録済みアカウントならQRセッションを開始できる。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginStart")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/QrLoginStart")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"account_email": "qr-user@example.com"}))
             .send()
             .await
@@ -2001,7 +2001,7 @@ mod tests {
 
         // whoami: マスク済みメールアドレスが取得できる(実メールアドレス
         // そのものは返さない)。
-        let res = client.post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginWhoami")).json(&serde_json::json!({"id": id})).send().await.unwrap();
+        let res = client.post(format!("http://{addr}/open_easy_web.admin.Auth/QrLoginWhoami")).json(&serde_json::json!({"id": id})).send().await.unwrap();
         assert_eq!(res.status(), reqwest::StatusCode::OK);
         let body: serde_json::Value = res.json().await.unwrap();
         let masked = body["masked_email"].as_str().unwrap();
@@ -2009,13 +2009,13 @@ mod tests {
         assert!(!masked.contains("qr-user@example.com"));
 
         // status: 確認前はfalse。
-        let res = client.post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginStatus")).json(&serde_json::json!({"id": id})).send().await.unwrap();
+        let res = client.post(format!("http://{addr}/open_easy_web.admin.Auth/QrLoginStatus")).json(&serde_json::json!({"id": id})).send().await.unwrap();
         let body: serde_json::Value = res.json().await.unwrap();
         assert_eq!(body["confirmed"].as_bool(), Some(false));
 
         // confirm: 確認端末(qr-confirm.html)側のリクエストを模す。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginConfirm")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/QrLoginConfirm")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"id": id}))
             .send()
             .await
@@ -2023,13 +2023,13 @@ mod tests {
         assert_eq!(res.status(), reqwest::StatusCode::OK);
 
         // status: 確認後はtrue。
-        let res = client.post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginStatus")).json(&serde_json::json!({"id": id})).send().await.unwrap();
+        let res = client.post(format!("http://{addr}/open_easy_web.admin.Auth/QrLoginStatus")).json(&serde_json::json!({"id": id})).send().await.unwrap();
         let body: serde_json::Value = res.json().await.unwrap();
         assert_eq!(body["confirmed"].as_bool(), Some(true));
 
         // finish: プライマリ端末がセッショントークンを受け取る。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginFinish")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/QrLoginFinish")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"id": id}))
             .send()
             .await
@@ -2041,7 +2041,7 @@ mod tests {
 
         // 使い捨て: 同じidで再度finishを呼ぶと失敗する。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginFinish")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/QrLoginFinish")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"id": id}))
             .send()
             .await
@@ -2056,7 +2056,7 @@ mod tests {
         state.users.register("no-totp-qr@example.com", None, Some("backup@example.com".into())).unwrap();
         let client = reqwest::Client::new();
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginStart")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/QrLoginStart")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"account_email": "no-totp-qr@example.com"}))
             .send()
             .await
@@ -2077,7 +2077,7 @@ mod tests {
 
         // 管理APIでotp_qrモードへ切り替える。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Settings/SetLoginMode"))
+            .post(format!("http://{addr}/open_easy_web.admin.Settings/SetLoginMode"))
             .header("x-admin-token", "test-dist-sync-token")
             .json(&serde_json::json!({"login_mode": "otp_qr"}))
             .send()
@@ -2089,7 +2089,7 @@ mod tests {
 
         // GETでも反映が確認できる。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Settings/GetLoginMode")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Settings/GetLoginMode")).header("content-type", "application/json").body("{}")
             .header("x-admin-token", "test-dist-sync-token")
             .send()
             .await
@@ -2100,7 +2100,7 @@ mod tests {
         // メールOTPを検証すると、TOTPコードではなくQRセッションが返る。
         let auth::RequestOtpOutcome::Issued(code) = state.auth.request_otp("otpqr-user@example.com");
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/VerifyOtp"))
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/VerifyOtp"))
             .json(&serde_json::json!({"contact": "otpqr-user@example.com", "code": code}))
             .send()
             .await
@@ -2112,14 +2112,14 @@ mod tests {
 
         // QR確認→finishでセッション発行。
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginConfirm")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/QrLoginConfirm")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"id": id}))
             .send()
             .await
             .unwrap();
         assert_eq!(res.status(), reqwest::StatusCode::OK);
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/QrLoginFinish")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/QrLoginFinish")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"id": id}))
             .send()
             .await
@@ -2131,7 +2131,7 @@ mod tests {
 
         // 後始末: 他テストへ影響しないよう既定のotpへ戻す。
         let _ = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Settings/SetLoginMode"))
+            .post(format!("http://{addr}/open_easy_web.admin.Settings/SetLoginMode"))
             .header("x-admin-token", "test-dist-sync-token")
             .json(&serde_json::json!({"login_mode": "otp"}))
             .send()
@@ -2147,7 +2147,7 @@ mod tests {
         let (addr, _state) = spawn_test_server().await;
         let client = reqwest::Client::new();
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Settings/SetLoginMode"))
+            .post(format!("http://{addr}/open_easy_web.admin.Settings/SetLoginMode"))
             .header("x-admin-token", "test-dist-sync-token")
             .json(&serde_json::json!({"login_mode": "bogus"}))
             .send()
@@ -2163,7 +2163,7 @@ mod tests {
         state.users.register("no-totp@example.com", None, Some("no-totp2@example.com".into())).unwrap();
         let client = reqwest::Client::new();
         let res = client
-            .post(format!("http://{addr}/open_easy_web.admin.v1.Auth/TotpLogin")).header("content-type", "application/json").body("{}")
+            .post(format!("http://{addr}/open_easy_web.admin.Auth/TotpLogin")).header("content-type", "application/json").body("{}")
             .json(&serde_json::json!({"account_email": "no-totp@example.com", "totp_code": "000000"}))
             .send()
             .await

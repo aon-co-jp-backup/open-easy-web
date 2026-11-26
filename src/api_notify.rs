@@ -1,5 +1,5 @@
 //! 更新のお知らせメール(`server/src/update_notify.rs`)への薄い`fetch()`ラッパー。
-//! 方式は Connect(POST、RS-JSON)(`POST /open_easy_web.admin.v1.Notify/<Method>`、本文は JSON)。REST は使わない
+//! 方式は Connect(POST、RS-JSON)(`POST /open_easy_web.admin.Notify/<Method>`、本文は JSON)。REST は使わない
 //! (2026-11-04 方針: REST 全廃、`CLAUDE.md`「API 方針」参照)。共通の`call`は`api_auto_update.rs`のものを再利用する。
 
 use serde::Serialize;
@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 
 use crate::api_auto_update::call;
 
-const SVC: &str = "/open_easy_web.admin.v1.Notify/";
+const SVC: &str = "/open_easy_web.admin.Notify/";
 
 /// `Notify/Get` — 登録済みの宛先、履歴、SMTPが設定済みか。
 pub async fn overview(base_url: &str, admin_token: &str) -> Result<Value, String> {

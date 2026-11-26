@@ -1,5 +1,5 @@
 //! 管理API(自動アップデート・システム状況・電源プロファイルなど)への薄い`fetch()`ラッパー。方式は Connect(POST、RS-JSON)
-//! (`POST /open_easy_web.admin.v1.<Service>/<Method>`、JSON)で、REST ではない。共通の`call`/`rpc`は、ほかの`api_*.rs`も再利用する。
+//! (`POST /open_easy_web.admin.<Service>/<Method>`、JSON)で、REST ではない。共通の`call`/`rpc`は、ほかの`api_*.rs`も再利用する。
 
 use serde::Serialize;
 use serde_json::Value;
@@ -48,9 +48,9 @@ pub(crate) async fn call<T: Serialize>(base_url: &str, path: &str, method: &str,
     }
 }
 
-/// Connect(POST、RS-JSON): `POST /open_easy_web.admin.v1.<Service>/<Method>`、本文は JSON(引数なしなら `{}`)。
+/// Connect(POST、RS-JSON): `POST /open_easy_web.admin.<Service>/<Method>`、本文は JSON(引数なしなら `{}`)。
 /// REST は使わない(2026-11-04 方針: REST 全廃、`CLAUDE.md`「API 方針」参照)。
-const NS: &str = "/open_easy_web.admin.v1.";
+const NS: &str = "/open_easy_web.admin.";
 
 pub(crate) async fn rpc<T: Serialize>(base_url: &str, service_method: &str, admin_token: &str, body: &T) -> Result<Value, String> {
     call(base_url, &format!("{NS}{service_method}"), "POST", admin_token, Some(body)).await
@@ -102,7 +102,7 @@ struct SetPowerProfileBody {
 
 /// `Settings/SetPowerProfile` — 電源プロファイルを設定する(メモリ使用状況セクションの「省メモリ版に変更」ボタンから呼ぶ想定)。
 /// 以前の REST では、`open-web-server`(リバースプロキシ)自身の同名の `/admin/power-profile` に横取りされる実バグがあり
-/// `easyweb-` 接頭辞を付けていた。Connect の経路 `/open_easy_web.admin.v1.…` はその衝突の心配がない。
+/// `easyweb-` 接頭辞を付けていた。Connect の経路 `/open_easy_web.admin.…` はその衝突の心配がない。
 pub async fn set_power_profile(base_url: &str, admin_token: &str, profiles: &[&str]) -> Result<Value, String> {
     let body = SetPowerProfileBody { profiles: profiles.iter().map(|s| s.to_string()).collect() };
     rpc(base_url, "Settings/SetPowerProfile", admin_token, &body).await

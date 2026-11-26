@@ -1,6 +1,6 @@
 //! Connect プロトコルの「単純呼び出し(unary)」で受ける API の全体(2026-11-04新設・同日、既存の REST 風 API をすべて移行)。
 //!
-//! 形式は `POST /open_easy_web.admin.v1.<Service>/<Method>`、本文は JSON(`content-type: application/json`)。
+//! 形式は `POST /open_easy_web.admin.<Service>/<Method>`、本文は JSON(`content-type: application/json`)。
 //! RPoem の管理API(`open_runo.admin.v1.Admin`)と呼び方をそろえつつ、`curl` からそのまま呼べる。
 //! **JSON の読み込みは RS-JSON の `parse_secure` / `from_str_secure`(サイズ・深さ・重複キーの上限つき)、書き出しは `rust_json::fast`**。
 //! エラーは Connect の形式 `{"code": "...", "message": "..."}`(HTTP ステータスは Connect 仕様の対応表)。
@@ -23,17 +23,11 @@ use hyper::{Method, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-pub const PREFIX: &str = "/open_easy_web.admin.v1.";
-/// 版なしの別名(Versionless)。`.v1` は呼び出し側を壊さないため当面残す。
-pub const PREFIX_ALIAS: &str = "/open_easy_web.admin.";
-
-/// 版つき・版なしのどちらの接頭辞でも、`<Service>/<Method>` 部分を返す。
+pub const PREFIX: &str = "/open_easy_web.admin.";
+/// `<Service>/<Method>` 部分を返す。版つき(`.v1.`)の経路は2026-11-26に削除した(Versionless)。
 pub fn strip_prefix(path: &str) -> Option<&str> {
-    if let Some(rest) = path.strip_prefix(PREFIX) {
-        return Some(rest);
-    }
-    let rest = path.strip_prefix(PREFIX_ALIAS)?;
-    // `v2.` など別の版は別名として扱わない(版なしの名前は大文字で始まる Service 名)。
+    let rest = path.strip_prefix(PREFIX)?;
+    // 版つき(`v1.` など)は Service 名(大文字始まり)ではないので受け付けない。
     rest.chars().next().filter(|c| c.is_ascii_uppercase()).map(|_| rest)
 }
 /// ファイル送信(`Sites/Upload`)の本文の上限(JSON + base64 なので、中身はおよそ 96 MiB まで)。ほかは 64 KiB。
@@ -583,8 +577,8 @@ mod tests {
 
     #[test]
     fn versionless_prefix_is_accepted() {
-        assert_eq!(strip_prefix("/open_easy_web.admin.v1.Sites/List"), Some("Sites/List"));
         assert_eq!(strip_prefix("/open_easy_web.admin.Sites/List"), Some("Sites/List"));
+        assert_eq!(strip_prefix("/open_easy_web.admin.v1.Sites/List"), None);
         assert_eq!(strip_prefix("/open_easy_web.admin.v2.Sites/List"), None);
         assert_eq!(strip_prefix("/other.Sites/List"), None);
     }

@@ -467,7 +467,7 @@ async fn register_appserver_request(profile: &SiteProfile, kind: &str) -> Result
     opts.set_body(&JsValue::from_str(&body_str));
 
     // Connect(POST、RS-JSON)(REST は使わない。2026-11-04 方針)。サイト名は本文の `site` で渡す。
-    let url = "/open_easy_web.admin.v1.Sites/RegisterAppserver".to_string();
+    let url = "/open_easy_web.admin.Sites/RegisterAppserver".to_string();
     let request = Request::new_with_str_and_init(&url, &opts).map_err(|e| format!("request build failed: {e:?}"))?;
 
     let resp_value = JsFuture::from(crate::dom::window().fetch_with_request(&request))
