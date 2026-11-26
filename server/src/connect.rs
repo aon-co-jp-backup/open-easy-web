@@ -1,7 +1,7 @@
 //! Connect プロトコルの「単純呼び出し(unary)」で受ける API の全体(2026-11-04新設・同日、既存の REST 風 API をすべて移行)。
 //!
 //! 形式は `POST /open_easy_web.admin.<Service>/<Method>`、本文は JSON(`content-type: application/json`)。
-//! RPoem の管理API(`open_runo.admin.v1.Admin`)と呼び方をそろえつつ、`curl` からそのまま呼べる。
+//! RPoem の管理API(`open_runo.admin.Admin`)と呼び方をそろえつつ、`curl` からそのまま呼べる。
 //! **JSON の読み込みは RS-JSON の `parse_secure` / `from_str_secure`(サイズ・深さ・重複キーの上限つき)、書き出しは `rust_json::fast`**。
 //! エラーは Connect の形式 `{"code": "...", "message": "..."}`(HTTP ステータスは Connect 仕様の対応表)。
 //!
