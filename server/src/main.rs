@@ -303,8 +303,8 @@ fn media_banner_html() -> String {
 async fn ime_api(method: &Method, path: &str, req: Request<Incoming>) -> Response<BoxBody> {
     let target = match (method, path) {
         (&Method::GET, "/ime/api/health") => "/health",
-        (&Method::POST, "/ime/api/aruaru_ime.v1.Ime/Key") => "/aruaru_ime.v1.Ime/Key",
-        (&Method::POST, "/ime/api/aruaru_ime.v1.Ime/Session") => "/aruaru_ime.v1.Ime/Session",
+        (&Method::POST, "/ime/api/aruaru_ime.Ime/Key") => "/aruaru_ime.Ime/Key",
+        (&Method::POST, "/ime/api/aruaru_ime.Ime/Session") => "/aruaru_ime.Ime/Session",
         _ => return error_response(StatusCode::NOT_FOUND, "not found"),
     };
     // 回数制限: 1つの接続元あたり1秒に40回まで、全体で1秒に400回まで
